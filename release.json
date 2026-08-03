@@ -4,8 +4,8 @@
   "versionTag": "v1.0.0",
   "log": "## v1.0.0\n\n首个正式版本。\n\n- 首页任务列表与卡片动画\n- 添加/编辑任务底部弹窗\n- 日历视图与统计页\n- Material You 主题与深色模式\n- 桌面 Widget（小/中/大）\n- 完整权限管理页\n- 多源自动更新检测",
   "apk": "https://github.com/Zero-william163/task-flow-Pro-/releases/download/v1.0.0/app-release.apk",
-  "sha256": "",
-  "size": 0,
+  "sha256": "0b794f0c2f13d824f0d89f6ab113a80d4fa0f37d8e32b0e0f60221bbe93b823d",
+  "size": 3764037,
   "downloadUrls": [
     { "name": "GH Proxy", "url": "https://gh-proxy.com/https://github.com/Zero-william163/task-flow-Pro-/releases/download/v1.0.0/app-release.apk", "region": "domestic" },
     { "name": "GH Fast",  "url": "https://ghfast.top/https://github.com/Zero-william163/task-flow-Pro-/releases/download/v1.0.0/app-release.apk", "region": "cdn" },
