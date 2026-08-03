@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Brand gradient anchors -->
+    <color name="brand_seed">#4C6EF5</color>
+    <color name="brand_start">#5B7CFA</color>
+    <color name="brand_end">#7950F2</color>
+    <color name="brand_accent">#15D0AB</color>
+
+    <!-- Priority colors -->
+    <color name="priority_high">#FF6B6B</color>
+    <color name="priority_medium">#FFB020</color>
+    <color name="priority_low">#15D0AB</color>
+    <color name="priority_none">#9AA0B4</color>
+
+    <!-- Widget surface (light) -->
+    <color name="widget_bg_light">#F3F4FB</color>
+    <color name="widget_card_light">#FFFFFF</color>
+    <color name="widget_text_primary_light">#1A1C2E</color>
+    <color name="widget_text_secondary_light">#6B7280</color>
+
+    <!-- Widget surface (dark) -->
+    <color name="widget_bg_dark">#15161F</color>
+    <color name="widget_card_dark">#22242F</color>
+    <color name="widget_text_primary_dark">#F2F3F7</color>
+    <color name="widget_text_secondary_dark">#9AA0B4</color>
+
+    <!-- Night-aware widget tokens (overridden in values-night) -->
+    <color name="widget_surface">#FFFFFF</color>
+    <color name="widget_surface_variant">#F3F4FB</color>
+    <color name="widget_on_surface">#1A1C2E</color>
+    <color name="widget_on_surface_variant">#6B7280</color>
+    <color name="widget_divider">#141A2E1F</color>
+
+    <color name="ic_launcher_background">#4C6EF5</color>
+</resources>

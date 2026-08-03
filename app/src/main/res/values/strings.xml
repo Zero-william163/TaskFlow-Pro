@@ -1,0 +1,148 @@
+<resources>
+    <string name="app_name">TaskFlow</string>
+    <string name="app_tagline">今天也要完成目标</string>
+
+    <!-- Navigation -->
+    <string name="nav_home">首页</string>
+    <string name="nav_calendar">日历</string>
+    <string name="nav_stats">统计</string>
+    <string name="nav_settings">设置</string>
+
+    <!-- Home -->
+    <string name="home_greeting_morning">早上好</string>
+    <string name="home_greeting_afternoon">下午好</string>
+    <string name="home_greeting_evening">晚上好</string>
+    <string name="home_subtitle_today">今天也要完成目标</string>
+    <string name="home_no_tasks">还没有任务</string>
+    <string name="home_no_tasks_hint">点击右下角按钮添加第一个任务</string>
+    <string name="home_search_hint">搜索任务…</string>
+    <string name="home_remaining_tasks">还有 %1$d 个任务</string>
+    <string name="home_all_done">全部完成，太棒了</string>
+    <string name="home_filter_all">全部</string>
+    <string name="home_filter_today">今天</string>
+    <string name="home_filter_upcoming">即将</string>
+    <string name="home_filter_completed">已完成</string>
+
+    <!-- Task -->
+    <string name="task_add">添加任务</string>
+    <string name="task_edit">编辑任务</string>
+    <string name="task_title">任务名称</string>
+    <string name="task_title_hint">输入任务名称</string>
+    <string name="task_description">描述</string>
+    <string name="task_description_hint">添加备注（可选）</string>
+    <string name="task_due_date">截止日期</string>
+    <string name="task_reminder">提醒时间</string>
+    <string name="task_priority">优先级</string>
+    <string name="task_category">分类</string>
+    <string name="task_save">保存</string>
+    <string name="task_cancel">取消</string>
+    <string name="task_delete">删除</string>
+    <string name="task_delete_confirm">确定删除这个任务吗？</string>
+    <string name="task_mark_complete">标记为已完成</string>
+    <string name="task_mark_incomplete">标记为未完成</string>
+    <string name="task_no_reminder">不提醒</string>
+
+    <!-- Priority -->
+    <string name="priority_none">无</string>
+    <string name="priority_low">低</string>
+    <string name="priority_medium">中</string>
+    <string name="priority_high">高</string>
+
+    <!-- Widget -->
+    <string name="widget_no_tasks">暂无任务</string>
+    <string name="widget_remaining">还有 %1$d 个任务</string>
+    <string name="widget_all_done">全部完成</string>
+    <string name="widget_add_hint">打开 TaskFlow 添加任务</string>
+
+    <!-- Widget guide -->
+    <string name="widget_guide_title">添加任务桌面组件</string>
+    <string name="widget_guide_message">把你的待办事项放在桌面，随时查看未完成任务，无需打开 App。</string>
+    <string name="widget_guide_add_now">立即添加</string>
+    <string name="widget_guide_later">稍后再说</string>
+    <string name="widget_guide_manual_title">手动添加组件</string>
+    <string name="widget_guide_manual_steps">1. 长按桌面空白处\n2. 选择「小组件」\n3. 找到 TaskFlow\n4. 拖拽到桌面</string>
+
+    <!-- Permissions -->
+    <string name="permission_title">权限管理</string>
+    <string name="permission_notifications">通知权限</string>
+    <string name="permission_notifications_desc">用于任务到期提醒与更新提示</string>
+    <string name="permission_widget">桌面组件</string>
+    <string name="permission_widget_desc">在桌面显示待办任务</string>
+    <string name="permission_install">安装未知应用</string>
+    <string name="permission_install_desc">用于 App 内更新安装 APK</string>
+    <string name="permission_battery">电池优化</string>
+    <string name="permission_battery_desc">允许后台运行，确保提醒准时到达</string>
+    <string name="permission_exact_alarm">精确闹钟</string>
+    <string name="permission_exact_alarm_desc">确保任务提醒准时触发</string>
+    <string name="permission_status_granted">已开启</string>
+    <string name="permission_status_denied">未开启</string>
+    <string name="permission_status_added">已添加</string>
+    <string name="permission_status_not_added">未添加</string>
+    <string name="permission_open_settings">前往设置</string>
+
+    <!-- Settings -->
+    <string name="settings_about">关于</string>
+    <string name="settings_version">版本</string>
+    <string name="settings_check_update">检查更新</string>
+    <string name="settings_permissions">权限管理</string>
+    <string name="settings_github">GitHub 仓库</string>
+    <string name="settings_license">开源协议</string>
+    <string name="settings_theme">主题</string>
+    <string name="settings_theme_system">跟随系统</string>
+    <string name="settings_theme_light">浅色</string>
+    <string name="settings_theme_dark">深色</string>
+    <string name="settings_dynamic_color">动态颜色</string>
+    <string name="settings_general">通用</string>
+    <string name="settings_appearance">外观</string>
+
+    <!-- Update -->
+    <string name="update_checking">正在检查更新…</string>
+    <string name="update_latest">已是最新版本</string>
+    <string name="update_available">发现新版本</string>
+    <string name="update_download">立即更新</string>
+    <string name="update_later">以后再说</string>
+    <string name="update_downloading">正在下载…</string>
+    <string name="update_download_failed">下载失败，请检查网络</string>
+    <string name="update_install">安装</string>
+    <string name="update_version">版本 %1$s</string>
+    <string name="update_size">大小 %1$s</string>
+
+    <!-- Notifications -->
+    <string name="notif_channel_reminder">任务提醒</string>
+    <string name="notif_channel_reminder_desc">任务到期前提醒</string>
+    <string name="notif_channel_update">应用更新</string>
+    <string name="notif_channel_update_desc">新版本下载进度</string>
+    <string name="notif_channel_download">下载服务</string>
+    <string name="notif_channel_download_desc">APK 下载进度</string>
+    <string name="notif_reminder_title">任务提醒</string>
+    <string name="notif_action_complete">完成</string>
+    <string name="notif_action_snooze">稍后提醒</string>
+
+    <!-- Common -->
+    <string name="common_confirm">确定</string>
+    <string name="common_cancel">取消</string>
+    <string name="common_save">保存</string>
+    <string name="common_delete">删除</string>
+    <string name="common_edit">编辑</string>
+    <string name="common_back">返回</string>
+    <string name="common_retry">重试</string>
+    <string name="common_close">关闭</string>
+
+    <!-- Stats -->
+    <string name="stats_title">统计</string>
+    <string name="stats_total">总任务</string>
+    <string name="stats_completed">已完成</string>
+    <string name="stats_pending">进行中</string>
+    <string name="stats_completion_rate">完成率</string>
+    <string name="stats_today">今日完成</string>
+    <string name="stats_week">本周</string>
+    <string name="stats_by_priority">按优先级</string>
+    <string name="stats_by_category">按分类</string>
+
+    <!-- Categories -->
+    <string name="category_default">默认</string>
+    <string name="category_work">工作</string>
+    <string name="category_personal">个人</string>
+    <string name="category_study">学习</string>
+    <string name="category_other">其他</string>
+</resources>
