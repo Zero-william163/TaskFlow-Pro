@@ -9,10 +9,10 @@ package com.taskflow.app.update
  */
 object UpdateConfig {
     const val GITHUB_OWNER = "Zero-william163"
-    const val GITHUB_REPO = "task-flow-Pro-"
+    const val GITHUB_REPO = "TaskFlow-Pro"
 
     const val GITEE_OWNER = "Zero-william163"
-    const val GITEE_REPO = "task-flow-Pro-"
+    const val GITEE_REPO = "TaskFlow-Pro"
 
     const val RELEASE_FILE = "release.json"
     const val DEFAULT_BRANCH = "main"
