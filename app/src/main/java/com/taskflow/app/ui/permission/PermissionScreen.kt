@@ -93,9 +93,9 @@ fun PermissionScreen(onBack: () -> Unit) {
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (!granted) {
-            // 用户拒绝 -> 直达通知设置页，让用户手动开启
-            pm.intentFor(PermissionType.NOTIFICATION)?.let {
-                runCatching { context.startActivity(it) }
+            // 用户拒绝运行时权限 -> 直达通知设置页，让用户手动开启
+            if (!pm.startIntent(PermissionType.NOTIFICATION)) {
+                Toast.makeText(context, "无法跳转通知设置页", Toast.LENGTH_SHORT).show()
             }
         } else {
             viewModel.refresh()
@@ -144,40 +144,40 @@ fun PermissionScreen(onBack: () -> Unit) {
                 ) {
                     notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                 } else {
-                    pm.intentFor(item.type)?.let {
-                        runCatching { context.startActivity(it) }
+                    // 直达本应用通知设置页（带 package + uid）
+                    if (!pm.startIntent(PermissionType.NOTIFICATION)) {
+                        Toast.makeText(context, "无法跳转通知设置页", Toast.LENGTH_SHORT).show()
                     }
+                }
+            }
+
+            PermissionType.EXACT_ALARM -> {
+                // 直达本应用精确闹钟权限页（带包名 data）
+                if (!pm.startIntent(PermissionType.EXACT_ALARM)) {
+                    Toast.makeText(context, "无法跳转精确闹钟设置页", Toast.LENGTH_SHORT).show()
+                }
+            }
+
+            PermissionType.BATTERY -> {
+                // 直达电池优化请求页（直接弹出系统对话框）
+                if (!pm.startIntent(PermissionType.BATTERY)) {
+                    Toast.makeText(context, "无法跳转电池优化设置页", Toast.LENGTH_SHORT).show()
                 }
             }
 
             PermissionType.AUTO_START,
             PermissionType.BACKGROUND_RUN -> {
                 // 国产 ROM：优先直达厂商特定页面，失败则显示文字教程
-                val intent = pm.intentFor(item.type)
-                if (intent != null) {
-                    val canResolve = runCatching {
-                        context.packageManager.resolveActivity(intent, 0) != null
-                    }.getOrDefault(false)
-                    if (canResolve) {
-                        runCatching { context.startActivity(intent) }
-                        return
+                if (!pm.startIntent(item.type)) {
+                    // 无法直达 -> 显示厂商文字引导
+                    val guide = pm.vendorGuideFor(item.type)
+                    if (guide != null) {
+                        guideDialogMessage = guide
+                        showGuideDialog = true
+                    } else {
+                        // 兜底：应用详情页
+                        runCatching { context.startActivity(pm.appDetailsIntent()) }
                     }
-                }
-                // 无法直达 -> 显示厂商文字引导
-                val guide = pm.vendorGuideFor(item.type)
-                if (guide != null) {
-                    guideDialogMessage = guide
-                    showGuideDialog = true
-                } else {
-                    // 兜底：应用详情页
-                    runCatching { context.startActivity(pm.appDetailsIntent()) }
-                }
-            }
-
-            else -> {
-                // 其他权限（精确闹钟、电池优化）：直达具体设置页
-                pm.intentFor(item.type)?.let {
-                    runCatching { context.startActivity(it) }
                 }
             }
         }

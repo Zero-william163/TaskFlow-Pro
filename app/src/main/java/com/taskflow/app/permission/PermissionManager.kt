@@ -9,11 +9,14 @@ import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
+import android.util.Log
 import androidx.annotation.StringRes
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationManagerCompat
 import com.taskflow.app.R
 import com.taskflow.app.widget.TaskWidgetProvider
+
+private const val TAG = "PermissionManager"
 
 enum class PermissionType {
     NOTIFICATION,
@@ -55,6 +58,13 @@ class PermissionManager(private val context: Context) {
 
     private val pkgUri: Uri by lazy { Uri.parse("package:${context.packageName}") }
 
+    /** 应用 UID，部分国产 ROM 通知设置页需要此参数才能定位到本应用 */
+    private val appUid: Int by lazy {
+        runCatching {
+            context.packageManager.getApplicationInfo(context.packageName, 0).uid
+        }.getOrDefault(-1)
+    }
+
     fun all(): List<PermissionItem> = listOfNotNull(
         notification(),
         exactAlarm(),
@@ -77,10 +87,6 @@ class PermissionManager(private val context: Context) {
         )
     }
 
-    /**
-     * Android 13+ 需要 POST_NOTIFICATIONS 运行时权限。
-     * Android 12 及以下仅需检查通知开关。
-     */
     fun isNotificationRuntimeGranted(): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             ActivityCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) ==
@@ -138,10 +144,6 @@ class PermissionManager(private val context: Context) {
         )
     }
 
-    /**
-     * 只信任系统 API：AppWidgetManager.getAppWidgetIds()
-     * 不信任 UserPreferences 或其他任何本地缓存。
-     */
     fun isWidgetPlaced(): Boolean {
         return try {
             val mgr = context.getSystemService(Context.APPWIDGET_SERVICE) as android.appwidget.AppWidgetManager
@@ -182,25 +184,29 @@ class PermissionManager(private val context: Context) {
 
     /**
      * 为每种权限类型返回直达**具体权限页**的 Intent。
-     * 绝不返回设置首页。
-     * 对于无法直达的国产 ROM 权限，返回 null，由上层显示引导文字。
+     *
+     * 关键修复：
+     * - 通知权限：同时传 EXTRA_APP_PACKAGE + EXTRA_APP_UID，确保国产 ROM 能定位到本应用
+     * - 精确闹钟：设置 data = pkgUri，直接定位到本应用而非全局列表
+     * - 电池优化：使用 ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS 直接请求
+     * - 所有 Intent 都加 FLAG_ACTIVITY_NEW_TASK
+     *
+     * 对于无法直达的国产 ROM 权限（自启动/后台运行），返回 null，由上层显示引导文字。
      */
     fun intentFor(type: PermissionType): Intent? = when (type) {
-        PermissionType.NOTIFICATION -> Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
-            putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
-        }
+        PermissionType.NOTIFICATION -> buildNotificationSettingsIntent()
 
         PermissionType.EXACT_ALARM ->
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
+                Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
+                    data = pkgUri
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
             } else null
 
-        PermissionType.BATTERY -> Intent(
-            Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS,
-            pkgUri
-        )
+        PermissionType.BATTERY -> buildBatterySettingsIntent()
 
-        PermissionType.WIDGET -> null // Widget 添加走系统 Pin 流程，不是设置页跳转
+        PermissionType.WIDGET -> null
 
         PermissionType.AUTO_START -> autoStartIntent()
 
@@ -208,13 +214,86 @@ class PermissionManager(private val context: Context) {
     }
 
     /**
+     * 通知设置页 Intent。
+     * 同时传 package name 和 uid，最大程度兼容国产 ROM。
+     */
+    private fun buildNotificationSettingsIntent(): Intent {
+        return Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+            putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+            if (appUid != -1) {
+                // EXTRA_APP_UID 是隐藏 API，直接使用字符串值
+                putExtra("android.app.extra.APP_UID", appUid)
+            }
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+    }
+
+    /**
+     * 电池优化 Intent。
+     * 优先使用 ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS（直接弹出请求对话框），
+     * 如果无法 resolve 则回退到 ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS（列表页）。
+     */
+    @SuppressLint("BatteryLife")
+    private fun buildBatterySettingsIntent(): Intent {
+        // 方式1：直接请求忽略电池优化（弹出系统对话框，最精准）
+        val directRequest = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+            data = pkgUri
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        if (canResolve(directRequest)) return directRequest
+
+        // 方式2：电池优化设置列表页（带包名）
+        val listPage = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS, pkgUri).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        if (canResolve(listPage)) return listPage
+
+        // 方式3：高优先级忽略电池优化设置
+        val highPriority = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        return highPriority
+    }
+
+    /**
+     * 尝试启动 Intent，返回是否成功。
+     * 如果 Intent 为 null 或无法 resolve，返回 false。
+     */
+    fun startIntent(type: PermissionType): Boolean {
+        val intent = intentFor(type) ?: run {
+            Log.w(TAG, "startIntent: intentFor($type) returned null")
+            return false
+        }
+        if (!canResolve(intent)) {
+            Log.w(TAG, "startIntent: cannot resolve intent for $type")
+            return false
+        }
+        return try {
+            context.startActivity(intent)
+            true
+        } catch (e: Throwable) {
+            Log.e(TAG, "startIntent: failed for $type", e)
+            false
+        }
+    }
+
+    /**
+     * 检查 Intent 是否可以被系统处理。
+     */
+    fun canResolve(intent: Intent): Boolean {
+        return try {
+            context.packageManager.resolveActivity(intent, 0) != null
+        } catch (_: Throwable) {
+            false
+        }
+    }
+
+    /**
      * 通知运行时权限请求（Android 13+）。
      */
     fun notificationRuntimeRequestIntent(): Intent? {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
-                putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
-            }
+            buildNotificationSettingsIntent()
         } else null
     }
 
@@ -225,6 +304,7 @@ class PermissionManager(private val context: Context) {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
                 data = pkgUri
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
         } else null
     }
@@ -232,10 +312,7 @@ class PermissionManager(private val context: Context) {
     /**
      * 电池优化直达 Intent（带包名）。
      */
-    fun batteryIntent(): Intent = Intent(
-        Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS,
-        pkgUri
-    )
+    fun batteryIntent(): Intent = buildBatterySettingsIntent()
 
     /**
      * 应用详情设置页（通用，包含「允许创建小组件」等权限）。
@@ -243,7 +320,7 @@ class PermissionManager(private val context: Context) {
     fun appDetailsIntent(): Intent = Intent(
         Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
         pkgUri
-    )
+    ).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
 
     // ==================== 厂商检测 ====================
 
@@ -252,72 +329,100 @@ class PermissionManager(private val context: Context) {
         return mfr in setOf("huawei", "honor", "xiaomi", "redmi", "oppo", "vivo", "meizu", "samsung")
     }
 
+    /**
+     * 国产 ROM 自启动权限 Intent。
+     * 只返回厂商专属页面的 Intent；如果无法直达，返回 null（不回退到应用详情页）。
+     * 由上层显示文字引导。
+     */
     private fun autoStartIntent(): Intent? {
         val mfr = Build.MANUFACTURER?.lowercase() ?: return null
         val candidates = listOfNotNull(
-            // 华为
+            // 华为/荣耀：应用启动管理
             if (mfr == "huawei" || mfr == "honor")
-                Intent("com.huawei.systemmanager.optimize.process.ProtectActivity").apply {
-                    component = android.content.ComponentName("com.huawei.systemmanager",
-                        "com.huawei.systemmanager.optimize.process.ProtectActivity")
+                Intent().apply {
+                    component = android.content.ComponentName(
+                        "com.huawei.systemmanager",
+                        "com.huawei.systemmanager.optimize.process.ProtectActivity"
+                    )
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
             else null,
-            // 小米/红米
+            // 小米/红米：自启动管理
             if (mfr == "xiaomi" || mfr == "redmi")
                 Intent("miui.intent.action.OP_AUTO_START").apply {
-                    component = android.content.ComponentName("com.miui.securitycenter",
-                        "com.miui.permcenter.autostart.AutoStartManagementActivity")
+                    component = android.content.ComponentName(
+                        "com.miui.securitycenter",
+                        "com.miui.permcenter.autostart.AutoStartManagementActivity"
+                    )
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
             else null,
-            // OPPO/realme
+            // OPPO/realme：启动管理
             if (mfr == "oppo" || mfr == "realme")
-                Intent("com.oppo.safe.permission.startup.StartupSettingActivity")
-                    .setComponent(android.content.ComponentName("com.oppo.safe",
-                        "com.oppo.safe.permission.startup.StartupSettingActivity"))
-            else null,
-            // VIVO/iQOO
-            if (mfr == "vivo" || mfr == "iqoo")
-                Intent("com.vivo.permissionmanager.activity.BgStartUpManagerActivity").apply {
-                    component = android.content.ComponentName("com.vivo.permissionmanager",
-                        "com.vivo.permissionmanager.activity.BgStartUpManagerActivity")
+                Intent().apply {
+                    component = android.content.ComponentName(
+                        "com.coloros.safecenter",
+                        "com.coloros.safecenter.permission.startup.StartupAppListActivity"
+                    )
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
             else null,
-            // 默认：应用详情页
-            appDetailsIntent()
+            // VIVO/iQOO：后台弹出活动管理
+            if (mfr == "vivo" || mfr == "iqoo")
+                Intent().apply {
+                    component = android.content.ComponentName(
+                        "com.vivo.permissionmanager",
+                        "com.vivo.permissionmanager.activity.BgStartUpManagerActivity"
+                    )
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+            else null
         )
-        return candidates.firstOrNull { intent ->
-            runCatching { context.packageManager.resolveActivity(intent, 0) != null }
-                .getOrDefault(false)
-        }
+        // 只返回能 resolve 的厂商专属 Intent，不回退到应用详情页
+        return candidates.firstOrNull { canResolve(it) }
     }
 
+    /**
+     * 国产 ROM 后台运行权限 Intent。
+     * 只返回厂商专属页面的 Intent；如果无法直达，返回 null。
+     */
     private fun backgroundRunIntent(): Intent? {
         val mfr = Build.MANUFACTURER?.lowercase() ?: return null
         val candidates = listOfNotNull(
-            // 华为：应用启动管理
+            // 华为/荣耀：应用启动管理（与自启动同一页面）
             if (mfr == "huawei" || mfr == "honor")
-                Intent("com.huawei.systemmanager.optimize.process.AppStartSettingsActivity")
-                    .setComponent(android.content.ComponentName("com.huawei.systemmanager",
-                        "com.huawei.systemmanager.optimize.process.AppStartSettingsActivity"))
+                Intent().apply {
+                    component = android.content.ComponentName(
+                        "com.huawei.systemmanager",
+                        "com.huawei.systemmanager.optimize.process.ProtectActivity"
+                    )
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
             else null,
-            // 小米：省电模式
+            // 小米/红米：电池优化（带包名）
             if (mfr == "xiaomi" || mfr == "redmi")
-                Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS, pkgUri).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
             else null,
-            // OPPO：后台冻结
+            // OPPO/realme：电池优化
             if (mfr == "oppo" || mfr == "realme")
-                Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS, pkgUri).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
             else null,
-            // VIVO：后台耗电管理
+            // VIVO/iQOO：后台耗电管理
             if (mfr == "vivo" || mfr == "iqoo")
-                Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
-            else null,
-            appDetailsIntent()
+                Intent().apply {
+                    component = android.content.ComponentName(
+                        "com.vivo.abe",
+                        "com.vivo.abe.FakeActivity"
+                    )
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+            else null
         )
-        return candidates.firstOrNull { intent ->
-            runCatching { context.packageManager.resolveActivity(intent, 0) != null }
-                .getOrDefault(false)
-        }
+        return candidates.firstOrNull { canResolve(it) }
     }
 
     /**
@@ -328,31 +433,31 @@ class PermissionManager(private val context: Context) {
         val mfr = Build.MANUFACTURER?.lowercase() ?: return null
         return when {
             type == PermissionType.AUTO_START && (mfr == "huawei" || mfr == "honor") ->
-                "华为/荣耀：设置 → 应用和服务 → 应用启动管理 → 找到 TaskFlow → 关闭自动管理 → 开启自动启动"
+                "华为/荣耀：\n设置 → 应用和服务 → 应用启动管理\n找到 TaskFlow → 关闭自动管理\n→ 开启「自动启动」「关联启动」「后台活动」三个开关"
 
             type == PermissionType.AUTO_START && (mfr == "xiaomi" || mfr == "redmi") ->
-                "小米/红米：安全中心 → 应用权限 → 自启动 → 找到 TaskFlow → 允许自启动"
+                "小米/红米：\n安全中心（或手机管家）→ 应用权限 → 自启动\n找到 TaskFlow → 开启「允许自启动」"
 
             type == PermissionType.AUTO_START && (mfr == "oppo" || mfr == "realme") ->
-                "OPPO/realme：设置 → 电池 → 应用耗电管理 → TaskFlow → 允许后台活动"
+                "OPPO/realme：\n设置 → 电池 → 更多电池设置 → 应用耗电管理\n找到 TaskFlow → 开启「允许自启动」和「允许后台运行」"
 
             type == PermissionType.AUTO_START && (mfr == "vivo" || mfr == "iqoo") ->
-                "VIVO/iQOO：i管家 → 应用管理 → 自启动 → 开启 TaskFlow"
+                "VIVO/iQOO：\ni管家 → 应用管理 → 权限管理 → 自启动\n找到 TaskFlow → 开启「允许自启动」"
 
             type == PermissionType.BACKGROUND_RUN && (mfr == "huawei" || mfr == "honor") ->
-                "华为/荣耀：设置 → 应用和服务 → 应用启动管理 → TaskFlow → 关闭自动管理 → 开启后台活动"
+                "华为/荣耀：\n设置 → 应用和服务 → 应用启动管理\n找到 TaskFlow → 关闭自动管理\n→ 开启「后台活动」开关"
 
             type == PermissionType.BACKGROUND_RUN && (mfr == "xiaomi" || mfr == "redmi") ->
-                "小米/红米：安全中心 → 省电策略 → TaskFlow → 无限后台"
+                "小米/红米：\n安全中心 → 电池 → 应用智能省电\n找到 TaskFlow → 设为「无限制」"
 
             type == PermissionType.BACKGROUND_RUN && (mfr == "oppo" || mfr == "realme") ->
-                "OPPO/realme：设置 → 电池 → 应用耗电管理 → TaskFlow → 允许后台活动"
+                "OPPO/realme：\n设置 → 电池 → 更多 → 应用耗电管理\n找到 TaskFlow → 开启「允许后台运行」"
 
             type == PermissionType.BACKGROUND_RUN && (mfr == "vivo" || mfr == "iqoo") ->
-                "VIVO/iQOO：i管家 → 应用管理 → 后台管理 → 允许 TaskFlow 后台运行"
+                "VIVO/iQOO：\ni管家 → 应用管理 → 后台管理\n找到 TaskFlow → 允许后台运行"
 
             type == PermissionType.WIDGET && isChineseRom() ->
-                "国产 ROM 可能需要手动开启创建小组件权限：设置 → 应用和服务 → 权限管理 → 找到 TaskFlow → 开启「允许创建小组件」"
+                "国产 ROM 可能需要手动开启创建小组件权限：\n设置 → 应用和服务 → 权限管理\n找到 TaskFlow → 开启「允许创建小组件」"
 
             else -> null
         }

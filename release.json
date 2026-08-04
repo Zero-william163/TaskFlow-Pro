@@ -1,25 +1,25 @@
 {
-  "version": "1.3.0",
-  "code": 14,
-  "versionTag": "v1.3.0",
-  "log": "## v1.3.0\n\n### 重构\n1. 权限引导系统全面重构：所有权限跳转直达具体权限页，不再跳转系统设置首页\n   - 通知权限 → ACTION_APP_NOTIFICATION_SETTINGS（带包名）\n   - 精确闹钟 → ACTION_REQUEST_SCHEDULE_EXACT_ALARM\n   - 电池优化 → ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS（带包名）\n2. Widget 真实状态检测系统：只信任 AppWidgetManager.getAppWidgetIds()，不信任本地缓存\n   - 修复 Widget 假创建问题（APP 显示已创建但桌面无组件）\n   - 禁止重复创建 Widget（已添加时按钮禁用 + Toast 提示）\n   - requestPinAppWidget 回调正确传递 EXTRA_APPWIDGET_ID\n3. 新增 PermissionManager 统一权限管理：\n   - 精确检测通知、精确闹钟、电池优化、Widget 状态\n   - Android 13+ POST_NOTIFICATIONS 运行时权限请求\n   - 国产 ROM 自启动/后台运行权限检测与引导\n4. 国产 ROM 适配：华为/荣耀/小米/红米/OPPO/VIVO/iQOO/realme\n   - 优先直达厂商专属权限页（resolveActivity 探测）\n   - 无法直达时显示详细文字教程\n5. SettingsScreen/PermissionScreen/HomeScreen 统一使用系统 API 检测 Widget 状态\n6. 新增字符串资源：permission_autostart、permission_background_run 等",
-  "apk": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.3.0/app-release.apk",
-  "sha256": "b75401cf53350a872d581faf6412a07c462038dadbd30b861f073c58fb6406d7",
+  "version": "1.3.1",
+  "code": 15,
+  "versionTag": "v1.3.1",
+  "log": "## v1.3.1\n\n### 修复\n1. 权限跳转精准度修复：所有权限按钮现在直达**具体权限页**，不再跳设置首页\n   - 通知权限：同时传 EXTRA_APP_PACKAGE + EXTRA_APP_UID，确保国产 ROM 定位到本应用\n   - 精确闹钟：设置 data = package URI，直接定位到本应用而非全局列表\n   - 电池优化：优先使用 ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS（直接弹对话框）\n2. 所有 Intent 添加 FLAG_ACTIVITY_NEW_TASK\n3. 新增 startIntent() 方法：启动前先 resolveActivity 检查，失败时 Toast 提示\n4. 国产 ROM 自启动/后台运行：不再回退到应用详情页，改为显示详细文字引导\n5. OPPO/realme 自启动 Intent 修正为 coloros.safecenter 组件",
+  "apk": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.3.1/app-release.apk",
+  "sha256": "9f2557c3abf689bc910452f282c742cbc34a936a9ba1ab9c4704f7bdc4c55561",
   "size": 46290759,
   "downloadUrls": [
     {
       "name": "GH Proxy",
-      "url": "https://gh-proxy.com/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.3.0/app-release.apk",
+      "url": "https://gh-proxy.com/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.3.1/app-release.apk",
       "region": "domestic"
     },
     {
       "name": "GH Fast",
-      "url": "https://ghfast.top/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.3.0/app-release.apk",
+      "url": "https://ghfast.top/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.3.1/app-release.apk",
       "region": "cdn"
     },
     {
       "name": "GitHub",
-      "url": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.3.0/app-release.apk",
+      "url": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.3.1/app-release.apk",
       "region": "international"
     }
   ]

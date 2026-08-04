@@ -8,6 +8,18 @@ The GitHub Actions release workflow extracts the section matching the pushed tag
 (e.g. `## v1.0.0`) and uses it as the GitHub / Gitee release notes, and embeds it
 into `release.json` as the `log` field consumed by the in-app updater.
 
+## v1.3.1
+
+### 修复
+1. 权限跳转精准度修复：所有权限按钮现在直达**具体权限页**，不再跳设置首页
+   - 通知权限：同时传 EXTRA_APP_PACKAGE + EXTRA_APP_UID，确保国产 ROM 定位到本应用
+   - 精确闹钟：设置 data = package URI，直接定位到本应用而非全局列表
+   - 电池优化：优先使用 ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS（直接弹对话框）
+2. 所有 Intent 添加 FLAG_ACTIVITY_NEW_TASK
+3. 新增 startIntent() 方法：启动前先 resolveActivity 检查，失败时 Toast 提示
+4. 国产 ROM 自启动/后台运行：不再回退到应用详情页，改为显示详细文字引导
+5. OPPO/realme 自启动 Intent 修正为 coloros.safecenter 组件
+
 ## v1.3.0
 
 ### 重构
