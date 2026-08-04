@@ -1,25 +1,25 @@
 {
-  "version": "1.1.1",
-  "code": 3,
-  "versionTag": "v1.1.1",
-  "log": "## v1.1.1\n\n### 全屏闹钟系统\n- 新增 AlarmActivity 全屏闹钟界面（类似系统闹钟）\n- 闹钟触发时直接弹出全屏界面，播放铃声+震动\n- MediaPlayer 循环播放铃声直到用户关闭\n- WakeLock 唤醒屏幕，锁屏状态也可弹出\n- 添加 USE_FULL_SCREEN_INTENT 权限（Android 14+）\n- 闹钟触发流程：AlarmManager → BroadcastReceiver → AlarmActivity（全屏）+ 通知（FullScreenIntent 回退）\n\n### 首次启动权限引导\n- 新增 OnboardingScreen 首次启动权限引导页面\n- 逐项检查：通知权限、精确闹钟权限、电池优化白名单、桌面小组件\n- 每个权限有明确用途说明\n- 权限开启后自动刷新状态\n- 完成设置后进入主页\n\n### 日期系统修复\n- DatePicker 确认时钳位非法日期（过去日期→今天，超出截止日期→截止日期）\n- 截止日期选择早于开始日期时自动修正并显示错误\n- 开始日期默认今天，截止日期默认为空（不自动生成）\n\n### BottomSheet 退出逻辑\n- 禁止下滑关闭创建任务页面（confirmValueChange 拒绝 Hidden 状态）\n- 取消按钮：有未保存内容时弹出「是否保存当前编辑？」对话框\n- 保存按钮：保存成功后关闭\n\n### 更新系统修复\n- 新增 GitHubRawSource 读取 release.json（获取 versionCode）\n- GitHubApiSource 从 tag/body 提取 versionCode\n- 国际用户优先读取 GitHub raw release.json\n\n### Widget 修复\n- requestPinWidget 添加详细日志（SDK 版本、支持状态、返回值、异常）\n- 失败时显示手动引导对话框\n\n### 编辑页面修复\n- TaskDetailScreen 包裹 AddEditTaskSheet 在 fillMaxSize Box 中\n- 确保编辑页面所有字段完整显示",
-  "apk": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.1.1/TaskFlow-Pro-v1.1.1-release.apk",
-  "sha256": "3059b6d457a6945c2cda3d2459b3e324864eb163da973d3a6e83489826974c0e",
-  "size": 46186827,
+  "version": "1.2.0",
+  "code": 4,
+  "versionTag": "v1.2.0",
+  "log": "## v1.2.0\n\n### Widget 创建无反应修复\n- 新增 WidgetCapability 预检系统：API/launcher/厂商/电池/已放置状态全面检测\n- 厂商兼容：Huawei/Honor/Xiaomi/OPPO/Vivo/Meizu 标记为需手动添加\n- OnboardingScreen 第4步改为真实 isAnyWidgetPlaced 检测\n- 点击添加小组件时先预检，失败时弹对话框显示原因+手动步骤\n- 新增 openWidgetPicker 兼容 AOSP/Huawei/MIUI/OPPO 桌面选择器\n\n### 统计页面折线图\n- 新增任务完成趋势折线图（Canvas 自绘，无外部依赖）\n- Y轴：完成数量刻度（0/5/10/15...）\n- X轴：日期标签（M/D 格式）\n- 折线+填充渐变区域+数据点圆圈+今日高亮\n- 标题自动生成：「YYYY年MM月任务完成趋势」\n- 月份切换：上一月/下一月按钮\n- 数据来源：Room Database tasks.completedAt，GROUP BY date 聚合\n- 实时更新：Flow + StateFlow + collectAsState，完成任务自动刷新\n\n### 主页分类优化\n- 新增「未完成」分类（INCOMPLETE）\n- 今天：dueDate == today 且未完成\n- 即将：dueDate > today 且未完成\n- 已完成：isCompleted == true\n- 未完成：截止日期未到（含今天/未来/无截止日期）且未完成\n- FilterChipRow 改为 LazyRow 横向滚动，5个chip在窄屏不溢出\n- 所有分类实时计算，数据变化立即同步\n\n### 数据一致性\n- 主页/统计/Widget 均通过 TaskRepository 单源读取 tasks 表\n- 5个变更方法均调用 notifyTasksChanged 广播\n- Flow 自动响应 DB 变化，无需手动刷新",
+  "apk": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.2.0/TaskFlow-Pro-v1.2.0-release.apk",
+  "sha256": "b4c72b50a25fea0d0bbb1af1d095635d142c78dc27b2ef8536a2b86fd11a7ac3",
+  "size": 46236391,
   "downloadUrls": [
     {
       "name": "GH Proxy",
-      "url": "https://gh-proxy.com/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.1.1/TaskFlow-Pro-v1.1.1-release.apk",
+      "url": "https://gh-proxy.com/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.2.0/TaskFlow-Pro-v1.2.0-release.apk",
       "region": "domestic"
     },
     {
       "name": "GH Fast",
-      "url": "https://ghfast.top/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.1.1/TaskFlow-Pro-v1.1.1-release.apk",
+      "url": "https://ghfast.top/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.2.0/TaskFlow-Pro-v1.2.0-release.apk",
       "region": "cdn"
     },
     {
       "name": "GitHub",
-      "url": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.1.1/TaskFlow-Pro-v1.1.1-release.apk",
+      "url": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.2.0/TaskFlow-Pro-v1.2.0-release.apk",
       "region": "international"
     }
   ]

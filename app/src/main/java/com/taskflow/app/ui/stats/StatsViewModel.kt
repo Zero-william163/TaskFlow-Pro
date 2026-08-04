@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import java.time.LocalDate
@@ -72,7 +73,7 @@ class StatsViewModel(
      * needed (spec §2 "实时更新").
      */
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
-    private val monthlyTrendFlow: StateFlow<List<DailyPoint>> = _selectedMonth
+    private val monthlyTrendFlow: StateFlow<List<DailyCompletion>> = _selectedMonth
         .flatMapLatest { month ->
             val start = month.atDay(1).atStartOfDay()
             val end = month.atEndOfMonth().atTime(23, 59, 59)

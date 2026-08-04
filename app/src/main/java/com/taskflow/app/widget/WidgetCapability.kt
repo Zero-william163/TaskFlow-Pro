@@ -1,6 +1,6 @@
 package com.taskflow.app.widget
 
-import android.app.AppWidgetManager
+import android.appwidget.AppWidgetManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -61,18 +61,24 @@ object WidgetCapability {
     fun report(context: Context): Report {
         val apiSupported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
         val launcherSupported = if (apiSupported) {
-            runCatching {
+            try {
                 AppWidgetManager.getInstance(context).isRequestPinAppWidgetSupported
-            }.getOrDefault(false)
+            } catch (e: Exception) {
+                false
+            }
         } else false
-        val widgetAlreadyPlaced = runCatching {
+        val widgetAlreadyPlaced = try {
             val provider = ComponentName(context, TaskWidgetProvider::class.java)
             AppWidgetManager.getInstance(context).getAppWidgetIds(provider).isNotEmpty()
-        }.getOrDefault(false)
-        val batteryOptimized = runCatching {
+        } catch (e: Exception) {
+            false
+        }
+        val batteryOptimized = try {
             val pm = context.getSystemService(Context.POWER_SERVICE) as PowerManager
-            !pm.isIgnoringBatteryOptimizations(context.packageName)
-        }.getOrDefault(false)
+            pm.isIgnoringBatteryOptimizations(context.packageName).not()
+        } catch (e: Exception) {
+            false
+        }
         val vendorName = Build.MANUFACTURER?.lowercase()
         val vendorRestricted = vendorName in restrictedVendors
 
