@@ -182,26 +182,27 @@ fun SettingsScreen(
                                     ).show()
                                 }
                                 report.canAttemptAutoPin -> {
+                                    // 系统支持自动 Pin（非华为等国产ROM）
                                     val pinned = WidgetHelper.requestPinWidget(context)
                                     if (pinned) {
-                                        // requestPinWidget返回true表示系统接受了请求，
-                                        // 但Widget可能还未实际添加。显示"已发送请求"
-                                        // 而不是"添加成功"，并等待WidgetPinResultReceiver
-                                        // 确认后再更新状态。
+                                        // requestPinWidget 返回 true 只表示系统接受了请求
+                                        // 不要认为已添加成功，等待 WidgetPinResultReceiver 回调
                                         Toast.makeText(
                                             context,
-                                            "已发送添加请求，请在桌面确认",
+                                            "请在系统弹窗中确认添加小组件",
                                             Toast.LENGTH_LONG
                                         ).show()
                                     } else {
-                                        widgetGuideMessage = report.blockingReason.ifBlank {
-                                            "系统未响应添加请求"
-                                        }
+                                        // 系统接受了请求但未弹窗，或请求失败
+                                        widgetGuideMessage = "系统未弹出添加面板，请手动添加"
                                         showWidgetGuideDialog = true
                                     }
                                 }
                                 else -> {
-                                    widgetGuideMessage = report.blockingReason
+                                    // 华为/小米等设备或不支持的Launcher：直接手动引导
+                                    widgetGuideMessage = report.blockingReason.ifBlank {
+                                        "当前设备不支持自动添加"
+                                    }
                                     showWidgetGuideDialog = true
                                 }
                             }
@@ -316,16 +317,10 @@ private data class WidgetStatus(
 
 private fun computeWidgetStatus(context: Context): WidgetStatus {
     val report = WidgetCapability.report(context)
-    // 组合判断：getAppWidgetIds() 是最可靠的系统状态。
-    // 部分OEM启动器下getAppWidgetIds()可能返回空（即使Widget已放置），
-    // 此时使用UserPreferences中的widgetAdded作为辅助判断。
-    val prefsAdded = runCatching {
-        // 同步读取一次性检查（Flow不适合同步，使用DataStore直接读取）
-        false // 暂时只依赖系统API + WidgetPinResultReceiver实时刷新
-    }.getOrDefault(false)
-    val trulyPlaced = report.widgetAlreadyPlaced || prefsAdded
+    // 只信任系统真实状态：getAppWidgetIds()
+    // 不使用 UserPreferences.widgetAdded，因为它可能是假成功
     return WidgetStatus(
-        placed = trulyPlaced,
+        placed = report.widgetAlreadyPlaced,
         launcherSupported = report.launcherSupported,
         vendorRestricted = report.vendorRestricted,
         vendorName = report.vendorName

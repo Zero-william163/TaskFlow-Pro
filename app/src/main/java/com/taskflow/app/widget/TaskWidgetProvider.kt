@@ -4,26 +4,30 @@ import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.Context
 import android.content.Intent
+import android.util.Log
 import com.taskflow.app.data.preferences.UserPreferences
 import com.taskflow.app.data.repository.TaskRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
-/**
- * App Widget entry point. Rebuilds its RemoteViews on update, resize, and whenever a
- * [ACTION_TASKS_CHANGED] / [ACTION_WIDGET_REFRESH] broadcast is received, so the
- * home-screen component always reflects the latest task list without manual refresh.
- */
+private const val TAG = "WidgetProvider"
+
 class TaskWidgetProvider : AppWidgetProvider() {
 
     private val scope = CoroutineScope(Dispatchers.Default)
 
     override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
+        Log.d(TAG, "onUpdate: ids=${appWidgetIds.toList()}")
         appWidgetIds.forEach { id ->
             scope.launch {
-                val views = WidgetHelper.buildForId(context, id)
-                appWidgetManager.updateAppWidget(id, views)
+                try {
+                    val views = WidgetHelper.buildForId(context, id)
+                    appWidgetManager.updateAppWidget(id, views)
+                    Log.d(TAG, "onUpdate: widget $id updated")
+                } catch (e: Throwable) {
+                    Log.e(TAG, "onUpdate: widget $id failed", e)
+                }
             }
         }
     }
@@ -34,18 +38,34 @@ class TaskWidgetProvider : AppWidgetProvider() {
         appWidgetId: Int,
         newOptions: android.os.Bundle
     ) {
+        Log.d(TAG, "onAppWidgetOptionsChanged: id=$appWidgetId")
         scope.launch {
-            val views = WidgetHelper.buildForId(context, appWidgetId)
-            appWidgetManager.updateAppWidget(appWidgetId, views)
+            try {
+                val views = WidgetHelper.buildForId(context, appWidgetId)
+                appWidgetManager.updateAppWidget(appWidgetId, views)
+            } catch (e: Throwable) {
+                Log.e(TAG, "onAppWidgetOptionsChanged: failed", e)
+            }
         }
     }
 
     override fun onEnabled(context: Context) {
-        // First widget instance placed — remember so we never show the guide again.
+        Log.d(TAG, "onEnabled: first widget placed")
         scope.launch { UserPreferences.get(context).setWidgetAdded(true) }
     }
 
+    override fun onDeleted(context: Context, appWidgetIds: IntArray) {
+        Log.d(TAG, "onDeleted: ids=${appWidgetIds.toList()}")
+        super.onDeleted(context, appWidgetIds)
+    }
+
+    override fun onDisabled(context: Context) {
+        Log.d(TAG, "onDisabled: last widget removed")
+        scope.launch { UserPreferences.get(context).setWidgetAdded(false) }
+    }
+
     override fun onReceive(context: Context, intent: Intent) {
+        Log.d(TAG, "onReceive: action=${intent.action}")
         super.onReceive(context, intent)
         when (intent.action) {
             ACTION_TASKS_CHANGED, ACTION_WIDGET_REFRESH -> WidgetHelper.refresh(context)

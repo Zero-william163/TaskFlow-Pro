@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.util.Log
 import android.view.View
 import android.widget.RemoteViews
 import com.taskflow.app.MainActivity
@@ -17,14 +18,19 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+private const val TAG = "WidgetHelper"
+
 object WidgetHelper {
 
     fun refresh(context: Context) {
         CoroutineScope(Dispatchers.Default).launch {
             val manager = AppWidgetManager.getInstance(context)
             val ids = manager.getAppWidgetIds(providerComponent(context))
-            if (ids.isEmpty()) return@launch
-
+            Log.d(TAG, "refresh: appWidgetIds=${ids.toList()}")
+            if (ids.isEmpty()) {
+                Log.w(TAG, "refresh: no widget placed, skip")
+                return@launch
+            }
             val pending = withContext(Dispatchers.IO) {
                 TaskRepository.get(context).getPinnedPending()
             }
@@ -51,7 +57,6 @@ object WidgetHelper {
     ): RemoteViews {
         val views = RemoteViews(context.packageName, R.layout.widget_content)
 
-        // 点击 header 区域打开 APP
         val headerPi = PendingIntent.getActivity(
             context, 0,
             Intent(context, MainActivity::class.java).apply {
@@ -67,7 +72,6 @@ object WidgetHelper {
             else context.getString(R.string.widget_all_done)
         )
 
-        // ListView 数据绑定
         val listIntent = Intent(context, TaskListRemoteViewsService::class.java).apply {
             putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
             data = Uri.parse(toUri(Intent.URI_INTENT_SCHEME))
@@ -88,7 +92,6 @@ object WidgetHelper {
             views.setViewVisibility(R.id.task_list, View.GONE)
             views.setViewVisibility(R.id.empty_text, View.VISIBLE)
             views.setTextViewText(R.id.empty_text, context.getString(R.string.widget_no_tasks))
-            // 空状态点击打开 APP
             views.setOnClickPendingIntent(R.id.empty_text, headerPi)
         } else {
             views.setViewVisibility(R.id.task_list, View.VISIBLE)
@@ -101,30 +104,50 @@ object WidgetHelper {
     fun providerComponent(context: Context): ComponentName =
         ComponentName(context, TaskWidgetProvider::class.java)
 
+    /**
+     * 请求系统 Pin Widget。
+     *
+     * 返回值含义：
+     * - true: 系统接受了请求（但不代表 Widget 已创建，需等 callback）
+     * - false: 系统不支持或请求失败
+     *
+     * 注意：调用此方法后不要立即设置 widgetAdded=true，
+     * 必须等待 [WidgetPinResultReceiver] 回调确认。
+     */
     fun requestPinWidget(context: Context): Boolean {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val manager = AppWidgetManager.getInstance(context)
-            if (manager.isRequestPinAppWidgetSupported) {
-                val callback = PendingIntent.getBroadcast(
-                    context,
-                    System.currentTimeMillis().toInt(),
-                    Intent(context, WidgetPinResultReceiver::class.java),
-                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-                )
-                return try {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                        manager.requestPinAppWidget(providerComponent(context), null, callback)
-                    } else {
-                        manager.requestPinAppWidget(providerComponent(context), null, callback)
-                    }
-                } catch (_: Throwable) {
-                    false
-                }
-            }
+        Log.d(TAG, "requestPinWidget: SDK=${Build.VERSION.SDK_INT}")
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            Log.w(TAG, "requestPinWidget: API < 26, not supported")
+            return false
         }
-        return false
+        val manager = AppWidgetManager.getInstance(context)
+        val supported = manager.isRequestPinAppWidgetSupported
+        Log.d(TAG, "requestPinWidget: isRequestPinAppWidgetSupported=$supported")
+        if (!supported) return false
+
+        // callback 广播：系统在用户确认/拒绝后发送
+        val callbackIntent = Intent(context, WidgetPinResultReceiver::class.java).apply {
+            // 关键：让系统能传递广播
+            setPackage(context.packageName)
+        }
+        val callback = PendingIntent.getBroadcast(
+            context,
+            System.currentTimeMillis().toInt(),
+            callbackIntent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        return try {
+            manager.requestPinAppWidget(providerComponent(context), null, callback)
+        } catch (e: Throwable) {
+            Log.e(TAG, "requestPinWidget: exception", e)
+            false
+        }
     }
 
+    /**
+     * 真实检测：系统中是否存在已放置的 Widget。
+     * 不要信任 UserPreferences.widgetAdded，只信任系统 API。
+     */
     fun isAnyWidgetPlaced(context: Context): Boolean {
         return AppWidgetManager.getInstance(context)
             .getAppWidgetIds(providerComponent(context))
