@@ -118,6 +118,10 @@ fun AddEditTaskSheet(
     var dueDate by remember(task) { mutableStateOf(task?.dueDate?.toLocalDate()) }
     var dueTime by remember(task) { mutableStateOf(task?.dueDate?.toLocalTime()) }
     var dueDateError by remember { mutableStateOf(false) }
+    // Distinguish the two due-date error cases so the inline message can match
+    // the actual problem (spec: empty → "请填写截止日期"; earlier-than-start →
+    // "截止日期不能早于开始日期"). Null = no error.
+    var dueDateErrorMessage by remember { mutableStateOf<String?>(null) }
 
     // Default reminder OFF for new tasks (#1 fix).
     var reminderEnabled by remember(task) { mutableStateOf(task?.reminderTime != null && isEdit) }
@@ -188,6 +192,7 @@ fun AddEditTaskSheet(
         // ====== Due date is required (Requirement #2) ======
         if (dueDate == null) {
             dueDateError = true
+            dueDateErrorMessage = "请填写截止日期"
             coroutineScope.launch {
                 scrollState.scrollTo(scrollState.maxValue)
             }
@@ -306,12 +311,13 @@ fun AddEditTaskSheet(
                 onClick = {
                     showEndPicker = true
                     dueDateError = false
+                    dueDateErrorMessage = null
                 }
             )
         }
         if (dueDateError) {
             Text(
-                text = "请填写截止日期",
+                text = dueDateErrorMessage ?: "请填写截止日期",
                 color = MaterialTheme.colorScheme.error,
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.padding(start = 14.dp, top = 2.dp)
@@ -442,6 +448,10 @@ fun AddEditTaskSheet(
                 ?.toInstant()?.toEpochMilli()
                 ?: minToday.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
         )
+        // Validator: gray out past dates AND dates after the due date.
+        // Spec: "今天以前：全部灰色。不可点击。" + "开始日期不能晚于截止日期".
+        val todayMillis = minToday.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val endMillis = endDay?.atStartOfDay(ZoneId.systemDefault())?.toInstant()?.toEpochMilli()
         DatePickerDialog(
             onConfirm = {
                 state.selectedDateMillis?.let {
@@ -457,7 +467,14 @@ fun AddEditTaskSheet(
                 showStartPicker = false
             },
             onDismiss = { showStartPicker = false }
-        ) { DatePicker(state = state) }
+        ) {
+            DatePicker(
+                state = state,
+                dateValidator = { millis ->
+                    millis >= todayMillis && (endMillis == null || millis <= endMillis)
+                }
+            )
+        }
     }
     if (showEndPicker) {
         val minDay = (startDate ?: LocalDate.now()).coerceAtLeast(LocalDate.now())
@@ -466,23 +483,39 @@ fun AddEditTaskSheet(
                 ?.toInstant()?.toEpochMilli()
                 ?: minDay.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
         )
+        // Validator: gray out past dates AND dates earlier than the start date.
+        // Spec: "今天以前：全部灰色。不可点击。" + "截止日期不能早于开始日期".
+        val minMillis = minDay.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
         DatePickerDialog(
             onConfirm = {
                 state.selectedDateMillis?.let {
                     val picked = Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate()
-                    // dueDate must be >= startDate. If user picks earlier, show error.
+                    // dueDate must be >= startDate. If user picks earlier (shouldn't
+                    // happen with dateValidator, but kept as a safety net for
+                    // timezone edge cases), show the spec-exact error and scroll
+                    // the form so the error is visible.
                     if (picked.isBefore(minDay)) {
                         dueDate = minDay // auto-correct
                         dueDateError = true
+                        dueDateErrorMessage = "截止日期不能早于开始日期"
+                        coroutineScope.launch {
+                            scrollState.scrollTo(scrollState.maxValue)
+                        }
                     } else {
                         dueDate = picked
                         dueDateError = false
+                        dueDateErrorMessage = null
                     }
                 }
                 showEndPicker = false
             },
             onDismiss = { showEndPicker = false }
-        ) { DatePicker(state = state) }
+        ) {
+            DatePicker(
+                state = state,
+                dateValidator = { millis -> millis >= minMillis }
+            )
+        }
     }
     if (showDueTimePicker) {
         TimePickerDialog(
