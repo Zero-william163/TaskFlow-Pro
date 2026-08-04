@@ -1,25 +1,25 @@
 {
-  "version": "1.2.6",
-  "code": 10,
-  "versionTag": "v1.2.6",
-  "log": "## v1.2.6 — Widget假成功根本修复\n\n### 修复\n1. 华为/小米等设备直接走手动添加引导\n2. WidgetPinResultReceiver增加二次验证\n3. 状态只依赖getAppWidgetIds()\n4. 全链路日志",
-  "apk": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.2.6/app-release.apk",
-  "sha256": "c6524c6aa8f046ea1fb61b1d0c4be4bf44721b1b32c92f36f11c6d2a23b62903",
+  "version": "1.2.9",
+  "code": 13,
+  "versionTag": "v1.2.9",
+  "log": "## v1.2.9\n\n### 修复\n1. 重构小组件权限引导：移除无效的\"打开小组件选择\"按钮\n2. 新增 openAppPermissionSettings：失败时引导前往系统设置开启「允许创建小组件」权限\n3. 统一三处入口（PermissionScreen / SettingsScreen / OnboardingScreen）的小组件引导逻辑\n4. 设置页移除\"手动添加\"按钮，仅保留\"添加小组件\"按钮\n5. 升级 GitHub Actions 到 Node 24 兼容版本（修复 CI 构建失败）",
+  "apk": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.2.9/app-release.apk",
+  "sha256": "93f9e4ff54cf6f81d4c7b58dbee6d396556ac6d2568b79ada94c34244b148d83",
   "size": 46271799,
   "downloadUrls": [
     {
       "name": "GH Proxy",
-      "url": "https://gh-proxy.com/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.2.6/app-release.apk",
+      "url": "https://gh-proxy.com/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.2.9/app-release.apk",
       "region": "domestic"
     },
     {
       "name": "GH Fast",
-      "url": "https://ghfast.top/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.2.6/app-release.apk",
+      "url": "https://ghfast.top/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.2.9/app-release.apk",
       "region": "cdn"
     },
     {
       "name": "GitHub",
-      "url": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.2.6/app-release.apk",
+      "url": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.2.9/app-release.apk",
       "region": "international"
     }
   ]
