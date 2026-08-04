@@ -1,25 +1,25 @@
 {
-  "version": "1.2.2",
-  "code": 6,
-  "versionTag": "v1.2.2",
-  "log": "## v1.2.2\n\n### 修复\n1. 版本检测无法发现新版本（GitHubApiSource @SerialName 修复）\n2. Widget 勾选任务完成功能\n3. 主页勾选后卡片移到已完成栏目\n4. 日历任务卡片可勾选可编辑\n5. 统计折线图实时更新",
-  "apk": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.2.2/TaskFlow-Pro-v1.2.2-release.apk",
-  "sha256": "c9c029871e0c103f95a10a3f3ab6ec94aaf309b356a9f557d139bb1daabb993a",
-  "size": 46255367,
+  "version": "1.2.3",
+  "code": 7,
+  "versionTag": "v1.2.3",
+  "log": "## v1.2.3\n\n### 修复\n1. DatePicker双圆圈: 截止日期默认为今天\n2. 后台恢复假死: ModalBottomSheet/Dialog生命周期重置\n3. LaunchedEffect重复导航守卫\n4. 生命周期日志添加",
+  "apk": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.2.3/app-release.apk",
+  "sha256": "ee22ff31555b56fd90586f549a0076bed3689258015251ce717211e63a876f0c",
+  "size": 46271751,
   "downloadUrls": [
     {
       "name": "GH Proxy",
-      "url": "https://gh-proxy.com/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.2.2/TaskFlow-Pro-v1.2.2-release.apk",
+      "url": "https://gh-proxy.com/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.2.3/app-release.apk",
       "region": "domestic"
     },
     {
       "name": "GH Fast",
-      "url": "https://ghfast.top/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.2.2/TaskFlow-Pro-v1.2.2-release.apk",
+      "url": "https://ghfast.top/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.2.3/app-release.apk",
       "region": "cdn"
     },
     {
       "name": "GitHub",
-      "url": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.2.2/TaskFlow-Pro-v1.2.2-release.apk",
+      "url": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.2.3/app-release.apk",
       "region": "international"
     }
   ]
