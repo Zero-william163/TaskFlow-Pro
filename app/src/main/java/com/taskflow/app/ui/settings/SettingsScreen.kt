@@ -128,7 +128,7 @@ fun SettingsScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .selectable(state.themeMode == mode) { viewModel.setThemeMode(mode) }
-                            .padding(vertical = 6p),
+                            .padding(vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         RadioButton(selected = state.themeMode == mode, onClick = { viewModel.setThemeMode(mode) })
