@@ -107,9 +107,15 @@ fun OnboardingScreen(onComplete: () -> Unit) {
             OnboardingStep(
                 icon = Icons.Outlined.Apps,
                 title = "桌面小组件",
-                description = "添加桌面小组件，快速查看今日任务。此步骤可跳过，稍后可在设置中添加。",
-                isGranted = { false }, // Optional, always shows as "not done"
-                action = { /* Opens widget pin */ },
+                description = "小组件需要桌面添加权限，用于在桌面显示任务。如不支持自动添加，将提供手动添加步骤。",
+                isGranted = {
+                    // Real capability check: a widget is already placed on the
+                    // home screen. This is the only reliable signal that the
+                    // user actually has the widget — isRequestPinAppWidgetSupported
+                    // returns true on many ROMs that then silently no-op.
+                    com.taskflow.app.widget.WidgetHelper.isAnyWidgetPlaced(context)
+                },
+                action = { /* Opens widget pin — handled in click handler */ },
                 optional = true
             )
         )
@@ -117,6 +123,10 @@ fun OnboardingScreen(onComplete: () -> Unit) {
 
     // Refresh permission states when screen resumes (user returns from settings)
     var refreshTrigger by remember { mutableStateOf(0) }
+    // Widget manual-guide dialog state. Shown when auto-pin is not possible
+    // or fails, per spec: "如果失败：不要静默。必须显示原因。"
+    var showWidgetGuideDialog by remember { mutableStateOf(false) }
+    var widgetGuideMessage by remember { mutableStateOf("") }
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
@@ -202,18 +212,36 @@ fun OnboardingScreen(onComplete: () -> Unit) {
                             }
                         }
                         3 -> {
-                            // Widget pin — actually attempt to pin a widget.
-                            // requestPinWidget returns false on unsupported
-                            // launchers (Huawei/Xiaomi/old Android). In that
-                            // case, fall back to a toast instructing the user
-                            // to add the widget manually from the home screen.
-                            val pinned = com.taskflow.app.widget.WidgetHelper.requestPinWidget(context)
-                            if (!pinned) {
-                                android.widget.Toast.makeText(
-                                    context,
-                                    "当前桌面不支持自动添加，请长按桌面 → 小组件 → TaskFlow → 添加",
-                                    android.widget.Toast.LENGTH_LONG
-                                ).show()
+                            // Widget pin — run pre-flight checks first so the
+                            // user gets a clear reason instead of a silent no-op.
+                            // Spec: "如果失败：不要静默。必须显示原因。"
+                            val report = com.taskflow.app.widget.WidgetCapability.report(context)
+                            when {
+                                report.widgetAlreadyPlaced -> {
+                                    android.widget.Toast.makeText(
+                                        context,
+                                        "桌面已存在 TaskFlow 小组件，无需重复添加。",
+                                        android.widget.Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                                report.canAttemptAutoPin -> {
+                                    val pinned = com.taskflow.app.widget.WidgetHelper.requestPinWidget(context)
+                                    if (!pinned) {
+                                        // System refused to even show the pin dialog.
+                                        // Show a dialog with manual steps.
+                                        widgetGuideMessage = report.blockingReason
+                                        showWidgetGuideDialog = true
+                                    }
+                                    // Note: pinned=true means the system showed the pin
+                                    // dialog. The user may still cancel it; we cannot
+                                    // detect that here. The WidgetPinResultReceiver
+                                    // callback is the source of truth for actual placement.
+                                }
+                                else -> {
+                                    // Launcher / vendor does not support auto-pin.
+                                    widgetGuideMessage = report.blockingReason
+                                    showWidgetGuideDialog = true
+                                }
                             }
                             refreshTrigger++
                         }
@@ -245,6 +273,46 @@ fun OnboardingScreen(onComplete: () -> Unit) {
             }
             Spacer(Modifier.height(24.dp))
         }
+    }
+
+    // Widget manual guide dialog — shown when auto-pin fails or is unsupported.
+    // Spec: "并提供步骤：长按桌面 → 小组件 → TaskFlow → 添加"
+    if (showWidgetGuideDialog) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showWidgetGuideDialog = false },
+            title = { Text("无法自动添加小组件") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (widgetGuideMessage.isNotBlank()) {
+                        Text(
+                            widgetGuideMessage,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Text(
+                        "请按以下步骤手动添加：",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text("1. 长按桌面空白处")
+                    Text("2. 选择「小组件」或「Widgets」")
+                    Text("3. 找到 TaskFlow")
+                    Text("4. 长按并拖到桌面，或点击添加")
+                }
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = {
+                    showWidgetGuideDialog = false
+                    com.taskflow.app.widget.WidgetCapability.openWidgetPicker(context)
+                }) { Text("打开小组件选择") }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = {
+                    showWidgetGuideDialog = false
+                }) { Text("我知道了") }
+            }
+        )
     }
 }
 

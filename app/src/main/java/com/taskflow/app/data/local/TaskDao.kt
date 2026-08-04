@@ -75,6 +75,31 @@ interface TaskDao {
     @Query("SELECT COUNT(*) FROM tasks WHERE isCompleted = 1 AND date(completedAt) = date(:day)")
     fun observeCompletedOn(day: LocalDateTime): Flow<Int>
 
+    /**
+     * Daily completion counts for a month range. Used by the stats line chart.
+     * Returns one row per day that has at least one completion; days with zero
+     * completions are absent and the UI fills them in.
+     *
+     * Spec: "数据来源：不能使用假数据。必须来自：Room Database。统计：TaskInstance
+     * 或者：已完成Task 数据。" We use tasks.completedAt (the authoritative
+     * completion timestamp) so toggling complete/uncomplete updates the chart
+     * in real time via Flow.
+     */
+    @Query("""
+        SELECT date(completedAt) as day, COUNT(*) as count
+        FROM tasks
+        WHERE isCompleted = 1
+          AND completedAt IS NOT NULL
+          AND date(completedAt) >= date(:startInclusive)
+          AND date(completedAt) <= date(:endInclusive)
+        GROUP BY date(completedAt)
+        ORDER BY day ASC
+    """)
+    fun observeDailyCompletions(
+        startInclusive: LocalDateTime,
+        endInclusive: LocalDateTime
+    ): Flow<List<DailyCompletion>>
+
     @Query("SELECT priority, COUNT(*) as count FROM tasks GROUP BY priority")
     fun observePriorityCounts(): Flow<List<PriorityCount>>
 
@@ -84,3 +109,9 @@ interface TaskDao {
 
 data class PriorityCount(val priority: String, val count: Int)
 data class CategoryCount(val categoryId: Long, val count: Int)
+
+/**
+ * One day's completion count. `day` is the SQLite `date()` text
+ * ("YYYY-MM-DD"). Used by the stats line chart.
+ */
+data class DailyCompletion(val day: String, val count: Int)

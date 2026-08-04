@@ -16,7 +16,7 @@ import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.LocalDateTime
 
-enum class HomeFilter { ALL, TODAY, UPCOMING, COMPLETED }
+enum class HomeFilter { ALL, TODAY, UPCOMING, COMPLETED, INCOMPLETE }
 
 data class HomeUiState(
     val tasks: List<Task> = emptyList(),
@@ -25,18 +25,36 @@ data class HomeUiState(
     val query: String = "",
     val pendingCount: Int = 0
 ) {
+    /**
+     * Filtered task list per spec §3:
+     * - TODAY:     今天需要执行的任务 (dueDate == today, 未完成)
+     * - UPCOMING:  未来任务 (dueDate > today, 未完成)
+     * - COMPLETED: status == COMPLETED
+     * - INCOMPLETE:截止日期未到 + status != COMPLETED (含今天/未来/无截止日期)
+     * - ALL:       全部任务
+     *
+     * All filters are pure functions of `tasks` so any DB change (create /
+     * complete / delete / edit date) flows through Flow → recompose → instant
+     * UI update. Spec §3 "实时同步".
+     */
     val filtered: List<Task>
         get() {
             val today = LocalDate.now()
             val base = when (filter) {
                 HomeFilter.ALL -> tasks
                 HomeFilter.TODAY -> tasks.filter { t ->
-                    !t.isCompleted && t.dueDate?.toLocalDate()?.let { it <= today } == true
+                    // 今天到期且未完成（严格 == today，逾期的归到 INCOMPLETE）
+                    !t.isCompleted && t.dueDate?.toLocalDate() == today
                 }
                 HomeFilter.UPCOMING -> tasks.filter { t ->
+                    // 未来到期且未完成
                     !t.isCompleted && t.dueDate?.toLocalDate()?.let { it > today } == true
                 }
                 HomeFilter.COMPLETED -> tasks.filter { it.isCompleted }
+                HomeFilter.INCOMPLETE -> tasks.filter { t ->
+                    // 截止日期未到（含今天、未来、无截止日期）+ 未完成
+                    !t.isCompleted && (t.dueDate?.toLocalDate()?.let { it >= today } ?: true)
+                }
             }
             val q = query.trim()
             return if (q.isEmpty()) base
@@ -47,6 +65,16 @@ data class HomeUiState(
         }
 
     val remaining: Int get() = tasks.count { !it.isCompleted }
+
+    /** Per-category counts for the chip badges (spec §3 "实时计算"). */
+    val todayCount: Int get() = tasks.count { !it.isCompleted && it.dueDate?.toLocalDate() == LocalDate.now() }
+    val upcomingCount: Int get() = tasks.count { t ->
+        !t.isCompleted && t.dueDate?.toLocalDate()?.let { it > LocalDate.now() } == true
+    }
+    val completedCount: Int get() = tasks.count { it.isCompleted }
+    val incompleteCount: Int get() = tasks.count { t ->
+        !t.isCompleted && (t.dueDate?.toLocalDate()?.let { it >= LocalDate.now() } ?: true)
+    }
 }
 
 class HomeViewModel(

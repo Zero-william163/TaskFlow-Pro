@@ -238,12 +238,19 @@ fun HomeScreen(
             onAddNow = {
                 val id = pendingTaskId
                 if (id != null) viewModel.pinToWidget(id)
-                val pinned = WidgetHelper.requestPinWidget(context)
-                if (!pinned) {
-                    // Bug #4 fix: if system does NOT support / accept pinned-widget
-                    // request, fall back to a clear manual instruction dialog. The
-                    // click is never a no-op this way.
-                    showManualWidgetGuide = true
+                // Pre-flight capability check before attempting to pin. Spec:
+                // "请完整检查 Android Widget 创建流程" + "如果失败：不要静默。"
+                val report = com.taskflow.app.widget.WidgetCapability.report(context)
+                when {
+                    report.widgetAlreadyPlaced -> {
+                        // Already placed — just refresh and stay quiet.
+                        WidgetHelper.refresh(context)
+                    }
+                    report.canAttemptAutoPin -> {
+                        val pinned = WidgetHelper.requestPinWidget(context)
+                        if (!pinned) showManualWidgetGuide = true
+                    }
+                    else -> showManualWidgetGuide = true
                 }
                 scope.launch { ServiceLocator.userPreferences.setWidgetGuideShown(true) }
                 pendingTaskId = null
@@ -263,10 +270,15 @@ fun HomeScreen(
                 pendingTaskId?.let { viewModel.pinToWidget(it) }
                 WidgetHelper.refresh(context)
                 // If no widget has actually been placed yet, also try pinning one so
-                // the UX is the "first widget" experience.
+                // the UX is the "first widget" experience, gated by capability.
                 if (!WidgetHelper.isAnyWidgetPlaced(context)) {
-                    val pinned = WidgetHelper.requestPinWidget(context)
-                    if (!pinned) showManualWidgetGuide = true
+                    val report = com.taskflow.app.widget.WidgetCapability.report(context)
+                    if (report.canAttemptAutoPin) {
+                        val pinned = WidgetHelper.requestPinWidget(context)
+                        if (!pinned) showManualWidgetGuide = true
+                    } else {
+                        showManualWidgetGuide = true
+                    }
                 }
                 pendingTaskId = null
                 showAddToWidgetPrompt = false
@@ -354,10 +366,14 @@ private fun FilterChipRow(current: HomeFilter, onSelect: (HomeFilter) -> Unit) {
         HomeFilter.ALL to R.string.home_filter_all,
         HomeFilter.TODAY to R.string.home_filter_today,
         HomeFilter.UPCOMING to R.string.home_filter_upcoming,
+        HomeFilter.INCOMPLETE to R.string.home_filter_incomplete,
         HomeFilter.COMPLETED to R.string.home_filter_completed
     )
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        options.forEach { (filter, label) ->
+    // Horizontally scrollable so all 5 chips fit on narrow screens.
+    androidx.compose.foundation.lazy.LazyRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        items(options) { (filter, label) ->
             FilterChip(
                 selected = current == filter,
                 onClick = { onSelect(filter) },

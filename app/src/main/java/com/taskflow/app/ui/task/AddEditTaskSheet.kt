@@ -443,20 +443,31 @@ fun AddEditTaskSheet(
     if (showStartPicker) {
         val minToday = LocalDate.now()
         val endDay = dueDate
-        val state = rememberDatePickerState(
-            initialSelectedDateMillis = startDate?.atStartOfDay(ZoneId.systemDefault())
-                ?.toInstant()?.toEpochMilli()
-                ?: minToday.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-        )
-        // Validator: gray out past dates AND dates after the due date.
+        // Material3 1.3.0 moved date validation from DatePicker.dateValidator
+        // (removed) into DatePickerState via SelectableDates. We supply a
+        // SelectableDates that disables past days AND days after the due date.
         // Spec: "今天以前：全部灰色。不可点击。" + "开始日期不能晚于截止日期".
         val todayMillis = minToday.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
         val endMillis = endDay?.atStartOfDay(ZoneId.systemDefault())?.toInstant()?.toEpochMilli()
+        val startSelectableDates = remember(endMillis) {
+            object : androidx.compose.material3.SelectableDates {
+                override fun isSelectableDate(utcTimeMillis: Long): Boolean =
+                    utcTimeMillis >= todayMillis &&
+                        (endMillis == null || utcTimeMillis <= endMillis)
+            }
+        }
+        val state = rememberDatePickerState(
+            initialSelectedDateMillis = startDate?.atStartOfDay(ZoneId.systemDefault())
+                ?.toInstant()?.toEpochMilli()
+                ?: minToday.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli(),
+            selectableDates = startSelectableDates
+        )
         DatePickerDialog(
             onConfirm = {
                 state.selectedDateMillis?.let {
                     val picked = Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate()
                     // Clamp: past dates → today, future beyond dueDate → dueDate
+                    // (safety net for timezone edge cases).
                     val clamped = when {
                         picked.isBefore(minToday) -> minToday
                         endDay != null && picked.isAfter(endDay) -> endDay
@@ -467,31 +478,32 @@ fun AddEditTaskSheet(
                 showStartPicker = false
             },
             onDismiss = { showStartPicker = false }
-        ) {
-            DatePicker(
-                state = state,
-                dateValidator = { millis ->
-                    millis >= todayMillis && (endMillis == null || millis <= endMillis)
-                }
-            )
-        }
+        ) { DatePicker(state = state) }
     }
     if (showEndPicker) {
         val minDay = (startDate ?: LocalDate.now()).coerceAtLeast(LocalDate.now())
+        // Same Material3 1.3.0 SelectableDates approach: gray out past dates
+        // AND dates earlier than the start date.
+        // Spec: "今天以前：全部灰色。不可点击。" + "截止日期不能早于开始日期".
+        val minMillis = minDay.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val endSelectableDates = remember(minMillis) {
+            object : androidx.compose.material3.SelectableDates {
+                override fun isSelectableDate(utcTimeMillis: Long): Boolean =
+                    utcTimeMillis >= minMillis
+            }
+        }
         val state = rememberDatePickerState(
             initialSelectedDateMillis = dueDate?.atStartOfDay(ZoneId.systemDefault())
                 ?.toInstant()?.toEpochMilli()
-                ?: minDay.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                ?: minDay.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli(),
+            selectableDates = endSelectableDates
         )
-        // Validator: gray out past dates AND dates earlier than the start date.
-        // Spec: "今天以前：全部灰色。不可点击。" + "截止日期不能早于开始日期".
-        val minMillis = minDay.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
         DatePickerDialog(
             onConfirm = {
                 state.selectedDateMillis?.let {
                     val picked = Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate()
                     // dueDate must be >= startDate. If user picks earlier (shouldn't
-                    // happen with dateValidator, but kept as a safety net for
+                    // happen with SelectableDates, but kept as a safety net for
                     // timezone edge cases), show the spec-exact error and scroll
                     // the form so the error is visible.
                     if (picked.isBefore(minDay)) {
@@ -510,12 +522,7 @@ fun AddEditTaskSheet(
                 showEndPicker = false
             },
             onDismiss = { showEndPicker = false }
-        ) {
-            DatePicker(
-                state = state,
-                dateValidator = { millis -> millis >= minMillis }
-            )
-        }
+        ) { DatePicker(state = state) }
     }
     if (showDueTimePicker) {
         TimePickerDialog(

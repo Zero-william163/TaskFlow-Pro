@@ -45,6 +45,17 @@ class TaskRepository private constructor(
     fun observeCompletedCount(): Flow<Int> = taskDao.observeCompletedCount()
     fun observePendingCount(): Flow<Int> = taskDao.observePendingCount()
     fun observeCompletedOn(day: LocalDateTime): Flow<Int> = taskDao.observeCompletedOn(day)
+
+    /**
+     * Daily completion counts in [startInclusive, endInclusive]. Emits a new
+     * list whenever any task is completed/uncompleted in the range — the line
+     * chart collects this Flow and updates in real time.
+     */
+    fun observeDailyCompletions(
+        startInclusive: LocalDateTime,
+        endInclusive: LocalDateTime
+    ): Flow<List<com.taskflow.app.data.local.DailyCompletion>> =
+        taskDao.observeDailyCompletions(startInclusive, endInclusive)
     fun observePriorityCounts(): Flow<List<com.taskflow.app.data.local.PriorityCount>> =
         taskDao.observePriorityCounts()
     fun observeCategoryCounts(): Flow<List<com.taskflow.app.data.local.CategoryCount>> =
