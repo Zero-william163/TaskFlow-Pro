@@ -1,14 +1,14 @@
 {
-  "version": "1.0.0",
-  "code": 1,
-  "versionTag": "v1.0.0",
-  "log": "## v1.0.0\n\n首个正式版本。\n\n- 首页任务列表与卡片动画\n- 添加/编辑任务底部弹窗\n- 日历视图与统计页\n- Material You 主题与深色模式\n- 桌面 Widget（小/中/大）\n- 完整权限管理页\n- 多源自动更新检测",
-  "apk": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.0.0/app-release.apk",
-  "sha256": "0b794f0c2f13d824f0d89f6ab113a80d4fa0f37d8e32b0e0f60221bbe93b823d",
-  "size": 3764037,
+  "version": "1.1.0",
+  "code": 2,
+  "versionTag": "v1.1.0",
+  "log": "## v1.1.0\n\n- 修复自定义日期选择器不弹出的问题\n- 截止日期必填验证（红色边框+提示+自动滚动）\n- 日期范围限制（开始日期 ≤ 自定义日期 ≤ 截止日期）\n- TaskInstance 系统优化：dueDate 为 null 时不生成实例\n- 修复 effectiveStart 错误逻辑（不再取 max(startDate, dueDate)）\n- GitHub 更新系统：启动时静默检查（24h节流），发现新版本自动弹窗\n- 闹钟提醒：声音+震动持续直到用户关闭\n- 自定义铃声：支持系统铃声选择器\n- Collection Widget：可滑动浏览多任务，数据来自 Room\n- 创建/编辑/删除后日历、Widget、Alarm 三重同步\n- 桌面小组件添加失败时显示手动引导",
+  "apk": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.1.0/TaskFlow-Pro-v1.1.0-release.apk",
+  "sha256": "6963725774d9bd559d26b788e0877900d57469f9a37a3accb8b093a85b3a048a",
+  "size": 46137495,
   "downloadUrls": [
-    { "name": "GH Proxy", "url": "https://gh-proxy.com/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.0.0/app-release.apk", "region": "domestic" },
-    { "name": "GH Fast",  "url": "https://ghfast.top/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.0.0/app-release.apk", "region": "cdn" },
-    { "name": "GitHub",   "url": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.0.0/app-release.apk", "region": "international" }
+    { "name": "GH Proxy", "url": "https://gh-proxy.com/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.1.0/TaskFlow-Pro-v1.1.0-release.apk", "region": "domestic" },
+    { "name": "GH Fast",  "url": "https://ghfast.top/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.1.0/TaskFlow-Pro-v1.1.0-release.apk", "region": "cdn" },
+    { "name": "GitHub",   "url": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.1.0/TaskFlow-Pro-v1.1.0-release.apk", "region": "international" }
   ]
 }
