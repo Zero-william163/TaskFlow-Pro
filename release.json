@@ -1,25 +1,25 @@
 {
-  "version": "1.2.5",
-  "code": 9,
-  "versionTag": "v1.2.5",
-  "log": "## v1.2.5\n\n### 日历卡片修复\n- 日历下任务卡片改为只读\n- 移除勾选和编辑\n\n### DatePicker双圆圈修复\n- 新建任务默认选中今天",
-  "apk": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.2.5/app-release.apk",
-  "sha256": "f0d715d0f15966af5ff2475d2088eb8b070a4fbc5e723f5b6e042e2e474c3780",
+  "version": "1.2.6",
+  "code": 10,
+  "versionTag": "v1.2.6",
+  "log": "## v1.2.6 — Widget假成功根本修复\n\n### 修复\n1. 华为/小米等设备直接走手动添加引导\n2. WidgetPinResultReceiver增加二次验证\n3. 状态只依赖getAppWidgetIds()\n4. 全链路日志",
+  "apk": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.2.6/app-release.apk",
+  "sha256": "c6524c6aa8f046ea1fb61b1d0c4be4bf44721b1b32c92f36f11c6d2a23b62903",
   "size": 46271799,
   "downloadUrls": [
     {
       "name": "GH Proxy",
-      "url": "https://gh-proxy.com/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.2.5/app-release.apk",
+      "url": "https://gh-proxy.com/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.2.6/app-release.apk",
       "region": "domestic"
     },
     {
       "name": "GH Fast",
-      "url": "https://ghfast.top/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.2.5/app-release.apk",
+      "url": "https://ghfast.top/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.2.6/app-release.apk",
       "region": "cdn"
     },
     {
       "name": "GitHub",
-      "url": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.2.5/app-release.apk",
+      "url": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.2.6/app-release.apk",
       "region": "international"
     }
   ]
