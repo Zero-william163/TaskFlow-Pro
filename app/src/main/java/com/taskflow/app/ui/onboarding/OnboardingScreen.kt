@@ -229,7 +229,7 @@ fun OnboardingScreen(onComplete: () -> Unit) {
                                     }
                                 }
                                 else -> {
-                                    widgetGuideMessage = report.blockingReason
+                                    widgetGuideMessage = report.blockingReason(context)
                                     showWidgetGuideDialog = true
                                 }
                             }

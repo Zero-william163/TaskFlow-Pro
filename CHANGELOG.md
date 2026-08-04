@@ -8,6 +8,27 @@ The GitHub Actions release workflow extracts the section matching the pushed tag
 (e.g. `## v1.0.0`) and uses it as the GitHub / Gitee release notes, and embeds it
 into `release.json` as the `log` field consumed by the in-app updater.
 
+## v1.3.0
+
+### 重构
+1. 权限引导系统全面重构：所有权限跳转直达具体权限页，不再跳转系统设置首页
+   - 通知权限 → ACTION_APP_NOTIFICATION_SETTINGS（带包名）
+   - 精确闹钟 → ACTION_REQUEST_SCHEDULE_EXACT_ALARM
+   - 电池优化 → ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS（带包名）
+2. Widget 真实状态检测系统：只信任 AppWidgetManager.getAppWidgetIds()，不信任本地缓存
+   - 修复 Widget 假创建问题（APP 显示已创建但桌面无组件）
+   - 禁止重复创建 Widget（已添加时按钮禁用 + Toast 提示）
+   - requestPinAppWidget 回调正确传递 EXTRA_APPWIDGET_ID
+3. 新增 PermissionManager 统一权限管理：
+   - 精确检测通知、精确闹钟、电池优化、Widget 状态
+   - Android 13+ POST_NOTIFICATIONS 运行时权限请求
+   - 国产 ROM 自启动/后台运行权限检测与引导
+4. 国产 ROM 适配：华为/荣耀/小米/红米/OPPO/VIVO/iQOO/realme
+   - 优先直达厂商专属权限页（resolveActivity 探测）
+   - 无法直达时显示详细文字教程（如「设置 → 应用和服务 → 应用启动管理 → ...」）
+5. SettingsScreen/PermissionScreen/HomeScreen 统一使用系统 API 检测 Widget 状态
+6. 新增字符串资源：permission_autostart、permission_background_run 等
+
 ## v1.2.9
 
 ### 修复

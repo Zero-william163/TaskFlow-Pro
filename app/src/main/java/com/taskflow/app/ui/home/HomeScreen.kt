@@ -103,22 +103,31 @@ fun HomeScreen(
         showUnsavedDialog = false
     }
 
-    val widgetAdded by ServiceLocator.userPreferences.widgetAdded.collectAsState(initial = false)
     val guideShown by ServiceLocator.userPreferences.widgetGuideShown.collectAsState(initial = false)
+    // 只信任系统 API 的 Widget 放置状态（与 WidgetHelper 保持一致），
+    // 避免依赖 UserPreferences 导致的"假阳性"或"假阴性"。
+    var systemWidgetPlaced by remember { mutableStateOf(WidgetHelper.isWidgetPlaced(context)) }
+    LaunchedEffect(Unit) { systemWidgetPlaced = WidgetHelper.isWidgetPlaced(context) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        systemWidgetPlaced = WidgetHelper.isWidgetPlaced(context)
+    }
+    LaunchedEffect(showFirstGuide, showAddToWidgetPrompt) {
+        // 在引导流程结束时再次检测，避免状态滞后
+        systemWidgetPlaced = WidgetHelper.isWidgetPlaced(context)
+    }
 
     /**
      * Runs only after a NEW task is persisted. Decides whether to show the widget
      * guide (first ever task) or the "add to widget?" prompt (subsequent tasks),
-     * keyed off the user's widget state. Declared before the add-sheet block so it
-     * is in scope for the onSaved callback.
+     * keyed off the system-reported widget state.
      */
     fun onNewTaskSaved(id: Long) {
         pendingTaskId = id
         when {
             // First time ever — guide the user to add the widget itself.
-            !widgetAdded && !guideShown -> showFirstGuide = true
+            !systemWidgetPlaced && !guideShown -> showFirstGuide = true
             // Widget already placed — ask whether to surface this new task on it.
-            widgetAdded -> showAddToWidgetPrompt = true
+            systemWidgetPlaced -> showAddToWidgetPrompt = true
             // User previously declined the guide; stay quiet.
             else -> pendingTaskId = null
         }

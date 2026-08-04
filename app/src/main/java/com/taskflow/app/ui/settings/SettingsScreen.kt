@@ -50,7 +50,6 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.taskflow.app.R
 import com.taskflow.app.data.preferences.ThemeMode
-import com.taskflow.app.data.preferences.UserPreferences
 import com.taskflow.app.ui.AppViewModelFactory
 import com.taskflow.app.ui.components.SectionTitle
 import com.taskflow.app.ui.components.SoftCard
@@ -67,28 +66,31 @@ fun SettingsScreen(
     val state by viewModel.state.collectAsState()
     val context = LocalContext.current
 
+    // 只信任系统 API 的 Widget 状态（不依赖任何本地缓存）
     var widgetStatus by remember { mutableStateOf(WidgetStatus()) }
-    LaunchedEffect(Unit) { widgetStatus = computeWidgetStatus(context) }
     val refreshKey = remember { mutableStateOf(0) }
+
+    fun refreshWidget() {
+        val report = WidgetCapability.report(context)
+        widgetStatus = WidgetStatus(
+            placed = report.alreadyPlaced,
+            launcherSupported = report.launcherSupported,
+            vendorRestricted = report.vendorRestricted,
+            vendorName = report.vendorName,
+            canAttemptAutoPin = report.canAttemptAutoPin
+        )
+    }
+
+    LaunchedEffect(Unit) { refreshWidget() }
+    // 权限页/系统弹窗返回时重新检测
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { refreshWidget() }
     LaunchedEffect(refreshKey.value) {
-        if (refreshKey.value > 0) {
-            delay(2000)
-        }
-        widgetStatus = computeWidgetStatus(context)
-    }
-    val widgetAddedPrefs by UserPreferences.get(context).widgetAdded.collectAsState(initial = false)
-    LaunchedEffect(widgetAddedPrefs) {
-        if (widgetAddedPrefs) {
-            widgetStatus = computeWidgetStatus(context)
-        }
+        if (refreshKey.value > 0) delay(1500)
+        refreshWidget()
     }
 
-    var showPermissionGuideDialog by remember { mutableStateOf(false) }
-    var permissionGuideMessage by remember { mutableStateOf("") }
-
-    LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
-        showPermissionGuideDialog = false
-    }
+    var showWidgetGuideDialog by remember { mutableStateOf(false) }
+    var widgetGuideMessage by remember { mutableStateOf("") }
 
     Column(
         modifier = Modifier
@@ -168,7 +170,8 @@ fun SettingsScreen(
                         onClick = {
                             val report = WidgetCapability.report(context)
                             when {
-                                report.widgetAlreadyPlaced -> {
+                                report.alreadyPlaced -> {
+                                    // 已添加：禁止重复创建
                                     Toast.makeText(
                                         context,
                                         R.string.settings_widget_status_added,
@@ -180,25 +183,34 @@ fun SettingsScreen(
                                     if (pinned) {
                                         Toast.makeText(
                                             context,
-                                            "请在系统弹窗中确认添加小组件",
+                                            R.string.settings_widget_prompt_success,
                                             Toast.LENGTH_LONG
                                         ).show()
                                     } else {
-                                        permissionGuideMessage =
-                                            "系统未弹出添加面板，可能需要先开启创建小组件的权限。"
-                                        showPermissionGuideDialog = true
+                                        widgetGuideMessage = report.blockingReason(context)
+                                        showWidgetGuideDialog = true
                                     }
                                 }
                                 else -> {
-                                    permissionGuideMessage = report.blockingReason
-                                    showPermissionGuideDialog = true
+                                    // 无法自动添加：显示厂商特定引导文字，而不是跳转设置首页
+                                    widgetGuideMessage = report.blockingReason(context)
+                                    showWidgetGuideDialog = true
                                 }
                             }
                             refreshKey.value++
                         },
                         modifier = Modifier.weight(1f),
+                        enabled = !widgetStatus.placed,
                         shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
-                    ) { Text(stringResource(R.string.settings_widget_add)) }
+                    ) {
+                        Text(
+                            if (widgetStatus.placed) {
+                                stringResource(R.string.settings_widget_status_added)
+                            } else {
+                                stringResource(R.string.settings_widget_add)
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -227,8 +239,10 @@ fun SettingsScreen(
             icon = Icons.Outlined.Code,
             title = stringResource(R.string.settings_github),
             onClick = {
-                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/${com.taskflow.app.update.UpdateConfig.GITHUB_OWNER}/${com.taskflow.app.update.UpdateConfig.GITHUB_REPO}"))
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                val intent = Intent(
+                    Intent.ACTION_VIEW,
+                    Uri.parse("https://github.com/${com.taskflow.app.update.UpdateConfig.GITHUB_OWNER}/${com.taskflow.app.update.UpdateConfig.GITHUB_REPO}")
+                ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 runCatching { context.startActivity(intent) }
             }
         )
@@ -239,19 +253,19 @@ fun SettingsScreen(
         )
     }
 
-    if (showPermissionGuideDialog) {
+    if (showWidgetGuideDialog) {
         AlertDialog(
-            onDismissRequest = { showPermissionGuideDialog = false },
-            title = { Text("需要开启权限") },
+            onDismissRequest = { showWidgetGuideDialog = false },
+            title = { Text("添加桌面小组件") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        permissionGuideMessage,
+                        widgetGuideMessage,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        "请前往系统设置开启「允许创建小组件」权限，然后返回本应用重试。",
+                        "请长按桌面空白处 → 选择「小组件」→ 找到 TaskFlow → 拖拽到桌面。",
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -259,13 +273,14 @@ fun SettingsScreen(
             },
             confirmButton = {
                 TextButton(onClick = {
-                    showPermissionGuideDialog = false
+                    showWidgetGuideDialog = false
+                    // 打开应用详情页，供用户开启「允许创建小组件」等权限
                     WidgetCapability.openAppPermissionSettings(context)
                 }) { Text("前往设置") }
             },
             dismissButton = {
-                TextButton(onClick = { showPermissionGuideDialog = false }) {
-                    Text("取消")
+                TextButton(onClick = { showWidgetGuideDialog = false }) {
+                    Text("知道了")
                 }
             }
         )
@@ -276,24 +291,15 @@ private data class WidgetStatus(
     val placed: Boolean = false,
     val launcherSupported: Boolean = true,
     val vendorRestricted: Boolean = false,
-    val vendorName: String? = null
+    val vendorName: String? = null,
+    val canAttemptAutoPin: Boolean = false
 ) {
     fun statusLabel(): String = when {
         placed -> "状态：已添加"
-        vendorRestricted -> "$vendorName 设备：可能需要开启权限"
-        !launcherSupported -> "当前启动器不支持自动添加"
+        vendorRestricted -> "${vendorName ?: "当前"} 设备：需按引导手动添加"
+        !launcherSupported -> "当前启动器不支持自动添加，请手动拖拽"
         else -> "状态：未添加（点击下方按钮添加）"
     }
-}
-
-private fun computeWidgetStatus(context: Context): WidgetStatus {
-    val report = WidgetCapability.report(context)
-    return WidgetStatus(
-        placed = report.widgetAlreadyPlaced,
-        launcherSupported = report.launcherSupported,
-        vendorRestricted = report.vendorRestricted,
-        vendorName = report.vendorName
-    )
 }
 
 @Composable
@@ -319,7 +325,11 @@ private fun SettingsRow(
                 }
             }
             if (onClick != null) {
-                Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Icon(
+                    Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }

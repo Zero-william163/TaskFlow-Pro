@@ -98,11 +98,17 @@
     <string name="permission_battery_desc">允许后台运行，确保提醒准时到达</string>
     <string name="permission_exact_alarm">精确闹钟</string>
     <string name="permission_exact_alarm_desc">确保任务提醒准时触发</string>
+    <string name="permission_autostart">自启动权限</string>
+    <string name="permission_autostart_desc">允许 App 随系统启动，确保后台提醒稳定</string>
+    <string name="permission_background_run">后台运行权限</string>
+    <string name="permission_background_run_desc">允许 App 在后台运行，确保提醒准时到达</string>
     <string name="permission_status_granted">已开启</string>
     <string name="permission_status_denied">未开启</string>
     <string name="permission_status_added">已添加</string>
     <string name="permission_status_not_added">未添加</string>
+    <string name="permission_status_none">需手动开启</string>
     <string name="permission_open_settings">前往设置</string>
+    <string name="permission_request_now">立即开启</string>
 
     <!-- Settings -->
     <string name="settings_about">关于</string>

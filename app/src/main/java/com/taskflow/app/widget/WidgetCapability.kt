@@ -8,104 +8,137 @@ import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
-import android.util.Log
+import com.taskflow.app.permission.PermissionManager
+import com.taskflow.app.permission.PermissionType
 
+/**
+ * Widget 能力与引导工具。
+ *
+ * 设计原则：
+ * 1. 状态只信任系统 API（AppWidgetManager / PowerManager），不信任任何本地缓存
+ * 2. 引导文案对所有国产 ROM 给出可操作的文字教程
+ * 3. 所有跳转都直达**具体权限页**，绝不返回设置首页
+ */
 object WidgetCapability {
 
-    private const val TAG = "WidgetCapability"
+    private val restrictedVendors = setOf(
+        "huawei", "honor", "xiaomi", "redmi", "oppo", "realme", "vivo", "iqoo", "meizu"
+    )
 
-    private val restrictedVendors = setOf("huawei", "honor", "xiaomi", "redmi", "oppo", "vivo", "meizu")
-
-    data class Report(
-        val apiSupported: Boolean,
-        val launcherSupported: Boolean,
-        val widgetAlreadyPlaced: Boolean,
-        val batteryOptimized: Boolean,
+    data class WidgetReport(
+        val canAutoPin: Boolean,
+        val alreadyPlaced: Boolean,
         val vendorRestricted: Boolean,
-        val vendorName: String?
+        val vendorName: String?,
+        val launcherSupported: Boolean,
+        val batteryOptimized: Boolean
     ) {
-        val canAttemptAutoPin: Boolean
-            get() = apiSupported && launcherSupported &&
-                !widgetAlreadyPlaced && !vendorRestricted
+        /** 派生字段：是否可以尝试 requestPinAppWidget */
+        val canAttemptAutoPin: Boolean get() = canAutoPin && !alreadyPlaced
 
-        val shouldShowPermissionGuide: Boolean
-            get() = !apiSupported || !launcherSupported || vendorRestricted
+        /** 派生字段：是否需要手动引导 */
+        val needsManualGuide: Boolean get() = vendorRestricted || !launcherSupported
 
-        val blockingReason: String get() = when {
-            widgetAlreadyPlaced -> "桌面已存在 TaskFlow 小组件，无需重复添加。"
-            !apiSupported -> "系统版本过低（Android 8.0 以下），不支持添加小组件。"
-            vendorRestricted -> "$vendorName 设备可能需要手动开启创建小组件权限。"
-            !launcherSupported -> "当前桌面启动器不支持自动添加小组件。"
-            batteryOptimized -> "应用受电池优化限制，可能影响小组件回调。建议加入电池优化白名单。"
-            else -> ""
+        /** 兼容 SettingsScreen 的字段名 */
+        val widgetAlreadyPlaced: Boolean get() = alreadyPlaced
+
+        /**
+         * 当无法自动添加时，返回给用户的阻塞原因文案。
+         * 优先使用厂商特定引导，否则返回通用提示。
+         */
+        fun blockingReason(context: Context): String {
+            val pm = PermissionManager(context)
+            return when {
+                alreadyPlaced -> "桌面已存在小组件，无需重复添加"
+                vendorRestricted -> {
+                    pm.vendorGuideFor(PermissionType.WIDGET)
+                        ?: "${vendorName ?: "当前"} 设备可能需要先开启创建小组件权限"
+                }
+                !launcherSupported -> "当前桌面启动器不支持自动添加小组件，请手动添加：长按桌面 → 小组件 → 找到 TaskFlow → 拖拽到桌面"
+                batteryOptimized -> "电池优化可能影响小组件，建议加入白名单：设置 → 电池 → 找到 TaskFlow → 允许后台活动"
+                else -> "无法自动添加，请手动添加：长按桌面 → 小组件 → 找到 TaskFlow → 拖拽到桌面"
+            }
         }
     }
 
-    fun report(context: Context): Report {
+    fun report(context: Context): WidgetReport {
         val apiSupported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
         val launcherSupported = if (apiSupported) {
             try {
                 AppWidgetManager.getInstance(context).isRequestPinAppWidgetSupported
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 false
             }
         } else false
 
-        val widgetAlreadyPlaced = try {
-            val provider = ComponentName(context, TaskWidgetProvider::class.java)
-            AppWidgetManager.getInstance(context).getAppWidgetIds(provider).isNotEmpty()
-        } catch (e: Exception) {
+        val alreadyPlaced = try {
+            AppWidgetManager.getInstance(context)
+                .getAppWidgetIds(ComponentName(context, TaskWidgetProvider::class.java))
+                .isNotEmpty()
+        } catch (_: Exception) {
             false
         }
 
-        val batteryOptimized = try {
+        val batteryIgnored = try {
             val pm = context.getSystemService(Context.POWER_SERVICE) as PowerManager
-            pm.isIgnoringBatteryOptimizations(context.packageName).not()
-        } catch (e: Exception) {
+            pm.isIgnoringBatteryOptimizations(context.packageName)
+        } catch (_: Exception) {
             false
         }
+        val batteryOptimized = !batteryIgnored
 
         val vendorName = Build.MANUFACTURER?.lowercase()
         val vendorRestricted = vendorName in restrictedVendors
 
-        Log.d(TAG, "report: api=$apiSupported launcher=$launcherSupported " +
-            "placed=$widgetAlreadyPlaced battery=$batteryOptimized " +
-            "vendor=$vendorName restricted=$vendorRestricted " +
-            "canAutoPin=${apiSupported && launcherSupported && !widgetAlreadyPlaced && !vendorRestricted}")
-
-        return Report(
-            apiSupported = apiSupported,
-            launcherSupported = launcherSupported,
-            widgetAlreadyPlaced = widgetAlreadyPlaced,
-            batteryOptimized = batteryOptimized,
+        return WidgetReport(
+            canAutoPin = apiSupported && launcherSupported && !vendorRestricted,
+            alreadyPlaced = alreadyPlaced,
             vendorRestricted = vendorRestricted,
-            vendorName = vendorName?.replaceFirstChar { it.uppercase() }
+            vendorName = vendorName?.replaceFirstChar { it.uppercase() },
+            launcherSupported = launcherSupported,
+            batteryOptimized = batteryOptimized
         )
     }
 
     /**
-     * 跳转到应用系统设置页，用户可在此开启「允许创建小组件」等权限。
-     * 华为/小米/OPPO/VIVO 等国产ROM 将此开关放在应用信息 → 权限 → 更多权限中。
+     * 打开应用详情页（包含「允许创建小组件」等权限开关）。
      */
-    fun openAppPermissionSettings(context: Context) {
+    fun openAppDetails(context: Context) {
         runCatching {
-            val intent = Intent(
-                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                Uri.parse("package:${context.packageName}")
-            ).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            context.startActivity(intent)
-        }.onFailure { Log.e(TAG, "Cannot open app settings", it) }
+            context.startActivity(
+                Intent(
+                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    Uri.parse("package:${context.packageName}")
+                ).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
+            )
+        }
     }
 
-    fun requestIgnoreBatteryOptimizations(context: Context) {
-        runCatching {
-            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                data = Uri.parse("package:${context.packageName}")
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            context.startActivity(intent)
-        }.onFailure { Log.e(TAG, "Cannot open battery settings", it) }
+    /**
+     * 打开本应用的权限页（应用详情页的权限子页在很多 ROM 上无法直达，
+     * 因此这里采用应用详情页 + 说明文字的组合方案）。
+     */
+    fun openAppPermissionSettings(context: Context) {
+        openAppDetails(context)
     }
+
+    /**
+     * 直达电池优化页面（带包名，直接定位到本应用）。
+     */
+    fun openBatterySettings(context: Context) {
+        runCatching {
+            context.startActivity(
+                Intent(
+                    Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS,
+                    Uri.parse("package:${context.packageName}")
+                ).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
+            )
+        }
+    }
+
+    /**
+     * 构建 Widget 引导文案（由上层 UI 调用）。
+     */
+    fun guideText(report: WidgetReport, context: Context): String =
+        report.blockingReason(context)
 }

@@ -2,6 +2,7 @@ package com.taskflow.app.widget
 
 import android.appwidget.AppWidgetManager
 import android.content.BroadcastReceiver
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.util.Log
@@ -69,7 +70,4 @@ class WidgetPinResultReceiver : BroadcastReceiver() {
             }
         }
     }
-
-    private fun ComponentName(context: Context, cls: Class<*>) =
-        android.content.ComponentName(context, cls)
 }

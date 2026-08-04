@@ -27,18 +27,13 @@ object WidgetHelper {
             val manager = AppWidgetManager.getInstance(context)
             val ids = manager.getAppWidgetIds(providerComponent(context))
             Log.d(TAG, "refresh: appWidgetIds=${ids.toList()}")
-            if (ids.isEmpty()) {
-                Log.w(TAG, "refresh: no widget placed, skip")
-                return@launch
-            }
+            if (ids.isEmpty()) return@launch
             val pending = withContext(Dispatchers.IO) {
-                TaskRepository.get(context).getPinnedPending()
+                TaskRepository.get(context).getPinnedPending().size
             }
-            val remaining = pending.size
             ids.forEach { id ->
-                val views = buildViews(context, id, remaining)
+                val views = buildViews(context, id, pending)
                 manager.updateAppWidget(id, views)
-                manager.notifyAppWidgetViewDataChanged(id, R.id.task_list)
             }
         }
     }
@@ -50,13 +45,8 @@ object WidgetHelper {
         return buildViews(context, appWidgetId, remaining)
     }
 
-    private fun buildViews(
-        context: Context,
-        appWidgetId: Int,
-        remaining: Int
-    ): RemoteViews {
+    private fun buildViews(context: Context, appWidgetId: Int, remaining: Int): RemoteViews {
         val views = RemoteViews(context.packageName, R.layout.widget_content)
-
         val headerPi = PendingIntent.getActivity(
             context, 0,
             Intent(context, MainActivity::class.java).apply {
@@ -65,19 +55,16 @@ object WidgetHelper {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         views.setOnClickPendingIntent(R.id.widget_header, headerPi)
-
         views.setTextViewText(
             R.id.count_text,
             if (remaining > 0) context.getString(R.string.widget_remaining, remaining)
             else context.getString(R.string.widget_all_done)
         )
-
         val listIntent = Intent(context, TaskListRemoteViewsService::class.java).apply {
             putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
             data = Uri.parse(toUri(Intent.URI_INTENT_SCHEME))
         }
         views.setRemoteAdapter(R.id.task_list, listIntent)
-
         val template = Intent(context, MainActivity::class.java).apply {
             action = MainActivity.ACTION_OPEN_TASK
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
@@ -87,7 +74,6 @@ object WidgetHelper {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         views.setPendingIntentTemplate(R.id.task_list, templatePi)
-
         if (remaining == 0) {
             views.setViewVisibility(R.id.task_list, View.GONE)
             views.setViewVisibility(R.id.empty_text, View.VISIBLE)
@@ -97,7 +83,6 @@ object WidgetHelper {
             views.setViewVisibility(R.id.task_list, View.VISIBLE)
             views.setViewVisibility(R.id.empty_text, View.GONE)
         }
-
         return views
     }
 
@@ -107,50 +92,55 @@ object WidgetHelper {
     /**
      * 请求系统 Pin Widget。
      *
-     * 返回值含义：
-     * - true: 系统接受了请求（但不代表 Widget 已创建，需等 callback）
+     * 返回值：
+     * - true: 系统接受了请求（但不代表 Widget 已创建）
      * - false: 系统不支持或请求失败
      *
-     * 注意：调用此方法后不要立即设置 widgetAdded=true，
-     * 必须等待 [WidgetPinResultReceiver] 回调确认。
+     * 注意：此方法返回 true 仅代表系统接受了请求。
+     * Widget 是否真正创建必须通过 [isWidgetPlaced]() 再次确认，
+     * 或等待 [WidgetPinResultReceiver] 回调。
+     *
+     * 必须在主线程调用。
      */
     fun requestPinWidget(context: Context): Boolean {
-        Log.d(TAG, "requestPinWidget: SDK=${Build.VERSION.SDK_INT}")
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-            Log.w(TAG, "requestPinWidget: API < 26, not supported")
-            return false
-        }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return false
         val manager = AppWidgetManager.getInstance(context)
-        val supported = manager.isRequestPinAppWidgetSupported
-        Log.d(TAG, "requestPinWidget: isRequestPinAppWidgetSupported=$supported")
-        if (!supported) return false
+        if (!manager.isRequestPinAppWidgetSupported) return false
 
-        // callback 广播：系统在用户确认/拒绝后发送
+        // Launcher 通过 resultExtras 回传 widget id，必须显式 setResult。
         val callbackIntent = Intent(context, WidgetPinResultReceiver::class.java).apply {
-            // 关键：让系统能传递广播
-            setPackage(context.packageName)
+            putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
         }
+        val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
         val callback = PendingIntent.getBroadcast(
             context,
             System.currentTimeMillis().toInt(),
             callbackIntent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            flags
         )
         return try {
             manager.requestPinAppWidget(providerComponent(context), null, callback)
-        } catch (e: Throwable) {
-            Log.e(TAG, "requestPinWidget: exception", e)
+        } catch (_: Throwable) {
             false
         }
     }
 
     /**
-     * 真实检测：系统中是否存在已放置的 Widget。
-     * 不要信任 UserPreferences.widgetAdded，只信任系统 API。
+     * 实时检测：Widget 是否存在于桌面。
+     * 只信任系统 API，不信任任何本地缓存。
      */
-    fun isAnyWidgetPlaced(context: Context): Boolean {
-        return AppWidgetManager.getInstance(context)
-            .getAppWidgetIds(providerComponent(context))
-            .isNotEmpty()
+    fun isWidgetPlaced(context: Context): Boolean {
+        return try {
+            AppWidgetManager.getInstance(context)
+                .getAppWidgetIds(providerComponent(context))
+                .isNotEmpty()
+        } catch (_: Throwable) {
+            false
+        }
     }
+
+    /**
+     * 同 [isWidgetPlaced]，兼容调用方命名。
+     */
+    fun isAnyWidgetPlaced(context: Context): Boolean = isWidgetPlaced(context)
 }
