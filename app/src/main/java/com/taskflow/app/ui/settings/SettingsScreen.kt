@@ -67,19 +67,15 @@ fun SettingsScreen(
     val state by viewModel.state.collectAsState()
     val context = LocalContext.current
 
-    // ====== Widget status (refreshes when screen resumes / after pin attempt) ======
     var widgetStatus by remember { mutableStateOf(WidgetStatus()) }
     LaunchedEffect(Unit) { widgetStatus = computeWidgetStatus(context) }
-    // Re-check whenever the widget is toggled / on resume
     val refreshKey = remember { mutableStateOf(0) }
     LaunchedEffect(refreshKey.value) {
         if (refreshKey.value > 0) {
-            // Give the launcher a moment to process the pin request
             delay(2000)
         }
         widgetStatus = computeWidgetStatus(context)
     }
-    // Also observe UserPreferences so we react when WidgetPinResultReceiver confirms
     val widgetAddedPrefs by UserPreferences.get(context).widgetAdded.collectAsState(initial = false)
     LaunchedEffect(widgetAddedPrefs) {
         if (widgetAddedPrefs) {
@@ -87,13 +83,11 @@ fun SettingsScreen(
         }
     }
 
-    // Dialogs used by the "Add Widget" flow.
-    var showWidgetGuideDialog by remember { mutableStateOf(false) }
-    var widgetGuideMessage by remember { mutableStateOf("") }
+    var showPermissionGuideDialog by remember { mutableStateOf(false) }
+    var permissionGuideMessage by remember { mutableStateOf("") }
 
-    // Reset dialog state when Activity goes to background
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
-        showWidgetGuideDialog = false
+        showPermissionGuideDialog = false
     }
 
     Column(
@@ -134,7 +128,7 @@ fun SettingsScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .selectable(state.themeMode == mode) { viewModel.setThemeMode(mode) }
-                            .padding(vertical = 6.dp),
+                            .padding(vertical = 6p),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         RadioButton(selected = state.themeMode == mode, onClick = { viewModel.setThemeMode(mode) })
@@ -182,28 +176,22 @@ fun SettingsScreen(
                                     ).show()
                                 }
                                 report.canAttemptAutoPin -> {
-                                    // 系统支持自动 Pin（非华为等国产ROM）
                                     val pinned = WidgetHelper.requestPinWidget(context)
                                     if (pinned) {
-                                        // requestPinWidget 返回 true 只表示系统接受了请求
-                                        // 不要认为已添加成功，等待 WidgetPinResultReceiver 回调
                                         Toast.makeText(
                                             context,
                                             "请在系统弹窗中确认添加小组件",
                                             Toast.LENGTH_LONG
                                         ).show()
                                     } else {
-                                        // 系统接受了请求但未弹窗，或请求失败
-                                        widgetGuideMessage = "系统未弹出添加面板，请手动添加"
-                                        showWidgetGuideDialog = true
+                                        permissionGuideMessage =
+                                            "系统未弹出添加面板，可能需要先开启创建小组件的权限。"
+                                        showPermissionGuideDialog = true
                                     }
                                 }
                                 else -> {
-                                    // 华为/小米等设备或不支持的Launcher：直接手动引导
-                                    widgetGuideMessage = report.blockingReason.ifBlank {
-                                        "当前设备不支持自动添加"
-                                    }
-                                    showWidgetGuideDialog = true
+                                    permissionGuideMessage = report.blockingReason
+                                    showPermissionGuideDialog = true
                                 }
                             }
                             refreshKey.value++
@@ -211,13 +199,6 @@ fun SettingsScreen(
                         modifier = Modifier.weight(1f),
                         shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
                     ) { Text(stringResource(R.string.settings_widget_add)) }
-                    androidx.compose.material3.OutlinedButton(
-                        onClick = {
-                            WidgetCapability.openWidgetPicker(context)
-                        },
-                        modifier = Modifier.weight(1f),
-                        shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
-                    ) { Text(stringResource(R.string.settings_widget_manual)) }
                 }
             }
         }
@@ -258,49 +239,39 @@ fun SettingsScreen(
         )
     }
 
-    if (showWidgetGuideDialog) {
+    if (showPermissionGuideDialog) {
         AlertDialog(
-            onDismissRequest = { showWidgetGuideDialog = false },
-            title = { Text("无法自动添加小组件") },
+            onDismissRequest = { showPermissionGuideDialog = false },
+            title = { Text("需要开启权限") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (widgetGuideMessage.isNotBlank()) {
-                        Text(
-                            widgetGuideMessage,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
                     Text(
-                        "请按以下步骤手动添加：",
+                        permissionGuideMessage,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        "请前往系统设置开启「允许创建小组件」权限，然后返回本应用重试。",
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.SemiBold
                     )
-                    Text("1. 长按桌面空白处")
-                    Text("2. 选择「小组件」或「Widgets」")
-                    Text("3. 找到 TaskFlow")
-                    Text("4. 长按并拖到桌面，或点击添加")
                 }
             },
             confirmButton = {
                 TextButton(onClick = {
-                    showWidgetGuideDialog = false
-                    WidgetCapability.openWidgetPicker(context)
-                }) { Text("打开小组件选择") }
+                    showPermissionGuideDialog = false
+                    WidgetCapability.openAppPermissionSettings(context)
+                }) { Text("前往设置") }
             },
             dismissButton = {
-                TextButton(onClick = { showWidgetGuideDialog = false }) {
-                    Text("我知道了")
+                TextButton(onClick = { showPermissionGuideDialog = false }) {
+                    Text("取消")
                 }
             }
         )
     }
 }
 
-/**
- * Lightweight cacheable snapshot of the widget's presence on the device.
- * Used by the Settings screen to render the "已添加 / 未添加" status.
- */
 private data class WidgetStatus(
     val placed: Boolean = false,
     val launcherSupported: Boolean = true,
@@ -309,7 +280,7 @@ private data class WidgetStatus(
 ) {
     fun statusLabel(): String = when {
         placed -> "状态：已添加"
-        vendorRestricted -> "$vendorName 设备：建议手动添加"
+        vendorRestricted -> "$vendorName 设备：可能需要开启权限"
         !launcherSupported -> "当前启动器不支持自动添加"
         else -> "状态：未添加（点击下方按钮添加）"
     }
@@ -317,8 +288,6 @@ private data class WidgetStatus(
 
 private fun computeWidgetStatus(context: Context): WidgetStatus {
     val report = WidgetCapability.report(context)
-    // 只信任系统真实状态：getAppWidgetIds()
-    // 不使用 UserPreferences.widgetAdded，因为它可能是假成功
     return WidgetStatus(
         placed = report.widgetAlreadyPlaced,
         launcherSupported = report.launcherSupported,
@@ -334,9 +303,6 @@ private fun SettingsRow(
     subtitle: String? = null,
     onClick: (() -> Unit)? = null
 ) {
-    // onClick is forwarded to SoftCard so the whole card is tappable. Previously
-    // the chevron was shown but the click was never wired, leaving permission /
-    // update buttons unresponsive.
     SoftCard(Modifier.fillMaxWidth().padding(vertical = 4.dp), onClick = onClick) {
         Row(
             modifier = Modifier

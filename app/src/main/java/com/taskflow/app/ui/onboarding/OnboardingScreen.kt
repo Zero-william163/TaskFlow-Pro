@@ -106,8 +106,8 @@ fun OnboardingScreen(onComplete: () -> Unit) {
             ),
             OnboardingStep(
                 icon = Icons.Outlined.Apps,
-                title = "桌面小组件",
-                description = "小组件需要桌面添加权限，用于在桌面显示任务。如不支持自动添加，将提供手动添加步骤。",
+                title = "桌面小组件（可选）",
+                description = "小组件需要桌面添加权限，用于在桌面显示任务。如不支持自动添加，将引导开启相关系统权限。",
                 isGranted = {
                     // Real capability check: a widget is already placed on the
                     // home screen. This is the only reliable signal that the
@@ -212,9 +212,6 @@ fun OnboardingScreen(onComplete: () -> Unit) {
                             }
                         }
                         3 -> {
-                            // Widget pin — run pre-flight checks first so the
-                            // user gets a clear reason instead of a silent no-op.
-                            // Spec: "如果失败：不要静默。必须显示原因。"
                             val report = com.taskflow.app.widget.WidgetCapability.report(context)
                             when {
                                 report.widgetAlreadyPlaced -> {
@@ -227,18 +224,11 @@ fun OnboardingScreen(onComplete: () -> Unit) {
                                 report.canAttemptAutoPin -> {
                                     val pinned = com.taskflow.app.widget.WidgetHelper.requestPinWidget(context)
                                     if (!pinned) {
-                                        // System refused to even show the pin dialog.
-                                        // Show a dialog with manual steps.
-                                        widgetGuideMessage = report.blockingReason
+                                        widgetGuideMessage = "系统未弹出添加面板，可能需要先开启创建小组件的权限。"
                                         showWidgetGuideDialog = true
                                     }
-                                    // Note: pinned=true means the system showed the pin
-                                    // dialog. The user may still cancel it; we cannot
-                                    // detect that here. The WidgetPinResultReceiver
-                                    // callback is the source of truth for actual placement.
                                 }
                                 else -> {
-                                    // Launcher / vendor does not support auto-pin.
                                     widgetGuideMessage = report.blockingReason
                                     showWidgetGuideDialog = true
                                 }
@@ -275,12 +265,10 @@ fun OnboardingScreen(onComplete: () -> Unit) {
         }
     }
 
-    // Widget manual guide dialog — shown when auto-pin fails or is unsupported.
-    // Spec: "并提供步骤：长按桌面 → 小组件 → TaskFlow → 添加"
     if (showWidgetGuideDialog) {
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { showWidgetGuideDialog = false },
-            title = { Text("无法自动添加小组件") },
+            title = { Text("需要开启权限") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (widgetGuideMessage.isNotBlank()) {
@@ -291,26 +279,22 @@ fun OnboardingScreen(onComplete: () -> Unit) {
                         )
                     }
                     Text(
-                        "请按以下步骤手动添加：",
+                        "请前往系统设置开启「允许创建小组件」权限，然后返回本应用重试。",
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.SemiBold
                     )
-                    Text("1. 长按桌面空白处")
-                    Text("2. 选择「小组件」或「Widgets」")
-                    Text("3. 找到 TaskFlow")
-                    Text("4. 长按并拖到桌面，或点击添加")
                 }
             },
             confirmButton = {
                 androidx.compose.material3.TextButton(onClick = {
                     showWidgetGuideDialog = false
-                    com.taskflow.app.widget.WidgetCapability.openWidgetPicker(context)
-                }) { Text("打开小组件选择") }
+                    com.taskflow.app.widget.WidgetCapability.openAppPermissionSettings(context)
+                }) { Text("前往设置") }
             },
             dismissButton = {
                 androidx.compose.material3.TextButton(onClick = {
                     showWidgetGuideDialog = false
-                }) { Text("我知道了") }
+                }) { Text("取消") }
             }
         )
     }

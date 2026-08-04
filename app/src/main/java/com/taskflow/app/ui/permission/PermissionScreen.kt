@@ -1,5 +1,6 @@
 package com.taskflow.app.ui.permission
 
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -24,17 +25,22 @@ import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -44,12 +50,16 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.taskflow.app.R
 import com.taskflow.app.permission.PermissionItem
 import com.taskflow.app.permission.PermissionType
 import com.taskflow.app.ui.AppViewModelFactory
 import com.taskflow.app.ui.components.SoftCard
+import com.taskflow.app.widget.WidgetCapability
+import com.taskflow.app.widget.WidgetHelper
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -59,7 +69,6 @@ fun PermissionScreen(onBack: () -> Unit) {
     val context = LocalContext.current
 
     LaunchedEffect(Unit) { viewModel.refresh() }
-    // Re-check status when the screen resumes (user returns from a settings page).
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
@@ -67,6 +76,13 @@ fun PermissionScreen(onBack: () -> Unit) {
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    var showPermissionGuideDialog by remember { mutableStateOf(false) }
+    var permissionGuideMessage by remember { mutableStateOf("") }
+
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
+        showPermissionGuideDialog = false
     }
 
     Scaffold(
@@ -89,7 +105,34 @@ fun PermissionScreen(onBack: () -> Unit) {
             items(items, key = { it.type }) { item ->
                 PermissionRow(item) {
                     if (item.type == PermissionType.WIDGET) {
-                        com.taskflow.app.widget.WidgetHelper.requestPinWidget(context)
+                        val report = WidgetCapability.report(context)
+                        when {
+                            report.widgetAlreadyPlaced -> {
+                                Toast.makeText(
+                                    context,
+                                    R.string.settings_widget_status_added,
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                            report.canAttemptAutoPin -> {
+                                val pinned = WidgetHelper.requestPinWidget(context)
+                                if (pinned) {
+                                    Toast.makeText(
+                                        context,
+                                        "请在系统弹窗中确认添加小组件",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                } else {
+                                    permissionGuideMessage =
+                                        "系统未弹出添加面板，可能需要先开启创建小组件的权限。"
+                                    showPermissionGuideDialog = true
+                                }
+                            }
+                            else -> {
+                                permissionGuideMessage = report.blockingReason
+                                showPermissionGuideDialog = true
+                            }
+                        }
                     } else {
                         viewModel.intentFor(item.type)?.let { intent ->
                             runCatching { context.startActivity(intent) }
@@ -98,6 +141,38 @@ fun PermissionScreen(onBack: () -> Unit) {
                 }
             }
         }
+    }
+
+    if (showPermissionGuideDialog) {
+        AlertDialog(
+            onDismissRequest = { showPermissionGuideDialog = false },
+            title = { Text("需要开启权限") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        permissionGuideMessage,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        "请前往系统设置开启「允许创建小组件」权限，然后返回本应用重试。",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showPermissionGuideDialog = false
+                    WidgetCapability.openAppPermissionSettings(context)
+                }) { Text("前往设置") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPermissionGuideDialog = false }) {
+                    Text("取消")
+                }
+            }
+        )
     }
 }
 
