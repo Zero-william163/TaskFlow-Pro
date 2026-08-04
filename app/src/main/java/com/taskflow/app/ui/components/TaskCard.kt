@@ -43,7 +43,8 @@ fun TaskCard(
     categoryName: String,
     onClick: () -> Unit,
     onToggleComplete: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    readOnly: Boolean = false
 ) {
     val completedAlpha by animateFloatAsState(
         targetValue = if (task.isCompleted) 0.45f else 1f,
@@ -122,10 +123,12 @@ fun TaskCard(
                 }
             }
             Spacer(Modifier.width(12.dp))
-            TaskCheckbox(
-                checked = task.isCompleted,
-                onCheckedChange = { onToggleComplete() }
-            )
+            if (!readOnly) {
+                TaskCheckbox(
+                    checked = task.isCompleted,
+                    onCheckedChange = { onToggleComplete() }
+                )
+            }
         }
     }
 }

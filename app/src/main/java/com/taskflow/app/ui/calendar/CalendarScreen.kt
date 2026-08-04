@@ -132,7 +132,8 @@ fun CalendarScreen(
                     categoryName = cat?.name.orEmpty(),
                     onClick = { onTaskClick(task.id) },
                     onToggleComplete = { viewModel.toggleComplete(task) },
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 5.dp)
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 5.dp),
+                    readOnly = true
                 )
             }
         }

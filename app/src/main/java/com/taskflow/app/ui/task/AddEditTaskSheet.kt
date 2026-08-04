@@ -497,9 +497,6 @@ fun AddEditTaskSheet(
     }
     if (showEndPicker) {
         val minDay = (startDate ?: LocalDate.now()).coerceAtLeast(LocalDate.now())
-        // Same Material3 1.3.0 SelectableDates approach: gray out past dates
-        // AND dates earlier than the start date.
-        // Spec: "今天以前：全部灰色。不可点击。" + "截止日期不能早于开始日期".
         val minMillis = minDay.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
         val endSelectableDates = remember(minMillis) {
             object : androidx.compose.material3.SelectableDates {
@@ -507,9 +504,14 @@ fun AddEditTaskSheet(
                     utcTimeMillis >= minMillis
             }
         }
-        val initialDueMillis = dueDate?.atStartOfDay(ZoneId.systemDefault())
-            ?.toInstant()?.toEpochMilli()
-            ?: minDay.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        // 新建任务默认选中今天，确保"今日"和"选中"标记在同一天
+        val initialDueMillis = if (isEdit) {
+            dueDate?.atStartOfDay(ZoneId.systemDefault())
+                ?.toInstant()?.toEpochMilli()
+                ?: LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        } else {
+            LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        }
         val state = rememberDatePickerState(
             initialSelectedDateMillis = initialDueMillis,
             initialDisplayedMonthMillis = initialDueMillis,
