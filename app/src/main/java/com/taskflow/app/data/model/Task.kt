@@ -19,7 +19,7 @@ data class Task(
     val startDate: LocalDate? = null,
     val reminderTime: LocalDateTime? = null,
     val reminderMode: ReminderMode = ReminderMode.ONCE,
-    val frequency: FrequencyType = FrequencyType.NONE,
+    val frequency: FrequencyType = FrequencyType.DAILY,
     /**
      * Weekday mask when [frequency] is WEEKLY. Mon=1..Sun=7 (ISO 8601), bits
      * (weekday-1). All-zero means "every day" fallback to MON-FRI.

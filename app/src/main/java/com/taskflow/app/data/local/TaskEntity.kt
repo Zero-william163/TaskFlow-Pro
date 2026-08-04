@@ -35,7 +35,7 @@ data class TaskEntity(
     /** @see com.taskflow.app.data.model.ReminderMode */
     val reminderMode: ReminderMode = ReminderMode.ONCE,
     /** @see com.taskflow.app.data.model.FrequencyType */
-    val frequency: FrequencyType = FrequencyType.NONE,
+    val frequency: FrequencyType = FrequencyType.DAILY,
     val weeklyWeekdays: Int = 0,
     val monthlyDays: Int = 0,
     val customDatesRaw: String? = null,

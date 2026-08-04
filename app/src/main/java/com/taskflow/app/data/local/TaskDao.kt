@@ -72,7 +72,7 @@ interface TaskDao {
     @Query("SELECT COUNT(*) FROM tasks WHERE isCompleted = 0")
     fun observePendingCount(): Flow<Int>
 
-    @Query("SELECT COUNT(*) FROM tasks WHERE isCompleted = 1 AND date(completedAt) = date(:day)")
+    @Query("SELECT COUNT(*) FROM tasks WHERE isCompleted = 1 AND date(completedAt / 1000, 'unixepoch') = date(:day / 1000, 'unixepoch')")
     fun observeCompletedOn(day: LocalDateTime): Flow<Int>
 
     /**
@@ -84,15 +84,18 @@ interface TaskDao {
      * 或者：已完成Task 数据。" We use tasks.completedAt (the authoritative
      * completion timestamp) so toggling complete/uncomplete updates the chart
      * in real time via Flow.
+     *
+     * completedAt is stored as epoch milliseconds (Long) per Converters.
+     * We convert to SQLite date string via datetime(ms/1000, 'unixepoch').
      */
     @Query("""
-        SELECT date(completedAt) as day, COUNT(*) as count
+        SELECT date(completedAt / 1000, 'unixepoch') as day, COUNT(*) as count
         FROM tasks
         WHERE isCompleted = 1
           AND completedAt IS NOT NULL
-          AND date(completedAt) >= date(:startInclusive)
-          AND date(completedAt) <= date(:endInclusive)
-        GROUP BY date(completedAt)
+          AND date(completedAt / 1000, 'unixepoch') >= date(:startInclusive / 1000, 'unixepoch')
+          AND date(completedAt / 1000, 'unixepoch') <= date(:endInclusive / 1000, 'unixepoch')
+        GROUP BY date(completedAt / 1000, 'unixepoch')
         ORDER BY day ASC
     """)
     fun observeDailyCompletions(
@@ -112,6 +115,7 @@ data class CategoryCount(val categoryId: Long, val count: Int)
 
 /**
  * One day's completion count. `day` is the SQLite `date()` text
- * ("YYYY-MM-DD"). Used by the stats line chart.
+ * ("YYYY-MM-DD") produced from epoch-millisecond column via
+ * `date(col / 1000, 'unixepoch')`. Used by the stats line chart.
  */
 data class DailyCompletion(val day: String, val count: Int)

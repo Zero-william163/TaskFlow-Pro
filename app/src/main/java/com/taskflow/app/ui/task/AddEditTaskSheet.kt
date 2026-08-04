@@ -66,6 +66,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.taskflow.app.R
 import com.taskflow.app.data.model.FrequencyType
@@ -97,7 +99,8 @@ fun AddEditTaskSheet(
     onDismiss: () -> Unit,
     onCancel: ((hasUnsavedChanges: Boolean) -> Unit)? = null,
     externalSaveTrigger: Boolean = false,
-    onExternalSaveTriggered: () -> Unit = {}
+    onExternalSaveTriggered: () -> Unit = {},
+    showTitle: Boolean = true
 ) {
     val viewModel: TaskViewModel = viewModel(factory = AppViewModelFactory)
     val categories by viewModel.categories.collectAsState()
@@ -115,8 +118,7 @@ fun AddEditTaskSheet(
     var startDate by remember(task) {
         mutableStateOf(task?.startDate ?: LocalDate.now())
     }
-    var dueDate by remember(task) { mutableStateOf(task?.dueDate?.toLocalDate()) }
-    var dueTime by remember(task) { mutableStateOf(task?.dueDate?.toLocalTime()) }
+    var dueDate by remember(task) { mutableStateOf(task?.dueDate?.toLocalDate() ?: LocalDate.now()) }
     var dueDateError by remember { mutableStateOf(false) }
     // Distinguish the two due-date error cases so the inline message can match
     // the actual problem (spec: empty → "请填写截止日期"; earlier-than-start →
@@ -135,7 +137,7 @@ fun AddEditTaskSheet(
         mutableStateOf(task?.alarmSoundUri.takeUnless { it.isNullOrBlank() })
     }
 
-    var frequency by remember(task) { mutableStateOf(task?.frequency ?: FrequencyType.NONE) }
+    var frequency by remember(task) { mutableStateOf(task?.frequency ?: FrequencyType.DAILY) }
     var customDates by remember(task) {
         mutableStateOf((task?.customDates.orEmpty()).toSet())
     }
@@ -145,12 +147,28 @@ fun AddEditTaskSheet(
 
     var showStartPicker by remember { mutableStateOf(false) }
     var showEndPicker by remember { mutableStateOf(false) }
-    var showDueTimePicker by remember { mutableStateOf(false) }
     var showReminderTimePicker by remember { mutableStateOf(false) }
     var showReminderModeDialog by remember { mutableStateOf(false) }
     var showFrequencyDialog by remember { mutableStateOf(false) }
     var showCustomDatePicker by remember { mutableStateOf(false) }
     var showSoundPickerDialog by remember { mutableStateOf(false) }
+
+    // ====== Lifecycle safety: reset all dialog states when Activity goes to
+    // background. Prevents frozen state where a dialog scrim blocks touches. ======
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
+        showStartPicker = false
+        showEndPicker = false
+        showReminderTimePicker = false
+        showReminderModeDialog = false
+        showFrequencyDialog = false
+        showCustomDatePicker = false
+        showSoundPickerDialog = false
+    }
+    LifecycleEventEffect(Lifecycle.Event.ON_PAUSE) {
+        showStartPicker = false
+        showEndPicker = false
+        showReminderTimePicker = false
+    }
 
     val scrollState = rememberScrollState()
     val coroutineScope = rememberCoroutineScope()
@@ -200,7 +218,7 @@ fun AddEditTaskSheet(
         }
         val start = startDate ?: LocalDate.now()
         val endLocal = dueDate!!
-        val end = endLocal.atTime(dueTime ?: LocalTime.of(23, 59))
+        val end = endLocal.atStartOfDay()
         val reminder = if (reminderEnabled) start.atTime(reminderTime) else null
         val customRaw = if (frequency == FrequencyType.CUSTOM)
             customDates.sorted().joinToString(",") { it.toString() }
@@ -233,15 +251,17 @@ fun AddEditTaskSheet(
             .fillMaxWidth()
             .verticalScroll(scrollState)
             .padding(horizontal = 20.dp)
-            .padding(bottom = 32.dp, top = 8.dp),
+            .padding(bottom = 32.dp, top = if (showTitle) 8.dp else 4.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        Text(
-            text = stringResource(if (isEdit) R.string.task_edit else R.string.task_add),
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold
-        )
-        Spacer(Modifier.height(6.dp))
+        if (showTitle) {
+            Text(
+                text = stringResource(if (isEdit) R.string.task_edit else R.string.task_add),
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(Modifier.height(6.dp))
+        }
 
         OutlinedTextField(
             value = title,
@@ -321,13 +341,6 @@ fun AddEditTaskSheet(
                 color = MaterialTheme.colorScheme.error,
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.padding(start = 14.dp, top = 2.dp)
-            )
-        }
-        if (dueDate != null) {
-            SelectorRow(
-                icon = Icons.Outlined.AccessTime,
-                text = dueTime?.let { Format.time(it.atDate(dueDate!!)) } ?: "全天",
-                onClick = { showDueTimePicker = true }
             )
         }
 
@@ -456,10 +469,12 @@ fun AddEditTaskSheet(
                         (endMillis == null || utcTimeMillis <= endMillis)
             }
         }
+        val initialStartMillis = startDate?.atStartOfDay(ZoneId.systemDefault())
+            ?.toInstant()?.toEpochMilli()
+            ?: minToday.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
         val state = rememberDatePickerState(
-            initialSelectedDateMillis = startDate?.atStartOfDay(ZoneId.systemDefault())
-                ?.toInstant()?.toEpochMilli()
-                ?: minToday.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli(),
+            initialSelectedDateMillis = initialStartMillis,
+            initialDisplayedMonthMillis = initialStartMillis,
             selectableDates = startSelectableDates
         )
         DatePickerDialog(
@@ -492,10 +507,12 @@ fun AddEditTaskSheet(
                     utcTimeMillis >= minMillis
             }
         }
+        val initialDueMillis = dueDate?.atStartOfDay(ZoneId.systemDefault())
+            ?.toInstant()?.toEpochMilli()
+            ?: minDay.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
         val state = rememberDatePickerState(
-            initialSelectedDateMillis = dueDate?.atStartOfDay(ZoneId.systemDefault())
-                ?.toInstant()?.toEpochMilli()
-                ?: minDay.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli(),
+            initialSelectedDateMillis = initialDueMillis,
+            initialDisplayedMonthMillis = initialDueMillis,
             selectableDates = endSelectableDates
         )
         DatePickerDialog(
@@ -523,13 +540,6 @@ fun AddEditTaskSheet(
             },
             onDismiss = { showEndPicker = false }
         ) { DatePicker(state = state) }
-    }
-    if (showDueTimePicker) {
-        TimePickerDialog(
-            initial = dueTime ?: LocalTime.of(9, 0),
-            onConfirm = { dueTime = it; showDueTimePicker = false },
-            onDismiss = { showDueTimePicker = false }
-        )
     }
     if (showReminderTimePicker) {
         TimePickerDialog(
@@ -792,6 +802,7 @@ private fun CustomDatePickerDialog(
                     val today = LocalDate.now()
                     val lower = startDate.let { if (it.isBefore(today)) today else it }
                     val upper = endDate
+                    val todayColor = MaterialTheme.colorScheme.tertiary
                     var dayCounter = 1 - startOffset
                     for (week in 0..5) {
                         Row(modifier = Modifier.fillMaxWidth(),
@@ -806,11 +817,13 @@ private fun CustomDatePickerDialog(
                                         // ====== BUG #2 FIX: exact (today..dueDate) range ======
                                         val outside = date.isBefore(lower) || date.isAfter(upper)
                                         val isSel = selected.contains(date)
+                                        val isToday = today.isEqual(date)
                                         val bg = when {
                                             isSel -> MaterialTheme.colorScheme.primary
                                             else -> Color.Transparent
                                         }
                                         val stroke = when {
+                                            isToday -> todayColor
                                             !outside && !isSel -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
                                             else -> Color.Transparent
                                         }
@@ -821,7 +834,7 @@ private fun CustomDatePickerDialog(
                                                 .background(bg)
                                                 .then(
                                                     if (stroke != Color.Transparent) Modifier.border(
-                                                        width = 1.dp,
+                                                        width = 1.5.dp,
                                                         color = stroke,
                                                         shape = CircleShape
                                                     )
@@ -841,11 +854,14 @@ private fun CustomDatePickerDialog(
                                             Text(
                                                 text = "${date.dayOfMonth}",
                                                 style = MaterialTheme.typography.bodyMedium,
-                                                fontWeight = if (today.isEqual(date) && !isSel) FontWeight.SemiBold else null,
+                                                fontWeight = when {
+                                                    isToday && !isSel -> FontWeight.Bold
+                                                    else -> null
+                                                },
                                                 color = when {
                                                     outside -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f)
                                                     isSel -> MaterialTheme.colorScheme.onPrimary
-                                                    today.isEqual(date) -> MaterialTheme.colorScheme.primary
+                                                    isToday -> todayColor
                                                     else -> MaterialTheme.colorScheme.onSurface
                                                 }
                                             )

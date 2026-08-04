@@ -272,17 +272,14 @@ private fun CompletionLineChart(points: List<DailyPoint>) {
     val todayColor = MaterialTheme.colorScheme.tertiary
 
     val today = remember { LocalDate.now() }
-    val maxCount = remember(points) {
-        (points.maxOfOrNull { it.count } ?: 0).coerceAtLeast(5)
-    }
-    // Y-axis tick steps: 0, 5, 10, 15, ... up to maxCount (rounded up).
-    val yTicks = remember(maxCount) {
-        val step = when {
-            maxCount <= 5 -> 1
-            maxCount <= 20 -> 5
-            else -> 10
-        }
-        (0..maxCount step step).toList()
+    // Dynamic Y-axis: compute a "nice" max based on the highest daily count.
+    // Spec: maxCount <= 5 → 0..5; maxCount 12 → 0..15; maxCount 50 → 0..60.
+    // We add ~20% headroom and snap to a clean tick boundary so the line never
+    // gets clipped and the grid stays readable.
+    val dataMax = remember(points) { points.maxOfOrNull { it.count } ?: 0 }
+    val (maxCount, yStep) = remember(dataMax) { computeYAxisMax(dataMax) }
+    val yTicks = remember(maxCount, yStep) {
+        (0..maxCount step yStep).toList()
     }
 
     if (points.isEmpty()) {
@@ -415,3 +412,35 @@ private fun Color.toArgb(): Int = android.graphics.Color.argb(
     (green * 255).toInt(),
     (blue * 255).toInt()
 )
+
+/**
+ * Compute a "nice" Y-axis ceiling and step size from the observed max daily count.
+ *
+ * Rules (per spec §3):
+ *   max ≤ 5  → ceiling = 5,     step = 1   (shows 0,1,2,3,4,5)
+ *   max ≤ 10 → ceiling = 10,    step = 2   (even ticks)
+ *   max ≤ 20 → ceiling = 20,    step = 5
+ *   else     → ceiling with +20% headroom rounded up to a multiple of 10,
+ *              step = 10
+ *
+ * Always returns at least (0, 1) so an empty chart still draws a flat axis.
+ */
+private fun computeYAxisMax(dataMax: Int): Pair<Int, Int> {
+    require(dataMax >= 0) { "dataMax must be non-negative, got $dataMax" }
+    return when {
+        dataMax <= 5 -> 5 to 1
+        dataMax <= 10 -> {
+            val max = (dataMax + 1).coerceAtLeast(5)
+            max to if (max <= 6) 1 else 2
+        }
+        dataMax <= 20 -> {
+            val max = ((dataMax + 3) / 5 * 5).coerceAtLeast(10)
+            max to 5
+        }
+        else -> {
+            val rawMax = (dataMax * 1.2f).toInt().coerceAtLeast(dataMax + 1)
+            val max = ((rawMax + 9) / 10 * 10)
+            max to 10
+        }
+    }
+}

@@ -54,5 +54,5 @@ class Converters {
 
     @TypeConverter
     fun toFrequencyType(value: String): FrequencyType =
-        FrequencyType.entries.firstOrNull { it.name == value } ?: FrequencyType.NONE
+        FrequencyType.entries.firstOrNull { it.name == value } ?: FrequencyType.DAILY
 }

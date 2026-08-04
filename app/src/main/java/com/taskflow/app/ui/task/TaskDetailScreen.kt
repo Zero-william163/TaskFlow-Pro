@@ -25,6 +25,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.taskflow.app.R
 import com.taskflow.app.ui.AppViewModelFactory
@@ -47,6 +49,12 @@ fun TaskDetailScreen(
     val viewModel: TaskViewModel = viewModel(factory = AppViewModelFactory)
     val task by viewModel.observeTask(taskId).collectAsState(initial = null)
     var showDeleteConfirm by remember { mutableStateOf(false) }
+
+    // Reset dialog state when Activity goes to background to prevent
+    // frozen state where dialog scrim blocks touch events.
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
+        showDeleteConfirm = false
+    }
 
     Scaffold(
         topBar = {
@@ -71,8 +79,6 @@ fun TaskDetailScreen(
                 Text("…", style = MaterialTheme.typography.titleLarge)
             }
         } else {
-            // Requirement #3: edit and create UI must be one and the same,
-            // with every field prefilled from the stored task.
             // Wrap in a scrollable Box that fills the Scaffold content area.
             Box(
                 modifier = Modifier
@@ -82,7 +88,8 @@ fun TaskDetailScreen(
                 AddEditTaskSheet(
                     task = t,
                     onSaved = { _, _ -> onBack() },
-                    onDismiss = onBack
+                    onDismiss = onBack,
+                    showTitle = false
                 )
             }
         }

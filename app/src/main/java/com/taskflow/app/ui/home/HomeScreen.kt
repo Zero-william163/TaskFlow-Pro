@@ -30,6 +30,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -45,6 +46,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.taskflow.app.R
 import com.taskflow.app.ServiceLocator
@@ -80,6 +83,25 @@ fun HomeScreen(
     var showFirstGuide by remember { mutableStateOf(false) }
     var showAddToWidgetPrompt by remember { mutableStateOf(false) }
     var showManualWidgetGuide by remember { mutableStateOf(false) }
+
+    // ====== Lifecycle safety: reset all transient UI states when the Activity
+    // goes to background. This prevents the "frozen" state where a ModalBottomSheet
+    // or AlertDialog scrim remains visible and blocks all touch events after the
+    // Activity is stopped and resumed. ======
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
+        showAddSheet = false
+        showUnsavedDialog = false
+        showFirstGuide = false
+        showAddToWidgetPrompt = false
+        showManualWidgetGuide = false
+        pendingTaskId = null
+        triggerSheetSave = false
+    }
+    // Also reset on ON_PAUSE to cover quick background transitions
+    LifecycleEventEffect(Lifecycle.Event.ON_PAUSE) {
+        showAddSheet = false
+        showUnsavedDialog = false
+    }
 
     val widgetAdded by ServiceLocator.userPreferences.widgetAdded.collectAsState(initial = false)
     val guideShown by ServiceLocator.userPreferences.widgetGuideShown.collectAsState(initial = false)

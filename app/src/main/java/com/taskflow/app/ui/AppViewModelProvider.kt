@@ -27,7 +27,7 @@ object AppViewModelFactory : ViewModelProvider.Factory {
             modelClass.isAssignableFrom(TaskViewModel::class.java) ->
                 TaskViewModel(locator.taskRepository, locator.categoryRepository, locator.reminderScheduler) as T
             modelClass.isAssignableFrom(CalendarViewModel::class.java) ->
-                CalendarViewModel(locator.taskRepository, locator.categoryRepository) as T
+                CalendarViewModel(locator.taskRepository, locator.categoryRepository, locator.reminderScheduler) as T
             modelClass.isAssignableFrom(StatsViewModel::class.java) ->
                 StatsViewModel(locator.taskRepository, locator.categoryRepository) as T
             modelClass.isAssignableFrom(SettingsViewModel::class.java) ->

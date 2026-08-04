@@ -21,10 +21,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -59,6 +64,19 @@ fun TaskFlowNavHost(
     LaunchedEffect(Unit) {
         updateViewModel.autoCheck()
     }
+
+    // ====== Lifecycle safety: dismiss auto-update dialog on background ======
+    // This prevents a stale AlertDialog from blocking touch events after resume.
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
+        if (autoUpdateInfo != null) {
+            updateViewModel.dismissAutoUpdate()
+        }
+    }
+
+    // ====== Guard for LaunchedEffect(openTaskId): track already-navigated IDs
+    // to prevent duplicate navigation when the Activity is resumed from background
+    // and the LaunchedEffect re-triggers with the same key. ======
+    var navigatedTaskId by remember { mutableStateOf<Long?>(null) }
 
     val showBottomBar = currentRoute in bottomItems.map { it.route }
 
@@ -133,10 +151,16 @@ fun TaskFlowNavHost(
             }
         }
 
+        // ====== Guarded navigation: only navigate if this taskId hasn't been
+        // navigated to yet. Prevents duplicate navigation when the Activity is
+        // resumed from background and the LaunchedEffect re-fires. ======
         LaunchedEffect(openTaskId) {
-            openTaskId?.let {
-                navController.navigate(Destinations.TaskDetail.create(it))
-                onTaskConsumed()
+            openTaskId?.let { id ->
+                if (id != navigatedTaskId) {
+                    navigatedTaskId = id
+                    navController.navigate(Destinations.TaskDetail.create(id))
+                    onTaskConsumed()
+                }
             }
         }
     }
