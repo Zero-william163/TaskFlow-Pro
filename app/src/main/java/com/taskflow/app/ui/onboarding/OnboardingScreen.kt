@@ -202,8 +202,20 @@ fun OnboardingScreen(onComplete: () -> Unit) {
                             }
                         }
                         3 -> {
-                            // Widget pin — handled by caller
-                            onComplete()
+                            // Widget pin — actually attempt to pin a widget.
+                            // requestPinWidget returns false on unsupported
+                            // launchers (Huawei/Xiaomi/old Android). In that
+                            // case, fall back to a toast instructing the user
+                            // to add the widget manually from the home screen.
+                            val pinned = com.taskflow.app.widget.WidgetHelper.requestPinWidget(context)
+                            if (!pinned) {
+                                android.widget.Toast.makeText(
+                                    context,
+                                    "当前桌面不支持自动添加，请长按桌面 → 小组件 → TaskFlow → 添加",
+                                    android.widget.Toast.LENGTH_LONG
+                                ).show()
+                            }
+                            refreshTrigger++
                         }
                     }
                 }
