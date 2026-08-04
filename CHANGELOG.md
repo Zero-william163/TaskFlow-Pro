@@ -8,6 +8,15 @@ The GitHub Actions release workflow extracts the section matching the pushed tag
 (e.g. `## v1.0.0`) and uses it as the GitHub / Gitee release notes, and embeds it
 into `release.json` as the `log` field consumed by the in-app updater.
 
+## v1.2.9
+
+### 修复
+1. 重构小组件权限引导：移除无效的"打开小组件选择"按钮
+2. 新增 openAppPermissionSettings：失败时引导前往系统设置开启「允许创建小组件」权限
+3. 统一三处入口（PermissionScreen / SettingsScreen / OnboardingScreen）的小组件引导逻辑
+4. 设置页移除"手动添加"按钮，仅保留"添加小组件"按钮
+5. 升级 GitHub Actions 到 Node 24 兼容版本（修复 CI 构建失败）
+
 ## v1.2.8
 
 ### 修复
