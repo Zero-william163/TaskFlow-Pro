@@ -13,12 +13,14 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.LocalDateTime
-import java.time.YearMonth
+
+private const val WINDOW_SIZE = 7
 
 data class StatsUiState(
     val total: Int = 0,
@@ -28,20 +30,26 @@ data class StatsUiState(
     val byPriority: List<PriorityCount> = emptyList(),
     val byCategory: List<CategoryCount> = emptyList(),
     val categories: Map<Long, Category> = emptyMap(),
-    // ====== Line chart (spec §2) ======
-    val selectedMonth: YearMonth = YearMonth.now(),
-    /** Daily counts for the selected month; index 0 = day 1. Length = month length. */
-    val monthlyTrend: List<DailyPoint> = emptyList()
+    val weekStart: LocalDate = LocalDate.now().minusDays((WINDOW_SIZE - 1).toLong()),
+    val trend: List<DailyPoint> = emptyList()
 ) {
     val completionRate: Int
         get() = if (total == 0) 0 else (completed * 100 / total)
 
-    /** Auto-generated chart title: "2026年8月任务完成趋势" (spec §2). */
     val trendTitle: String
-        get() = "${selectedMonth.year}年${selectedMonth.monthValue}月任务完成趋势"
+        get() {
+            val start = weekStart
+            val end = weekStart.plusDays((trend.size - 1).coerceAtLeast(0).toLong())
+            val startStr = "${start.year}年${start.monthValue}月"
+            val endStr = "${end.year}年${end.monthValue}月"
+            return if (start.month == end.month && start.year == end.year) {
+                "${start.year}年${start.monthValue}月完成趋势"
+            } else {
+                "${start.year}年${start.monthValue}月-${end.monthValue}月完成趋势"
+            }
+        }
 }
 
-/** A single point on the line chart. */
 data class DailyPoint(val date: LocalDate, val count: Int)
 
 class StatsViewModel(
@@ -49,35 +57,44 @@ class StatsViewModel(
     private val categoryRepository: CategoryRepository
 ) : ViewModel() {
 
-    // ====== Month selector (spec §2: "根据当前选择月份自动变化") ======
-    private val _selectedMonth = MutableStateFlow(YearMonth.now())
-    val selectedMonth: StateFlow<YearMonth> = _selectedMonth
+    private val _weekStart = MutableStateFlow(LocalDate.now().minusDays((WINDOW_SIZE - 1).toLong()))
+    val weekStart: StateFlow<LocalDate> = _weekStart
 
-    fun selectPreviousMonth() {
-        _selectedMonth.update { it.minusMonths(1) }
+    private var lastObservedDay = LocalDate.now()
+
+    init {
+        // 跨午夜自动推进窗口
+        viewModelScope.launch {
+            while (true) {
+                delay(3600_000) // 每小时检查一次
+                val today = LocalDate.now()
+                if (today != lastObservedDay) {
+                    lastObservedDay = today
+                    _weekStart.update { current ->
+                        val newStart = today.minusDays((WINDOW_SIZE - 1).toLong())
+                        // 只在窗口发生实质性变化时更新
+                        if (current != newStart) newStart else current
+                    }
+                }
+            }
+        }
     }
 
-    fun selectNextMonth() {
-        _selectedMonth.update { it.plusMonths(1) }
+    fun selectPreviousWindow() {
+        _weekStart.update { it.minusDays(WINDOW_SIZE.toLong()) }
     }
 
-    fun selectMonth(month: YearMonth) {
-        _selectedMonth.value = month
+    fun selectNextWindow() {
+        _weekStart.update { it.plusDays(WINDOW_SIZE.toLong()) }
     }
 
-    /**
-     * Daily completion trend for the selected month. Emits a new list of
-     * DailyPoint (one per day of the month, zero-filled for days with no
-     * completions) whenever any task is completed/uncompleted. The chart
-     * collects this as StateFlow → real-time updates, no manual refresh
-     * needed (spec §2 "实时更新").
-     */
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
-    private val monthlyTrendFlow: StateFlow<List<DailyCompletion>> = _selectedMonth
-        .flatMapLatest { month ->
-            val start = month.atDay(1).atStartOfDay()
-            val end = month.atEndOfMonth().atTime(23, 59, 59)
-            taskRepository.observeDailyCompletions(start, end)
+    private val trendFlow: StateFlow<List<DailyCompletion>> = _weekStart
+        .flatMapLatest { start ->
+            val end = start.plusDays(WINDOW_SIZE.toLong() - 1)
+            val from = start.atStartOfDay()
+            val to = end.atTime(23, 59, 59)
+            taskRepository.observeDailyCompletions(from, to)
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -89,10 +106,10 @@ class StatsViewModel(
         taskRepository.observePriorityCounts(),
         taskRepository.observeCategoryCounts(),
         categoryRepository.observeAll(),
-        _selectedMonth,
-        monthlyTrendFlow
+        _weekStart,
+        trendFlow
     ) { values ->
-        val month = values[7] as YearMonth
+        val start = values[7] as LocalDate
         val rawTrend = values[8] as List<DailyCompletion>
         StatsUiState(
             total = values[0] as Int,
@@ -102,24 +119,15 @@ class StatsViewModel(
             byPriority = values[4] as List<PriorityCount>,
             byCategory = values[5] as List<CategoryCount>,
             categories = (values[6] as List<Category>).associateBy { it.id },
-            selectedMonth = month,
-            monthlyTrend = fillMonth(month, rawTrend)
+            weekStart = start,
+            trend = fillWindow(start, rawTrend)
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), StatsUiState())
 
-    /**
-     * Expand the sparse DB rows into a dense per-day list covering every day
-     * of the month. Days with no completion entry get count = 0. This is what
-     * the line chart needs — a point for every day, not just days with data.
-     */
-    private fun fillMonth(month: YearMonth, rows: List<DailyCompletion>): List<DailyPoint> {
-        val byDay = rows.associate {
-            // row.day is "YYYY-MM-DD" from SQLite date(); parse to LocalDate.
-            LocalDate.parse(it.day) to it.count
-        }
-        val length = month.lengthOfMonth()
-        return (1..length).map { day ->
-            val date = month.atDay(day)
+    private fun fillWindow(start: LocalDate, rows: List<DailyCompletion>): List<DailyPoint> {
+        val byDay = rows.associate { LocalDate.parse(it.day) to it.count }
+        return (0 until WINDOW_SIZE).map { offset ->
+            val date = start.plusDays(offset.toLong())
             DailyPoint(date = date, count = byDay[date] ?: 0)
         }
     }

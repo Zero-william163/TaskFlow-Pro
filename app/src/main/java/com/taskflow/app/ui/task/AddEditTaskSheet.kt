@@ -593,7 +593,8 @@ fun AddEditTaskSheet(
             title = { Text(stringResource(R.string.task_frequency_title)) },
             text = {
                 Column {
-                    FrequencyOption.entries.forEach { opt ->
+                    // 过滤掉 NONE 选项，频率只有每日/每周/每月/自定义
+                    FrequencyOption.entries.filter { it.type != FrequencyType.NONE }.forEach { opt ->
                         Row(verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
                                 .fillMaxWidth()

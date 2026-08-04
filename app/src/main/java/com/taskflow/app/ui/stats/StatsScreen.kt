@@ -130,12 +130,12 @@ fun StatsScreen() {
 
         Spacer(Modifier.height(20.dp))
 
-        // ====== Line chart: monthly completion trend (spec §2) ======
+        // ====== Line chart: 7-day rolling completion trend ======
         TrendCard(
             title = state.trendTitle,
-            points = state.monthlyTrend,
-            onPrevMonth = { viewModel.selectPreviousMonth() },
-            onNextMonth = { viewModel.selectNextMonth() }
+            points = state.trend,
+            onPrevWindow = { viewModel.selectPreviousWindow() },
+            onNextWindow = { viewModel.selectNextWindow() }
         )
 
         Spacer(Modifier.height(20.dp))
@@ -225,12 +225,11 @@ private fun BarRow(label: String, value: Int, max: Int, color: Color) {
 private fun TrendCard(
     title: String,
     points: List<DailyPoint>,
-    onPrevMonth: () -> Unit,
-    onNextMonth: () -> Unit
+    onPrevWindow: () -> Unit,
+    onNextWindow: () -> Unit
 ) {
     SoftCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
-            // Title row with month navigation.
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -242,11 +241,11 @@ private fun TrendCard(
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f)
                 )
-                IconButton(onClick = onPrevMonth) {
-                    Icon(Icons.Outlined.ChevronLeft, contentDescription = "上一月")
+                IconButton(onClick = onPrevWindow) {
+                    Icon(Icons.Outlined.ChevronLeft, contentDescription = "上一周")
                 }
-                IconButton(onClick = onNextMonth) {
-                    Icon(Icons.Outlined.ChevronRight, contentDescription = "下一月")
+                IconButton(onClick = onNextWindow) {
+                    Icon(Icons.Outlined.ChevronRight, contentDescription = "下一周")
                 }
             }
             Spacer(Modifier.height(8.dp))
@@ -337,27 +336,23 @@ private fun CompletionLineChart(points: List<DailyPoint>) {
             )
         }
 
-        // ====== X-axis labels (dates) — sample to avoid crowding ======
+        // ====== X-axis labels — show all 7 days with Chinese date format ======
         val xLabelPaint = android.graphics.Paint().apply {
             color = labelColor.toArgb()
             textSize = 9f.sp.toPx()
             textAlign = android.graphics.Paint.Align.CENTER
         }
         val n = points.size
-        // Show ~6 labels evenly spaced.
-        val labelStep = (n / 6).coerceAtLeast(1)
         points.forEachIndexed { i, pt ->
-            if (i % labelStep == 0 || i == n - 1) {
-                val x = if (n == 1) plotLeft + plotW / 2
-                else plotLeft + plotW * i / (n - 1)
-                val label = "${pt.date.monthValue}/${pt.date.dayOfMonth}"
-                drawContext.canvas.nativeCanvas.drawText(
-                    label,
-                    x,
-                    plotBottom + 14f,
-                    xLabelPaint
-                )
-            }
+            val x = if (n == 1) plotLeft + plotW / 2
+            else plotLeft + plotW * i / (n - 1)
+            val label = "${pt.date.monthValue}月${pt.date.dayOfMonth}日"
+            drawContext.canvas.nativeCanvas.drawText(
+                label,
+                x,
+                plotBottom + 14f,
+                xLabelPaint
+            )
         }
 
         // ====== Polyline + filled area ======
