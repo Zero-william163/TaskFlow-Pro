@@ -1,25 +1,25 @@
 {
-  "version": "1.2.3",
-  "code": 7,
-  "versionTag": "v1.2.3",
-  "log": "## v1.2.3\n\n### 修复\n1. DatePicker双圆圈: 截止日期默认为今天\n2. 后台恢复假死: ModalBottomSheet/Dialog生命周期重置\n3. LaunchedEffect重复导航守卫\n4. 生命周期日志添加",
-  "apk": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.2.3/app-release.apk",
-  "sha256": "ee22ff31555b56fd90586f549a0076bed3689258015251ce717211e63a876f0c",
-  "size": 46271751,
+  "version": "1.2.4",
+  "code": 8,
+  "versionTag": "v1.2.4",
+  "log": "## v1.2.4\n\n### 统计图表重大更新\n- 7天滚动窗口\n- 中文日期标签\n- 跨午夜自动推进\n- 动态纵轴\n\n### 频率对话框优化\n- 移除\"无\"选项\n\n### Widget 修复\n- 点击事件修复\n- requestPin流程优化",
+  "apk": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.2.4/app-release.apk",
+  "sha256": "4dee00810a74ff0217aafc2d874805ba14524ef8ac8f67f32cb8077b9a0bf54a",
+  "size": 46271799,
   "downloadUrls": [
     {
       "name": "GH Proxy",
-      "url": "https://gh-proxy.com/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.2.3/app-release.apk",
+      "url": "https://gh-proxy.com/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.2.4/app-release.apk",
       "region": "domestic"
     },
     {
       "name": "GH Fast",
-      "url": "https://ghfast.top/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.2.3/app-release.apk",
+      "url": "https://ghfast.top/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.2.4/app-release.apk",
       "region": "cdn"
     },
     {
       "name": "GitHub",
-      "url": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.2.3/app-release.apk",
+      "url": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.2.4/app-release.apk",
       "region": "international"
     }
   ]
