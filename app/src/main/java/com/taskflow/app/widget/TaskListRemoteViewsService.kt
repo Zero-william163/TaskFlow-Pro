@@ -62,6 +62,21 @@ class TaskListRemoteViewsService : RemoteViewsService() {
 
             views.setImageViewResource(R.id.item_check, R.drawable.widget_check_circle)
 
+            // Checkbox click → broadcast to toggle task completion directly from widget.
+            val toggleIntent = Intent(TaskWidgetProvider.ACTION_TOGGLE_TASK).apply {
+                setPackage(context.packageName)
+                putExtra(TaskWidgetProvider.EXTRA_TASK_ID, task.id)
+            }
+            views.setOnClickPendingIntent(
+                R.id.item_check,
+                android.app.PendingIntent.getBroadcast(
+                    context,
+                    task.id.toInt(),
+                    toggleIntent,
+                    android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT
+                )
+            )
+
             // Per-item click → open the task's detail page. The ListView carries the
             // template PendingIntent (set by WidgetHelper); we only fill in the id.
             val fillIn = Intent().apply {

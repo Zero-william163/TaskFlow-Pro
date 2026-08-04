@@ -51,21 +51,18 @@ data class DownloadSource(
 
 @Serializable
 internal data class GitHubRelease(
-    val tagName: String? = null,
-    val name: String? = null,
-    val body: String? = null,
-    val assets: List<GitHubAsset> = emptyList()
+    @SerialName("tag_name") val tagName: String? = null,
+    @SerialName("name") val name: String? = null,
+    @SerialName("body") val body: String? = null,
+    @SerialName("assets") val assets: List<GitHubAsset> = emptyList()
 )
 
 @Serializable
 internal data class GitHubAsset(
-    val name: String,
-    val browserDownloadUrl: String? = null,
-    val size: Long? = null
-) {
-    @SerialName("browser_download_url")
-    val browserDownloadUrlSafe: String? get() = browserDownloadUrl
-}
+    @SerialName("name") val name: String,
+    @SerialName("browser_download_url") val browserDownloadUrl: String? = null,
+    @SerialName("size") val size: Long? = null
+)
 
 /** Result of an update check. */
 sealed class UpdateCheckResult {

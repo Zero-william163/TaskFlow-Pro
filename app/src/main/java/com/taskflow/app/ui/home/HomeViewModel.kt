@@ -41,18 +41,16 @@ data class HomeUiState(
         get() {
             val today = LocalDate.now()
             val base = when (filter) {
-                HomeFilter.ALL -> tasks
+                // ALL 只显示未完成任务，已完成的归入 COMPLETED 栏目
+                HomeFilter.ALL -> tasks.filter { !it.isCompleted }
                 HomeFilter.TODAY -> tasks.filter { t ->
-                    // 今天到期且未完成（严格 == today，逾期的归到 INCOMPLETE）
                     !t.isCompleted && t.dueDate?.toLocalDate() == today
                 }
                 HomeFilter.UPCOMING -> tasks.filter { t ->
-                    // 未来到期且未完成
                     !t.isCompleted && t.dueDate?.toLocalDate()?.let { it > today } == true
                 }
                 HomeFilter.COMPLETED -> tasks.filter { it.isCompleted }
                 HomeFilter.INCOMPLETE -> tasks.filter { t ->
-                    // 截止日期未到（含今天、未来、无截止日期）+ 未完成
                     !t.isCompleted && (t.dueDate?.toLocalDate()?.let { it >= today } ?: true)
                 }
             }

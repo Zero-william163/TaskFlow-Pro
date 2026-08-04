@@ -16,8 +16,8 @@ android {
         applicationId = "com.taskflow.app"
         minSdk = 29
         targetSdk = 34
-        versionCode = 4
-        versionName = "1.2.0"
+        versionCode = 6
+        versionName = "1.2.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }

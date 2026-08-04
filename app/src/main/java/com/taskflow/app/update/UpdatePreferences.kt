@@ -36,7 +36,7 @@ class UpdatePreferences(private val context: Context) {
     }
 
     companion object {
-        /** 24 hours in milliseconds. */
-        const val THROTTLE_INTERVAL_MS = 24L * 60 * 60 * 1000
+        /** 6 hours in milliseconds — balances API rate limits with timely update detection. */
+        const val THROTTLE_INTERVAL_MS = 6L * 60 * 60 * 1000
     }
 }

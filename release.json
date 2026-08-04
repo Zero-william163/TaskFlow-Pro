@@ -1,25 +1,25 @@
 {
-  "version": "1.2.0",
-  "code": 4,
-  "versionTag": "v1.2.0",
-  "log": "## v1.2.0\n\n### Widget 创建无反应修复\n- 新增 WidgetCapability 预检系统：API/launcher/厂商/电池/已放置状态全面检测\n- 厂商兼容：Huawei/Honor/Xiaomi/OPPO/Vivo/Meizu 标记为需手动添加\n- OnboardingScreen 第4步改为真实 isAnyWidgetPlaced 检测\n- 点击添加小组件时先预检，失败时弹对话框显示原因+手动步骤\n- 新增 openWidgetPicker 兼容 AOSP/Huawei/MIUI/OPPO 桌面选择器\n\n### 统计页面折线图\n- 新增任务完成趋势折线图（Canvas 自绘，无外部依赖）\n- Y轴：完成数量刻度（0/5/10/15...）\n- X轴：日期标签（M/D 格式）\n- 折线+填充渐变区域+数据点圆圈+今日高亮\n- 标题自动生成：「YYYY年MM月任务完成趋势」\n- 月份切换：上一月/下一月按钮\n- 数据来源：Room Database tasks.completedAt，GROUP BY date 聚合\n- 实时更新：Flow + StateFlow + collectAsState，完成任务自动刷新\n\n### 主页分类优化\n- 新增「未完成」分类（INCOMPLETE）\n- 今天：dueDate == today 且未完成\n- 即将：dueDate > today 且未完成\n- 已完成：isCompleted == true\n- 未完成：截止日期未到（含今天/未来/无截止日期）且未完成\n- FilterChipRow 改为 LazyRow 横向滚动，5个chip在窄屏不溢出\n- 所有分类实时计算，数据变化立即同步\n\n### 数据一致性\n- 主页/统计/Widget 均通过 TaskRepository 单源读取 tasks 表\n- 5个变更方法均调用 notifyTasksChanged 广播\n- Flow 自动响应 DB 变化，无需手动刷新",
-  "apk": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.2.0/TaskFlow-Pro-v1.2.0-release.apk",
-  "sha256": "b4c72b50a25fea0d0bbb1af1d095635d142c78dc27b2ef8536a2b86fd11a7ac3",
-  "size": 46236391,
+  "version": "1.2.2",
+  "code": 6,
+  "versionTag": "v1.2.2",
+  "log": "## v1.2.2\n\n### 修复\n1. 版本检测无法发现新版本（GitHubApiSource @SerialName 修复）\n2. Widget 勾选任务完成功能\n3. 主页勾选后卡片移到已完成栏目\n4. 日历任务卡片可勾选可编辑\n5. 统计折线图实时更新",
+  "apk": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.2.2/TaskFlow-Pro-v1.2.2-release.apk",
+  "sha256": "c9c029871e0c103f95a10a3f3ab6ec94aaf309b356a9f557d139bb1daabb993a",
+  "size": 46255367,
   "downloadUrls": [
     {
       "name": "GH Proxy",
-      "url": "https://gh-proxy.com/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.2.0/TaskFlow-Pro-v1.2.0-release.apk",
+      "url": "https://gh-proxy.com/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.2.2/TaskFlow-Pro-v1.2.2-release.apk",
       "region": "domestic"
     },
     {
       "name": "GH Fast",
-      "url": "https://ghfast.top/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.2.0/TaskFlow-Pro-v1.2.0-release.apk",
+      "url": "https://ghfast.top/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.2.2/TaskFlow-Pro-v1.2.2-release.apk",
       "region": "cdn"
     },
     {
       "name": "GitHub",
-      "url": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.2.0/TaskFlow-Pro-v1.2.0-release.apk",
+      "url": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.2.2/TaskFlow-Pro-v1.2.2-release.apk",
       "region": "international"
     }
   ]

@@ -105,6 +105,7 @@
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
                 <action android:name="com.taskflow.app.WIDGET_REFRESH" />
                 <action android:name="com.taskflow.app.TASKS_CHANGED" />
+                <action android:name="com.taskflow.app.TOGGLE_TASK" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"

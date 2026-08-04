@@ -7,6 +7,7 @@ import com.taskflow.app.data.model.Task
 import com.taskflow.app.data.model.TaskInstance
 import com.taskflow.app.data.repository.CategoryRepository
 import com.taskflow.app.data.repository.TaskRepository
+import com.taskflow.app.notification.ReminderScheduler
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -14,6 +15,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.YearMonth
 
@@ -27,7 +29,8 @@ data class CalendarUiState(
 
 class CalendarViewModel(
     private val taskRepository: TaskRepository,
-    private val categoryRepository: CategoryRepository
+    private val categoryRepository: CategoryRepository,
+    private val reminderScheduler: ReminderScheduler
 ) : ViewModel() {
 
     private val selected = MutableStateFlow(LocalDate.now())
@@ -77,6 +80,15 @@ class CalendarViewModel(
     fun selectDate(date: LocalDate) { selected.value = date }
     fun previousMonth() { selected.value = selected.value.minusMonths(1) }
     fun nextMonth() { selected.value = selected.value.plusMonths(1) }
+
+    fun toggleComplete(task: Task) {
+        viewModelScope.launch {
+            val completed = !task.isCompleted
+            taskRepository.setCompleted(task, completed)
+            if (completed) reminderScheduler.cancel(task.id)
+            else task.reminderTime?.let { reminderScheduler.schedule(task) }
+        }
+    }
 }
 
 private fun YearMonth.atEndOfMonth(): LocalDate = atDay(lengthOfMonth())

@@ -5,6 +5,7 @@ import android.appwidget.AppWidgetProvider
 import android.content.Context
 import android.content.Intent
 import com.taskflow.app.data.preferences.UserPreferences
+import com.taskflow.app.data.repository.TaskRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -48,11 +49,25 @@ class TaskWidgetProvider : AppWidgetProvider() {
         super.onReceive(context, intent)
         when (intent.action) {
             ACTION_TASKS_CHANGED, ACTION_WIDGET_REFRESH -> WidgetHelper.refresh(context)
+            ACTION_TOGGLE_TASK -> {
+                val taskId = intent.getLongExtra(EXTRA_TASK_ID, -1L)
+                if (taskId > 0) {
+                    scope.launch {
+                        val repo = TaskRepository.get(context)
+                        val task = repo.getTask(taskId)
+                        if (task != null) {
+                            repo.setCompleted(task, !task.isCompleted)
+                        }
+                    }
+                }
+            }
         }
     }
 
     companion object {
         const val ACTION_WIDGET_REFRESH = "com.taskflow.app.WIDGET_REFRESH"
         const val ACTION_TASKS_CHANGED = "com.taskflow.app.TASKS_CHANGED"
+        const val ACTION_TOGGLE_TASK = "com.taskflow.app.TOGGLE_TASK"
+        const val EXTRA_TASK_ID = "extra_task_id"
     }
 }

@@ -52,12 +52,17 @@ class UpdateSourceManager {
         }
     }
 
-    /** Sources ordered by region: domestic prefers Gitee, international prefers GitHub raw. */
+    /**
+     * Sources ordered by region.
+     * GitHubApiSource is prioritized over raw files because raw files (release.json)
+     * can become stale if not updated, while the Releases API always returns the
+     * latest published release.
+     */
     fun getSortedSources(isDomestic: Boolean): List<UpdateSource> =
         if (isDomestic) {
-            listOf(GiteeRawSource(), GitHubRawSource(), JSDelivrSource(), GitHubApiSource(), GiteeApiSource())
+            listOf(GiteeApiSource(), GitHubApiSource(), GiteeRawSource(), GitHubRawSource(), JSDelivrSource())
         } else {
-            listOf(GitHubRawSource(), GitHubApiSource(), JSDelivrSource(), GiteeRawSource(), GiteeApiSource())
+            listOf(GitHubApiSource(), GitHubRawSource(), JSDelivrSource(), GiteeApiSource(), GiteeRawSource())
         }
 
     /**
