@@ -25,6 +25,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -71,11 +72,14 @@ fun HomeScreen(
 
     // Bottom sheet for add/edit.
     var showAddSheet by remember { mutableStateOf(false) }
+    var showUnsavedDialog by remember { mutableStateOf(false) }
+    var triggerSheetSave by remember { mutableStateOf(false) }
 
     // Widget flow state — only resolved AFTER a task is actually saved.
     var pendingTaskId by remember { mutableStateOf<Long?>(null) }
     var showFirstGuide by remember { mutableStateOf(false) }
     var showAddToWidgetPrompt by remember { mutableStateOf(false) }
+    var showManualWidgetGuide by remember { mutableStateOf(false) }
 
     val widgetAdded by ServiceLocator.userPreferences.widgetAdded.collectAsState(initial = false)
     val guideShown by ServiceLocator.userPreferences.widgetGuideShown.collectAsState(initial = false)
@@ -173,9 +177,20 @@ fun HomeScreen(
     }
 
     if (showAddSheet) {
-        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        // Requirement #1: block swipe-down-to-dismiss by rejecting the Hidden
+        // state. The sheet can then only close by setting showAddSheet = false,
+        // which happens via the save button (onSaved) or the cancel button
+        // (onCancel → unsaved-changes prompt / direct close).
+        val sheetState = rememberModalBottomSheetState(
+            skipPartiallyExpanded = true,
+            confirmValueChange = { it != SheetValue.Hidden }
+        )
         ModalBottomSheet(
-            onDismissRequest = { showAddSheet = false },
+            onDismissRequest = {
+                // Exit is only allowed via the cancel/dismiss button or the save
+                // button (requirement #3). Swipe is blocked by confirmValueChange
+                // above; scrim/back taps are intentionally ignored here.
+            },
             sheetState = sheetState,
             shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
         ) {
@@ -185,18 +200,50 @@ fun HomeScreen(
                     showAddSheet = false
                     if (isNew) onNewTaskSaved(id)
                 },
-                onDismiss = { showAddSheet = false }
+                onDismiss = { showAddSheet = false },
+                onCancel = { hasUnsavedChanges ->
+                    if (hasUnsavedChanges) {
+                        showUnsavedDialog = true
+                    } else {
+                        showAddSheet = false
+                    }
+                },
+                externalSaveTrigger = triggerSheetSave,
+                onExternalSaveTriggered = { triggerSheetSave = false }
             )
         }
+    }
+
+    if (showUnsavedDialog) {
+        AlertDialog(
+            onDismissRequest = { showUnsavedDialog = false },
+            text = { Text("是否保存当前编辑？") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showUnsavedDialog = false
+                    triggerSheetSave = true
+                }) { Text("保存") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showUnsavedDialog = false
+                    showAddSheet = false
+                }) { Text("放弃") }
+            }
+        )
     }
 
     if (showFirstGuide) {
         FirstWidgetGuideDialog(
             onAddNow = {
                 val id = pendingTaskId
-                if (id != null) {
-                    viewModel.pinToWidget(id)
-                    WidgetHelper.requestPinWidget(context)
+                if (id != null) viewModel.pinToWidget(id)
+                val pinned = WidgetHelper.requestPinWidget(context)
+                if (!pinned) {
+                    // Bug #4 fix: if system does NOT support / accept pinned-widget
+                    // request, fall back to a clear manual instruction dialog. The
+                    // click is never a no-op this way.
+                    showManualWidgetGuide = true
                 }
                 scope.launch { ServiceLocator.userPreferences.setWidgetGuideShown(true) }
                 pendingTaskId = null
@@ -215,6 +262,12 @@ fun HomeScreen(
             onAdd = {
                 pendingTaskId?.let { viewModel.pinToWidget(it) }
                 WidgetHelper.refresh(context)
+                // If no widget has actually been placed yet, also try pinning one so
+                // the UX is the "first widget" experience.
+                if (!WidgetHelper.isAnyWidgetPlaced(context)) {
+                    val pinned = WidgetHelper.requestPinWidget(context)
+                    if (!pinned) showManualWidgetGuide = true
+                }
                 pendingTaskId = null
                 showAddToWidgetPrompt = false
             },
@@ -224,6 +277,37 @@ fun HomeScreen(
             }
         )
     }
+
+    if (showManualWidgetGuide) {
+        ManualWidgetPinDialog(onDismiss = { showManualWidgetGuide = false })
+    }
+}
+
+/**
+ * Shown whenever AppWidgetManager.requestPinAppWidget returns false (launcher on
+ * Huawei/Xiaomi/OPPO, or old Android builds). Gives the user a step-by-step path to
+ * placing the widget so the click never does "nothing".
+ */
+@Composable
+private fun ManualWidgetPinDialog(onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.widget_manual_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(stringResource(R.string.widget_manual_line1))
+                Text(stringResource(R.string.widget_manual_line2))
+                Text(
+                    stringResource(R.string.widget_manual_line3),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_ok)) }
+        }
+    )
 }
 
 @Composable

@@ -1,14 +1,14 @@
 {
-  "version": "1.1.0",
-  "code": 2,
-  "versionTag": "v1.1.0",
-  "log": "## v1.1.0\n\n- 修复自定义日期选择器不弹出的问题\n- 截止日期必填验证（红色边框+提示+自动滚动）\n- 日期范围限制（开始日期 ≤ 自定义日期 ≤ 截止日期）\n- TaskInstance 系统优化：dueDate 为 null 时不生成实例\n- 修复 effectiveStart 错误逻辑（不再取 max(startDate, dueDate)）\n- GitHub 更新系统：启动时静默检查（24h节流），发现新版本自动弹窗\n- 闹钟提醒：声音+震动持续直到用户关闭\n- 自定义铃声：支持系统铃声选择器\n- Collection Widget：可滑动浏览多任务，数据来自 Room\n- 创建/编辑/删除后日历、Widget、Alarm 三重同步\n- 桌面小组件添加失败时显示手动引导",
-  "apk": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.1.0/TaskFlow-Pro-v1.1.0-release.apk",
-  "sha256": "6963725774d9bd559d26b788e0877900d57469f9a37a3accb8b093a85b3a048a",
-  "size": 46137495,
+  "version": "1.1.1",
+  "code": 3,
+  "versionTag": "v1.1.1",
+  "log": "## v1.1.1\n\n### 全屏闹钟系统\n- 新增 AlarmActivity 全屏闹钟界面（类似系统闹钟）\n- 闹钟触发时直接弹出全屏界面，播放铃声+震动\n- MediaPlayer 循环播放铃声直到用户关闭\n- WakeLock 唤醒屏幕，锁屏状态也可弹出\n- 添加 USE_FULL_SCREEN_INTENT 权限（Android 14+）\n- 闹钟触发流程：AlarmManager → BroadcastReceiver → AlarmActivity（全屏）+ 通知（FullScreenIntent 回退）\n\n### 首次启动权限引导\n- 新增 OnboardingScreen 首次启动权限引导页面\n- 逐项检查：通知权限、精确闹钟权限、电池优化白名单、桌面小组件\n- 每个权限有明确用途说明\n- 权限开启后自动刷新状态\n- 完成设置后进入主页\n\n### 日期系统修复\n- DatePicker 确认时钳位非法日期（过去日期→今天，超出截止日期→截止日期）\n- 截止日期选择早于开始日期时自动修正并显示错误\n- 开始日期默认今天，截止日期默认为空（不自动生成）\n\n### BottomSheet 退出逻辑\n- 禁止下滑关闭创建任务页面（confirmValueChange 拒绝 Hidden 状态）\n- 取消按钮：有未保存内容时弹出"是否保存当前编辑？"对话框\n- 保存按钮：保存成功后关闭\n\n### 更新系统修复\n- 新增 GitHubRawSource 读取 release.json（获取 versionCode）\n- GitHubApiSource 从 tag/body 提取 versionCode\n- 国际用户优先读取 GitHub raw release.json\n\n### Widget 修复\n- requestPinWidget 添加详细日志（SDK 版本、支持状态、返回值、异常）\n- 失败时显示手动引导对话框\n\n### 编辑页面修复\n- TaskDetailScreen 包裹 AddEditTaskSheet 在 fillMaxSize Box 中\n- 确保编辑页面所有字段完整显示",
+  "apk": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.1.1/TaskFlow-Pro-v1.1.1-release.apk",
+  "sha256": "d35564fb38949a06afc8745c3369d28f48e17de4e41427d607e900b9a3fe95e3",
+  "size": 46186823,
   "downloadUrls": [
-    { "name": "GH Proxy", "url": "https://gh-proxy.com/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.1.0/TaskFlow-Pro-v1.1.0-release.apk", "region": "domestic" },
-    { "name": "GH Fast",  "url": "https://ghfast.top/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.1.0/TaskFlow-Pro-v1.1.0-release.apk", "region": "cdn" },
-    { "name": "GitHub",   "url": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.1.0/TaskFlow-Pro-v1.1.0-release.apk", "region": "international" }
+    { "name": "GH Proxy", "url": "https://gh-proxy.com/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.1.1/TaskFlow-Pro-v1.1.1-release.apk", "region": "domestic" },
+    { "name": "GH Fast", "url": "https://ghfast.top/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.1.1/TaskFlow-Pro-v1.1.1-release.apk", "region": "cdn" },
+    { "name": "GitHub", "url": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v1.1.1/TaskFlow-Pro-v1.1.1-release.apk", "region": "international" }
   ]
 }

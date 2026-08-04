@@ -44,6 +44,19 @@ class ReminderReceiver : BroadcastReceiver() {
         val task = withContext(Dispatchers.IO) { repo.getTask(taskId) } ?: return
         if (task.isCompleted) return
 
+        // ====== PRIMARY PATH: Launch full-screen AlarmActivity ======
+        // This directly shows the alarm UI with looping sound + vibration,
+        // bypassing the notification system entirely as the main trigger.
+        try {
+            val alarmIntent = AlarmActivity.createIntent(context, taskId)
+            context.startActivity(alarmIntent)
+        } catch (e: Exception) {
+            android.util.Log.e("ReminderReceiver", "Failed to start AlarmActivity", e)
+        }
+
+        // ====== FALLBACK: Also post a high-priority notification with FullScreenIntent ======
+        // If the activity can't start (e.g. background restrictions), the notification
+        // with fullScreenIntent will still wake the screen and show the alarm.
         val helper = NotificationHelper(context)
         val body = buildString {
             task.dueDate?.let { append("截止: ").append(formatTime(it)).append("\n") }
@@ -64,7 +77,17 @@ class ReminderReceiver : BroadcastReceiver() {
             context, (taskId + SNOOZE_REQUEST_OFFSET).toInt(), snoozeIntent,
             android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT
         )
-        val builder = helper.buildReminder(taskId, task.title, body, completePi, snoozePi)
+        val soundUri = task.alarmSoundUri
+            ?.takeIf { it.isNotBlank() }
+            ?.let { runCatching { android.net.Uri.parse(it) }.getOrNull() }
+        val builder = helper.buildReminder(
+            taskId = taskId,
+            title = task.title,
+            body = body,
+            completeIntent = completePi,
+            snoozeIntent = snoozePi,
+            alarmSoundUri = soundUri
+        )
         helper.notify(taskId.toInt(), builder)
 
         // Chain the next alarm for DAILY tasks right after this one fired, so the
@@ -79,6 +102,7 @@ class ReminderReceiver : BroadcastReceiver() {
         ReminderScheduler(context).cancel(taskId)
         NotificationManagerCompat.from(context).cancel(taskId.toInt())
         WidgetHelper.refresh(context)
+        cancelVibrate(context)
     }
 
     private fun snooze(context: Context, taskId: Long) {
@@ -98,6 +122,7 @@ class ReminderReceiver : BroadcastReceiver() {
             am.setAndAllowWhileIdle(android.app.AlarmManager.RTC_WAKEUP, triggerAt, pi)
         }
         NotificationManagerCompat.from(context).cancel(taskId.toInt())
+        cancelVibrate(context)
     }
 
     private fun formatTime(time: LocalDateTime): String {

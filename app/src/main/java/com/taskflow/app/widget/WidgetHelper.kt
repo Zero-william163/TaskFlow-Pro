@@ -5,6 +5,7 @@ import android.appwidget.AppWidgetManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.view.View
 import android.widget.RemoteViews
@@ -120,20 +121,50 @@ object WidgetHelper {
 
     /**
      * Attempts the modern pinned-widget flow (API 26+). Returns true when the system
-     * accepted the request; callers should fall back to a manual instruction dialog.
+     * accepted the request; callers should fall back to a manual instruction dialog
+     * on `false` so the user never gets "clicking does nothing" (Bug #4 fix).
      */
     fun requestPinWidget(context: Context): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        android.util.Log.d("WidgetHelper", "requestPinWidget: SDK=${Build.VERSION.SDK_INT}")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val manager = AppWidgetManager.getInstance(context)
-            if (manager.isRequestPinAppWidgetSupported) {
+            val supported = manager.isRequestPinAppWidgetSupported
+            android.util.Log.d("WidgetHelper", "isRequestPinAppWidgetSupported=$supported")
+            if (supported) {
                 val callback = PendingIntent.getBroadcast(
-                    context, 0,
+                    context,
+                    System.currentTimeMillis().toInt(),
                     Intent(context, WidgetPinResultReceiver::class.java),
                     PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
                 )
-                manager.requestPinAppWidget(providerComponent(context), null, callback)
-                true
-            } else false
-        } else false
+                return try {
+                    val success = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        val options = android.os.Bundle()
+                        manager.requestPinAppWidget(providerComponent(context), options, callback)
+                    } else {
+                        manager.requestPinAppWidget(providerComponent(context), null, callback)
+                    }
+                    android.util.Log.d("WidgetHelper", "requestPinAppWidget returned: $success")
+                    success
+                } catch (t: Throwable) {
+                    android.util.Log.e("WidgetHelper", "requestPinAppWidget failed", t)
+                    false
+                }
+            }
+        }
+        android.util.Log.d("WidgetHelper", "Pin widget not supported on this API level")
+        return false
+    }
+
+    /**
+     * A best-effort check: whether at least one widget of ours is currently placed on
+     * any home screen. Falls back to the UserPreferences `widgetAdded` flag when the
+     * system's widget-ids array is empty (the user may have placed it earlier on a
+     * launcher that doesn't expose getAppWidgetIds for pinned widgets).
+     */
+    fun isAnyWidgetPlaced(context: Context): Boolean {
+        val ids = AppWidgetManager.getInstance(context)
+            .getAppWidgetIds(providerComponent(context))
+        return ids.isNotEmpty()
     }
 }

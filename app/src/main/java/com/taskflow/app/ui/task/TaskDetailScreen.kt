@@ -73,11 +73,18 @@ fun TaskDetailScreen(
         } else {
             // Requirement #3: edit and create UI must be one and the same,
             // with every field prefilled from the stored task.
-            AddEditTaskSheet(
-                task = t,
-                onSaved = { _, _ -> onBack() },
-                onDismiss = onBack
-            )
+            // Wrap in a scrollable Box that fills the Scaffold content area.
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+            ) {
+                AddEditTaskSheet(
+                    task = t,
+                    onSaved = { _, _ -> onBack() },
+                    onDismiss = onBack
+                )
+            }
         }
     }
 

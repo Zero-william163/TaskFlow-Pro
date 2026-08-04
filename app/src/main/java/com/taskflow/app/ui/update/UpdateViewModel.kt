@@ -31,7 +31,35 @@ class UpdateViewModel(
     private val _state = MutableStateFlow<UpdateUiState>(UpdateUiState.Idle)
     val state: StateFlow<UpdateUiState> = _state.asStateFlow()
 
+    /** Separate flag for the startup auto-check dialog (doesn't disturb manual screen). */
+    private val _autoUpdateInfo = MutableStateFlow<UpdateInfo?>(null)
+    val autoUpdateInfo: StateFlow<UpdateInfo?> = _autoUpdateInfo.asStateFlow()
+
     val currentVersion: String get() = updateChecker.installedVersionName
+
+    /**
+     * Silent background check called on app startup. Respects the 24h throttle
+     * in [UpdateChecker.checkUpdateIfDue]. Only surfaces a result when an update
+     * is available AND the user hasn't ignored this version. Network failures are
+     * silently swallowed (returns null internally → no UI change).
+     */
+    fun autoCheck() {
+        viewModelScope.launch {
+            val result = updateChecker.checkUpdateIfDue() ?: return@launch
+            if (result is UpdateCheckResult.UpdateAvailable) {
+                val ignored = userPreferences.ignoredUpdateVersion.first()
+                if (ignored != result.info.version) {
+                    _autoUpdateInfo.value = result.info
+                }
+            }
+            // UpToDate / LocalNewer / Error → do nothing, no popup.
+        }
+    }
+
+    /** Dismiss the auto-check dialog (e.g. user clicks "稍后提醒"). */
+    fun dismissAutoUpdate() {
+        _autoUpdateInfo.value = null
+    }
 
     fun check(context: Context) {
         _state.value = UpdateUiState.Checking

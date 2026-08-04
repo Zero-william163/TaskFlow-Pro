@@ -150,6 +150,17 @@
     <string name="common_back">返回</string>
     <string name="common_retry">重试</string>
     <string name="common_close">关闭</string>
+    <string name="common_ok">好的</string>
+
+    <!-- Reminder sound -->
+    <string name="task_reminder_sound_title">提醒铃声</string>
+    <string name="task_reminder_sound_default">默认铃声</string>
+
+    <!-- Widget manual pin guide (fallback when launcher doesn't support requestPinAppWidget) -->
+    <string name="widget_manual_title">需要手动添加小组件</string>
+    <string name="widget_manual_line1">当前桌面不支持自动添加小组件。</string>
+    <string name="widget_manual_line2">请长按桌面空白处 → 选择「小组件」 → 找到 TaskFlow → 拖拽到桌面。</string>
+    <string name="widget_manual_line3">放置成功后，已标记的任务会自动显示。</string>
 
     <!-- Stats -->
     <string name="stats_title">统计</string>

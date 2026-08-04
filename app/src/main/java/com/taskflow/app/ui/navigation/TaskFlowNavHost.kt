@@ -5,24 +5,35 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.taskflow.app.R
+import com.taskflow.app.ui.AppViewModelFactory
 import com.taskflow.app.ui.calendar.CalendarScreen
 import com.taskflow.app.ui.home.HomeScreen
 import com.taskflow.app.ui.permission.PermissionScreen
@@ -30,6 +41,7 @@ import com.taskflow.app.ui.settings.SettingsScreen
 import com.taskflow.app.ui.stats.StatsScreen
 import com.taskflow.app.ui.task.TaskDetailScreen
 import com.taskflow.app.ui.update.UpdateScreen
+import com.taskflow.app.ui.update.UpdateViewModel
 
 @Composable
 fun TaskFlowNavHost(
@@ -39,6 +51,14 @@ fun TaskFlowNavHost(
     val navController = rememberNavController()
     val backStack by navController.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
+    val context = LocalContext.current
+
+    // ====== Auto update check on startup (silent, 24h-throttled) ======
+    val updateViewModel: UpdateViewModel = viewModel(factory = AppViewModelFactory)
+    val autoUpdateInfo by updateViewModel.autoUpdateInfo.collectAsState()
+    LaunchedEffect(Unit) {
+        updateViewModel.autoCheck()
+    }
 
     val showBottomBar = currentRoute in bottomItems.map { it.route }
 
@@ -113,11 +133,40 @@ fun TaskFlowNavHost(
             }
         }
 
-        androidx.compose.runtime.LaunchedEffect(openTaskId) {
+        LaunchedEffect(openTaskId) {
             openTaskId?.let {
                 navController.navigate(Destinations.TaskDetail.create(it))
                 onTaskConsumed()
             }
         }
+    }
+
+    // ====== Auto-check update dialog ======
+    val info = autoUpdateInfo
+    if (info != null) {
+        AlertDialog(
+            onDismissRequest = { updateViewModel.dismissAutoUpdate() },
+            title = { Text(stringResource(R.string.update_available)) },
+            text = {
+                Column {
+                    Text(stringResource(R.string.update_version, info.version))
+                    if (info.log.isNotBlank()) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(info.log, style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    updateViewModel.startDownload(context, info)
+                    updateViewModel.dismissAutoUpdate()
+                }) { Text(stringResource(R.string.update_download)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { updateViewModel.dismissAutoUpdate() }) {
+                    Text(stringResource(R.string.update_later))
+                }
+            }
+        )
     }
 }

@@ -9,14 +9,11 @@ import java.time.LocalDate
  * execution dates that the UI / calendar / alarm system needs.
  *
  * Invariants:
- *  - No instance is produced before today.
+ *  - No instance is produced before [Task.startDate] (or today if null).
  *  - No instance is produced after [Task.dueDate].
- *  - If the task has no due date the range clamps to today + 365 days so the
- *    calendar can still show upcoming occurrences without exploding.
+ *  - If the task has no due date, no instances are generated (dueDate is required).
  */
 object TaskInstanceGenerator {
-
-    private const val OPEN_ENDED_HORIZON_DAYS = 365
 
     fun generate(task: Task): List<LocalDate> {
         val range = effectiveRange(task)
@@ -25,8 +22,8 @@ object TaskInstanceGenerator {
 
         return when (task.frequency) {
             FrequencyType.NONE -> {
-                // Single-shot: one instance on the due date, or today if no date.
-                val only = task.dueDate?.toLocalDate() ?: from
+                // Single-shot: one instance on the due date.
+                val only = task.dueDate!!.toLocalDate()
                 listOfNotNull(only.takeIf { !it.isBefore(from) && !it.isAfter(to) })
             }
             FrequencyType.DAILY -> generateDaily(from, to)
@@ -37,27 +34,16 @@ object TaskInstanceGenerator {
     }
 
     /**
-     * Returns the (inclusive) date range instances may land inside. `null` when
-     * the task has no temporal anchor at all.
+     * Returns the (inclusive) date range [startDate, dueDate] for instance
+     * generation. Returns `null` when dueDate is null (dueDate is required).
+     * startDate defaults to today and is clamped to not be before today.
      */
     fun effectiveRange(task: Task): Pair<LocalDate, LocalDate>? {
+        val dueLocal = task.dueDate?.toLocalDate() ?: return null
         val today = LocalDate.now()
-        val explicitStart = task.startDate
-        val dueLocal = task.dueDate?.toLocalDate()
-        val start = when {
-            explicitStart != null && explicitStart.isAfter(today) -> explicitStart
-            dueLocal != null && dueLocal.isAfter(today) -> {
-                if (explicitStart != null && !explicitStart.isAfter(dueLocal)) explicitStart.coerceAtLeast(today)
-                else today
-            }
-            else -> today
-        }
-        val end = when {
-            dueLocal != null -> dueLocal
-            else -> start.plusDays(OPEN_ENDED_HORIZON_DAYS.toLong())
-        }
-        if (start.isAfter(end)) return null
-        return start to end
+        val start = (task.startDate ?: today).coerceAtLeast(today)
+        if (start.isAfter(dueLocal)) return null
+        return start to dueLocal
     }
 
     private fun generateDaily(from: LocalDate, to: LocalDate): List<LocalDate> {

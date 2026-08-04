@@ -39,7 +39,13 @@ data class Task(
     val completedAt: LocalDateTime? = null,
     val createdAt: LocalDateTime = LocalDateTime.now(),
     val updatedAt: LocalDateTime = LocalDateTime.now(),
-    val pinnedToWidget: Boolean = false
+    val pinnedToWidget: Boolean = false,
+    /**
+     * Sound URI for task reminder. `null` / blank = use system default.
+     * Value comes from RingtoneManager picker (content:// URI) and is persisted
+     * as a plain string so Room can store it with a single TEXT column.
+     */
+    val alarmSoundUri: String? = null
 ) {
     val hasReminder: Boolean get() = reminderTime != null
     val isOverdue: Boolean
@@ -51,4 +57,15 @@ data class Task(
             ?.split(',')
             ?.mapNotNull { runCatching { LocalDate.parse(it.trim()) }.getOrNull() }
             .orEmpty()
+
+    /**
+     * Effective start date for instance generation and date-picker lower bound.
+     * Uses [startDate] when set, otherwise defaults to today.
+     * Never returns a date before today (past dates are not actionable).
+     *
+     * NOTE: dueDate is intentionally NOT part of this calculation — the start
+     * and end of the instance range are independent boundaries.
+     */
+    val effectiveStart: LocalDate
+        get() = (startDate ?: LocalDate.now()).coerceAtLeast(LocalDate.now())
 }

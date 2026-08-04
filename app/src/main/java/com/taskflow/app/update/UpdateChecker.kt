@@ -13,6 +13,7 @@ import kotlinx.coroutines.withContext
 class UpdateChecker(private val context: Context) {
 
     private val manager = UpdateSourceManager()
+    val preferences = UpdatePreferences(context)
 
     private val installedVersionCode: Int
         get() = runCatching {
@@ -33,8 +34,24 @@ class UpdateChecker(private val context: Context) {
         runCatching {
             val info = manager.fetchLatest()
                 ?: return@withContext UpdateCheckResult.Error("无法获取版本信息")
+            // Record check timestamp on every successful fetch.
+            preferences.setLastCheckTime(System.currentTimeMillis())
             compare(info)
         }.getOrElse { UpdateCheckResult.Error(it.message ?: "检查更新失败") }
+    }
+
+    /**
+     * Silent auto-check that respects the 24h throttle. Only hits the network if
+     * the last check was >24h ago (or never done). Returns null when throttled
+     * or when the network silently fails — callers should treat null as "no action".
+     */
+    suspend fun checkUpdateIfDue(): UpdateCheckResult? = withContext(Dispatchers.IO) {
+        if (preferences.shouldThrottle()) return@withContext null
+        runCatching {
+            val info = manager.fetchLatest() ?: return@withContext null
+            preferences.setLastCheckTime(System.currentTimeMillis())
+            compare(info)
+        }.getOrElse { null }
     }
 
     private fun compare(info: UpdateInfo): UpdateCheckResult {

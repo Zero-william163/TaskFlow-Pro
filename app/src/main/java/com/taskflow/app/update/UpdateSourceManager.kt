@@ -52,12 +52,12 @@ class UpdateSourceManager {
         }
     }
 
-    /** Sources ordered by region: domestic prefers Gitee, international prefers GitHub. */
+    /** Sources ordered by region: domestic prefers Gitee, international prefers GitHub raw. */
     fun getSortedSources(isDomestic: Boolean): List<UpdateSource> =
         if (isDomestic) {
-            listOf(GiteeRawSource(), GiteeApiSource(), JSDelivrSource(), GitHubApiSource())
+            listOf(GiteeRawSource(), GitHubRawSource(), JSDelivrSource(), GitHubApiSource(), GiteeApiSource())
         } else {
-            listOf(GitHubApiSource(), JSDelivrSource(), GiteeRawSource(), GiteeApiSource())
+            listOf(GitHubRawSource(), GitHubApiSource(), JSDelivrSource(), GiteeRawSource(), GiteeApiSource())
         }
 
     /**

@@ -11,7 +11,7 @@ import com.taskflow.app.data.model.Category
 
 @Database(
     entities = [TaskEntity::class, CategoryEntity::class, TaskInstanceEntity::class],
-    version = 3,
+    version = 4,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -33,7 +33,7 @@ abstract class TaskDatabase : RoomDatabase() {
                     "taskflow.db"
                 )
                     .addCallback(SeedCallback())
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                     .build()
                     .also { INSTANCE = it }
             }
@@ -57,9 +57,7 @@ abstract class TaskDatabase : RoomDatabase() {
         /**
          * v2 → v3: add frequency fields + reminder mode + startDate + TaskInstance
          * table. All new task columns default to "NONE / ONCE / NULL" for backwards
-         * compatibility. Task instances are seeded on first insert (see
-         * TaskRepository). The seed keeps already-created tasks usable without
-         * requiring user intervention.
+         * compatibility.
          */
         private val MIGRATION_2_3 = object : Migration(2, 3) {
             override fun migrate(db: SupportSQLiteDatabase) {
@@ -108,6 +106,19 @@ abstract class TaskDatabase : RoomDatabase() {
                 )
                 db.execSQL(
                     "CREATE UNIQUE INDEX IF NOT EXISTS index_task_instances_taskId_occurrenceDate ON task_instances(taskId, occurrenceDate)"
+                )
+            }
+        }
+
+        /**
+         * v3 → v4: add alarmSoundUri to enable per-task custom ringtone URI.
+         * NULL defaults are important — "null string" = fall back to system default
+         * reminder sound stored on NotificationChannel (Android O+).
+         */
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE tasks ADD COLUMN alarmSoundUri TEXT"
                 )
             }
         }

@@ -35,6 +35,14 @@ class GiteeRawSource : UpdateSource {
     }
 }
 
+/** Reads release.json from GitHub raw (international-first). */
+class GitHubRawSource : UpdateSource {
+    override fun fetch(client: OkHttpClient): UpdateInfo? {
+        val text = client.getBody(UpdateConfig.githubRawUrl()) ?: return null
+        return parseReleaseJson(text)
+    }
+}
+
 /** Reads release.json through the jsDelivr CDN. */
 class JSDelivrSource : UpdateSource {
     override fun fetch(client: OkHttpClient): UpdateInfo? {
@@ -50,6 +58,9 @@ class GitHubApiSource : UpdateSource {
         val release = runCatching { updateJson.decodeFromString<GitHubRelease>(text) }.getOrNull()
             ?: return null
         val tag = release.tagName?.removePrefix("v").orEmpty()
+        // Try to extract versionCode from the release body (changelog) or tag.
+        // Format: "versionCode:N" in body, or parse from tag like "v1.1.0" → 110.
+        val extractedCode = extractVersionCode(release.body, release.tagName)
         val apk = release.assets.firstOrNull { it.name.endsWith(".apk", ignoreCase = true) }
         val sources = release.assets
             .filter { it.name.endsWith(".apk", ignoreCase = true) }
@@ -60,13 +71,33 @@ class GitHubApiSource : UpdateSource {
             }
         return UpdateInfo(
             version = tag,
-            code = 0,
+            code = extractedCode,
             apk = apk?.browserDownloadUrlSafe,
             log = release.body.orEmpty(),
             size = apk?.size,
             downloadUrls = sources,
             versionTag = release.tagName
         )
+    }
+
+    /** Extract versionCode from release body or derive from tag name. */
+    private fun extractVersionCode(body: String?, tag: String?): Int {
+        // Try "versionCode:123" pattern in body
+        body?.let {
+            val regex = Regex("versionCode[\"\\s:]*([0-9]+)", RegexOption.IGNORE_CASE)
+            regex.find(it)?.groupValues?.getOrNull(1)?.toIntOrNull()?.let { return it }
+        }
+        // Derive from tag: v1.2.3 → 10203
+        tag?.removePrefix("v")?.let {
+            val parts = it.split(".")
+            if (parts.size >= 3) {
+                val major = parts[0].toIntOrNull() ?: 0
+                val minor = parts[1].toIntOrNull() ?: 0
+                val patch = parts[2].toIntOrNull() ?: 0
+                return major * 10000 + minor * 100 + patch
+            }
+        }
+        return 0
     }
 }
 

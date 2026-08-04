@@ -14,3 +14,5 @@ local.properties
 *.keystore
 *.apk
 *.aab
+# Signing files (kept in repo for reproducible builds)
+app/keystore/taskflow-release.jks

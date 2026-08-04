@@ -5,6 +5,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
@@ -23,6 +24,8 @@ class UserPreferences private constructor(private val context: Context) {
         val WIDGET_GUIDE_SHOWN = booleanPreferencesKey("widget_guide_shown")
         val WIDGET_ADDED = booleanPreferencesKey("widget_added")
         val IGNORED_UPDATE = stringPreferencesKey("ignored_update_version")
+        val LAST_UPDATE_CHECK_TIME = longPreferencesKey("last_update_check_time")
+        val ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
     }
 
     val themeMode: Flow<ThemeMode> = context.dataStore.data.map { prefs ->
@@ -40,6 +43,12 @@ class UserPreferences private constructor(private val context: Context) {
 
     val ignoredUpdateVersion: Flow<String?> =
         context.dataStore.data.map { it[Keys.IGNORED_UPDATE] }
+
+    val lastUpdateCheckTime: Flow<Long> =
+        context.dataStore.data.map { it[Keys.LAST_UPDATE_CHECK_TIME] ?: 0L }
+
+    val onboardingCompleted: Flow<Boolean> =
+        context.dataStore.data.map { it[Keys.ONBOARDING_COMPLETED] ?: false }
 
     suspend fun setThemeMode(mode: ThemeMode) {
         context.dataStore.edit { it[Keys.THEME_MODE] = mode.name }
@@ -62,6 +71,14 @@ class UserPreferences private constructor(private val context: Context) {
             if (version == null) prefs.remove(Keys.IGNORED_UPDATE)
             else prefs[Keys.IGNORED_UPDATE] = version
         }
+    }
+
+    suspend fun setLastUpdateCheckTime(timestamp: Long) {
+        context.dataStore.edit { it[Keys.LAST_UPDATE_CHECK_TIME] = timestamp }
+    }
+
+    suspend fun setOnboardingCompleted(completed: Boolean) {
+        context.dataStore.edit { it[Keys.ONBOARDING_COMPLETED] = completed }
     }
 
     companion object {

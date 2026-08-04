@@ -47,5 +47,7 @@ data class TaskEntity(
      * Per-task pin flag for the home-screen widget. Only pinned, incomplete tasks
      * are rendered by the collection widget.
      */
-    val pinnedToWidget: Boolean = false
+    val pinnedToWidget: Boolean = false,
+    /** Reminder sound URI (RingtoneManager content://). Null = system default. */
+    val alarmSoundUri: String? = null
 )
