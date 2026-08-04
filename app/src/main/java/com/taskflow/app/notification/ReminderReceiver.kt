@@ -66,6 +66,10 @@ class ReminderReceiver : BroadcastReceiver() {
         )
         val builder = helper.buildReminder(taskId, task.title, body, completePi, snoozePi)
         helper.notify(taskId.toInt(), builder)
+
+        // Chain the next alarm for DAILY tasks right after this one fired, so the
+        // repetition survives process death or reboot without re-sweeping the DB.
+        ReminderScheduler(context).rescheduleDaily(task)
     }
 
     private suspend fun completeTask(context: Context, taskId: Long) {

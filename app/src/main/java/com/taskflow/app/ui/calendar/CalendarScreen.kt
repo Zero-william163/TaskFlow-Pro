@@ -124,7 +124,7 @@ fun CalendarScreen(
                 )
             }
         } else {
-            items(list, key = { it.id }) { task ->
+            items(list, key = { it.second.id }) { (task, _) ->
                 val cat = state.categories[task.categoryId]
                 TaskCard(
                     task = task,

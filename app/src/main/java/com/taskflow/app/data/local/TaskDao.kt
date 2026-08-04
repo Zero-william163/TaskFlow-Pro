@@ -42,6 +42,12 @@ interface TaskDao {
     @Query("SELECT * FROM tasks WHERE isCompleted = 0 ORDER BY priority DESC, dueDate IS NULL, dueDate ASC, createdAt DESC")
     suspend fun getPending(): List<TaskEntity>
 
+    @Query("SELECT * FROM tasks WHERE isCompleted = 0 AND pinnedToWidget = 1 ORDER BY priority DESC, dueDate IS NULL, dueDate ASC, createdAt DESC")
+    fun observePinnedPending(): Flow<List<TaskEntity>>
+
+    @Query("SELECT * FROM tasks WHERE isCompleted = 0 AND pinnedToWidget = 1 ORDER BY priority DESC, dueDate IS NULL, dueDate ASC, createdAt DESC")
+    suspend fun getPinnedPending(): List<TaskEntity>
+
     @Query("SELECT * FROM tasks WHERE title LIKE '%' || :query || '%' OR description LIKE '%' || :query || '%' ORDER BY isCompleted ASC, priority DESC, dueDate IS NULL, dueDate ASC")
     fun search(query: String): Flow<List<TaskEntity>>
 
@@ -53,6 +59,9 @@ interface TaskDao {
 
     @Query("UPDATE tasks SET isCompleted = :completed, completedAt = :completedAt, updatedAt = :now WHERE id = :id")
     suspend fun setCompleted(id: Long, completed: Boolean, completedAt: LocalDateTime?, now: LocalDateTime)
+
+    @Query("UPDATE tasks SET pinnedToWidget = :pinned, updatedAt = :now WHERE id = :id")
+    suspend fun setPinnedToWidget(id: Long, pinned: Boolean, now: LocalDateTime)
 
     @Query("SELECT COUNT(*) FROM tasks")
     fun observeTotalCount(): Flow<Int>

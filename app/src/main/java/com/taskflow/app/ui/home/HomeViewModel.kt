@@ -96,4 +96,9 @@ class HomeViewModel(
     fun reschedule(task: Task) {
         if (task.reminderTime != null && !task.isCompleted) reminderScheduler.schedule(task)
     }
+
+    /** Pin a freshly-created task so it appears on the home-screen widget. */
+    fun pinToWidget(taskId: Long) {
+        viewModelScope.launch { taskRepository.setPinnedToWidget(taskId, true) }
+    }
 }

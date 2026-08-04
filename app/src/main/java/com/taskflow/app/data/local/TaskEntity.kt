@@ -3,7 +3,10 @@ package com.taskflow.app.data.local
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import com.taskflow.app.data.model.FrequencyType
 import com.taskflow.app.data.model.Priority
+import com.taskflow.app.data.model.ReminderMode
+import java.time.LocalDate
 import java.time.LocalDateTime
 
 @Entity(
@@ -12,7 +15,10 @@ import java.time.LocalDateTime
         Index(value = ["categoryId"]),
         Index(value = ["isCompleted"]),
         Index(value = ["dueDate"]),
-        Index(value = ["reminderTime"])
+        Index(value = ["reminderTime"]),
+        Index(value = ["pinnedToWidget"]),
+        Index(value = ["startDate"]),
+        Index(value = ["frequency"])
     ]
 )
 data class TaskEntity(
@@ -23,9 +29,23 @@ data class TaskEntity(
     val categoryId: Long = 1L,
     val priority: Priority = Priority.NONE,
     val dueDate: LocalDateTime? = null,
+    /** Beginning of the date range (inclusive) used by frequency rules. */
+    val startDate: LocalDate? = null,
     val reminderTime: LocalDateTime? = null,
+    /** @see com.taskflow.app.data.model.ReminderMode */
+    val reminderMode: ReminderMode = ReminderMode.ONCE,
+    /** @see com.taskflow.app.data.model.FrequencyType */
+    val frequency: FrequencyType = FrequencyType.NONE,
+    val weeklyWeekdays: Int = 0,
+    val monthlyDays: Int = 0,
+    val customDatesRaw: String? = null,
     val isCompleted: Boolean = false,
     val completedAt: LocalDateTime? = null,
     val createdAt: LocalDateTime = LocalDateTime.now(),
-    val updatedAt: LocalDateTime = LocalDateTime.now()
+    val updatedAt: LocalDateTime = LocalDateTime.now(),
+    /**
+     * Per-task pin flag for the home-screen widget. Only pinned, incomplete tasks
+     * are rendered by the collection widget.
+     */
+    val pinnedToWidget: Boolean = false
 )

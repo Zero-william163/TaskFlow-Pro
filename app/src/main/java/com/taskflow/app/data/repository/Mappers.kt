@@ -13,11 +13,18 @@ internal fun TaskEntity.toDomain(): Task = Task(
     categoryId = categoryId,
     priority = priority,
     dueDate = dueDate,
+    startDate = startDate,
     reminderTime = reminderTime,
+    reminderMode = reminderMode,
+    frequency = frequency,
+    weeklyWeekdays = weeklyWeekdays,
+    monthlyDays = monthlyDays,
+    customDatesRaw = customDatesRaw,
     isCompleted = isCompleted,
     completedAt = completedAt,
     createdAt = createdAt,
-    updatedAt = updatedAt
+    updatedAt = updatedAt,
+    pinnedToWidget = pinnedToWidget
 )
 
 internal fun Task.toEntity(): TaskEntity = TaskEntity(
@@ -27,11 +34,18 @@ internal fun Task.toEntity(): TaskEntity = TaskEntity(
     categoryId = categoryId,
     priority = priority,
     dueDate = dueDate,
+    startDate = startDate,
     reminderTime = reminderTime,
+    reminderMode = reminderMode,
+    frequency = frequency,
+    weeklyWeekdays = weeklyWeekdays,
+    monthlyDays = monthlyDays,
+    customDatesRaw = customDatesRaw,
     isCompleted = isCompleted,
     completedAt = completedAt,
     createdAt = createdAt,
-    updatedAt = updatedAt
+    updatedAt = updatedAt,
+    pinnedToWidget = pinnedToWidget
 )
 
 internal fun CategoryEntity.toDomain(): Category = Category(

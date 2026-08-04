@@ -1,5 +1,6 @@
 package com.taskflow.app.data.model
 
+import java.time.LocalDate
 import java.time.LocalDateTime
 
 /** Domain representation of a task. */
@@ -9,14 +10,45 @@ data class Task(
     val description: String = "",
     val categoryId: Long = 1L,
     val priority: Priority = Priority.NONE,
+    /**
+     * The *deadline* date/time. For frequency-based tasks: the end of the range
+     * within which instances are generated (instances do not exceed dueDate).
+     */
     val dueDate: LocalDateTime? = null,
+    /** First date the task starts being active (inclusive). Inferred = dueDate. */
+    val startDate: LocalDate? = null,
     val reminderTime: LocalDateTime? = null,
+    val reminderMode: ReminderMode = ReminderMode.ONCE,
+    val frequency: FrequencyType = FrequencyType.NONE,
+    /**
+     * Weekday mask when [frequency] is WEEKLY. Mon=1..Sun=7 (ISO 8601), bits
+     * (weekday-1). All-zero means "every day" fallback to MON-FRI.
+     */
+    val weeklyWeekdays: Int = 0,
+    /**
+     * Monthday mask when [frequency] is MONTHLY. IntSet stored as bitmask
+     * supporting days 1..31. 0 = fall back to the start day.
+     */
+    val monthlyDays: Int = 0,
+    /**
+     * User-picked dates when [frequency] is CUSTOM. Stored encoded as a
+     * comma-separated `yyyy-MM-dd` list; Room + DataStore both persist strings.
+     */
+    val customDatesRaw: String? = null,
     val isCompleted: Boolean = false,
     val completedAt: LocalDateTime? = null,
     val createdAt: LocalDateTime = LocalDateTime.now(),
-    val updatedAt: LocalDateTime = LocalDateTime.now()
+    val updatedAt: LocalDateTime = LocalDateTime.now(),
+    val pinnedToWidget: Boolean = false
 ) {
     val hasReminder: Boolean get() = reminderTime != null
     val isOverdue: Boolean
         get() = !isCompleted && dueDate != null && dueDate.isBefore(LocalDateTime.now())
+
+    val customDates: List<LocalDate>
+        get() = customDatesRaw
+            ?.takeIf { it.isNotBlank() }
+            ?.split(',')
+            ?.mapNotNull { runCatching { LocalDate.parse(it.trim()) }.getOrNull() }
+            .orEmpty()
 }

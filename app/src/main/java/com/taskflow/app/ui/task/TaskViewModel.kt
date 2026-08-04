@@ -16,6 +16,9 @@ import kotlinx.coroutines.launch
  * Persistence gateway for add / edit / detail. Form input state lives in the
  * composables; this ViewModel owns the categories list and all task mutations
  * (including reminder scheduling).
+ *
+ * The "cancel old alarm → persist → schedule new alarm" sequence is guaranteed
+ * during saves so edits never orphan an AlarmManager slot.
  */
 class TaskViewModel(
     private val taskRepository: TaskRepository,
@@ -31,19 +34,37 @@ class TaskViewModel(
 
     suspend fun getTask(id: Long): Task? = taskRepository.getTask(id)
 
-    fun saveTask(task: Task, onDone: (Long) -> Unit) {
+    /**
+     * Persist the task and wire up reminders. Callbacks are called on the Main
+     * dispatcher and carry the resulting task id + whether this is a new insert.
+     */
+    fun saveTask(task: Task, onDone: (id: Long, isNew: Boolean) -> Unit) {
         viewModelScope.launch {
-            if (task.id == 0L) {
-                val id = taskRepository.addTask(task)
-                if (task.reminderTime != null) reminderScheduler.schedule(task.copy(id = id))
-                onDone(id)
+            val isNew = task.id == 0L
+            // Drop any previous alarm we may have set (both edit and first-save paths).
+            if (!isNew) reminderScheduler.cancel(task.id)
+
+            val resultingId = if (isNew) {
+                taskRepository.addTask(task)
             } else {
                 taskRepository.updateTask(task)
-                reminderScheduler.cancel(task.id)
-                if (task.reminderTime != null && !task.isCompleted) reminderScheduler.schedule(task)
-                onDone(task.id)
+                task.id
             }
+
+            // Wire the new reminder with the saved task. When reminder is disabled
+            // or the task is complete we explicitly leave the slot empty.
+            val rebuilt = task.copy(id = resultingId)
+            if (!rebuilt.isCompleted && rebuilt.reminderTime != null) {
+                reminderScheduler.schedule(rebuilt)
+            }
+
+            onDone(resultingId, isNew)
         }
+    }
+
+    /** Pin a freshly-created task to the widget so it shows up immediately. */
+    fun pinToWidget(taskId: Long) {
+        viewModelScope.launch { taskRepository.setPinnedToWidget(taskId, true) }
     }
 
     fun deleteTask(task: Task, onDone: () -> Unit) {
@@ -57,8 +78,11 @@ class TaskViewModel(
     fun setCompleted(task: Task, completed: Boolean) {
         viewModelScope.launch {
             taskRepository.setCompleted(task, completed)
-            if (completed) reminderScheduler.cancel(task.id)
-            else task.reminderTime?.let { reminderScheduler.schedule(task) }
+            if (completed) {
+                reminderScheduler.cancel(task.id)
+            } else {
+                task.reminderTime?.let { reminderScheduler.schedule(task) }
+            }
         }
     }
 }

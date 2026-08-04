@@ -41,6 +41,23 @@
     <string name="task_mark_complete">标记为已完成</string>
     <string name="task_mark_incomplete">标记为未完成</string>
     <string name="task_no_reminder">不提醒</string>
+    <string name="task_start_date">开始日期</string>
+    <string name="task_start_date_hint">选择开始日期（可选）</string>
+    <string name="task_reminder_mode_title">提醒模式</string>
+    <string name="task_reminder_mode_once">单次提醒</string>
+    <string name="task_reminder_mode_daily">每日提醒</string>
+    <string name="task_frequency">频率</string>
+    <string name="task_frequency_title">任务频率</string>
+    <string name="task_frequency_none">无</string>
+    <string name="task_frequency_none_desc">任务仅在截止日期执行一次</string>
+    <string name="task_frequency_daily">每日</string>
+    <string name="task_frequency_daily_desc">开始日期到截止日期，每天执行</string>
+    <string name="task_frequency_weekly">每周</string>
+    <string name="task_frequency_weekly_desc">每周选定的工作日执行</string>
+    <string name="task_frequency_monthly">每月</string>
+    <string name="task_frequency_monthly_desc">每月同一天执行</string>
+    <string name="task_frequency_custom">自定义日期</string>
+    <string name="task_frequency_custom_desc">手动选择多个执行日期</string>
 
     <!-- Priority -->
     <string name="priority_none">无</string>
@@ -61,6 +78,12 @@
     <string name="widget_guide_later">稍后再说</string>
     <string name="widget_guide_manual_title">手动添加组件</string>
     <string name="widget_guide_manual_steps">1. 长按桌面空白处\n2. 选择「小组件」\n3. 找到 TaskFlow\n4. 拖拽到桌面</string>
+
+    <!-- Add-to-widget prompt (shown for every subsequent new task) -->
+    <string name="widget_add_to_widget_title">添加到桌面小组件</string>
+    <string name="widget_add_to_widget_message">是否将此任务添加到桌面小组件？添加后可在桌面直接查看。</string>
+    <string name="widget_add_to_widget_yes">添加到小组件</string>
+    <string name="widget_add_to_widget_no">暂不添加</string>
 
     <!-- Permissions -->
     <string name="permission_title">权限管理</string>

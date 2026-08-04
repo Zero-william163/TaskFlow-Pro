@@ -1,11 +1,5 @@
 package com.taskflow.app.ui.home
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,12 +11,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.AlertDialog
@@ -56,7 +47,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.taskflow.app.R
 import com.taskflow.app.ServiceLocator
-import com.taskflow.app.data.model.Task
 import com.taskflow.app.ui.AppViewModelFactory
 import com.taskflow.app.ui.components.EmptyState
 import com.taskflow.app.ui.components.Format
@@ -64,6 +54,7 @@ import com.taskflow.app.ui.components.TaskCard
 import com.taskflow.app.ui.theme.GradientEnd
 import com.taskflow.app.ui.theme.GradientStart
 import com.taskflow.app.ui.task.AddEditTaskSheet
+import com.taskflow.app.widget.WidgetHelper
 import kotlinx.coroutines.launch
 import java.time.LocalDateTime
 
@@ -78,20 +69,43 @@ fun HomeScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
+    // Bottom sheet for add/edit.
     var showAddSheet by remember { mutableStateOf(false) }
-    var showWidgetGuide by remember { mutableStateOf(false) }
+
+    // Widget flow state — only resolved AFTER a task is actually saved.
+    var pendingTaskId by remember { mutableStateOf<Long?>(null) }
+    var showFirstGuide by remember { mutableStateOf(false) }
+    var showAddToWidgetPrompt by remember { mutableStateOf(false) }
 
     val widgetAdded by ServiceLocator.userPreferences.widgetAdded.collectAsState(initial = false)
     val guideShown by ServiceLocator.userPreferences.widgetGuideShown.collectAsState(initial = false)
+
+    /**
+     * Runs only after a NEW task is persisted. Decides whether to show the widget
+     * guide (first ever task) or the "add to widget?" prompt (subsequent tasks),
+     * keyed off the user's widget state. Declared before the add-sheet block so it
+     * is in scope for the onSaved callback.
+     */
+    fun onNewTaskSaved(id: Long) {
+        pendingTaskId = id
+        when {
+            // First time ever — guide the user to add the widget itself.
+            !widgetAdded && !guideShown -> showFirstGuide = true
+            // Widget already placed — ask whether to surface this new task on it.
+            widgetAdded -> showAddToWidgetPrompt = true
+            // User previously declined the guide; stay quiet.
+            else -> pendingTaskId = null
+        }
+    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         floatingActionButton = {
             ExtendedFloatingActionButton(
-                onClick = {
-                    if (!widgetAdded && !guideShown) showWidgetGuide = true
-                    else showAddSheet = true
-                },
+                // Requirement: first tap on "添加任务" only opens the create page.
+                // No widget logic is triggered here — the widget prompt is decided
+                // after the task is actually persisted.
+                onClick = { showAddSheet = true },
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary,
                 shape = RoundedCornerShape(18.dp)
@@ -158,21 +172,6 @@ fun HomeScreen(
         }
     }
 
-    if (showWidgetGuide) {
-        WidgetGuideDialog(
-            onAddNow = {
-                scope.launch { ServiceLocator.userPreferences.setWidgetGuideShown(true) }
-                showWidgetGuide = false
-                requestPinWidget(context)
-            },
-            onLater = {
-                scope.launch { ServiceLocator.userPreferences.setWidgetGuideShown(true) }
-                showWidgetGuide = false
-                showAddSheet = true
-            }
-        )
-    }
-
     if (showAddSheet) {
         val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         ModalBottomSheet(
@@ -182,10 +181,48 @@ fun HomeScreen(
         ) {
             AddEditTaskSheet(
                 task = null,
-                onSaved = { showAddSheet = false },
+                onSaved = { id, isNew ->
+                    showAddSheet = false
+                    if (isNew) onNewTaskSaved(id)
+                },
                 onDismiss = { showAddSheet = false }
             )
         }
+    }
+
+    if (showFirstGuide) {
+        FirstWidgetGuideDialog(
+            onAddNow = {
+                val id = pendingTaskId
+                if (id != null) {
+                    viewModel.pinToWidget(id)
+                    WidgetHelper.requestPinWidget(context)
+                }
+                scope.launch { ServiceLocator.userPreferences.setWidgetGuideShown(true) }
+                pendingTaskId = null
+                showFirstGuide = false
+            },
+            onLater = {
+                scope.launch { ServiceLocator.userPreferences.setWidgetGuideShown(true) }
+                pendingTaskId = null
+                showFirstGuide = false
+            }
+        )
+    }
+
+    if (showAddToWidgetPrompt) {
+        AddToWidgetPromptDialog(
+            onAdd = {
+                pendingTaskId?.let { viewModel.pinToWidget(it) }
+                WidgetHelper.refresh(context)
+                pendingTaskId = null
+                showAddToWidgetPrompt = false
+            },
+            onSkip = {
+                pendingTaskId = null
+                showAddToWidgetPrompt = false
+            }
+        )
     }
 }
 
@@ -246,8 +283,9 @@ private fun FilterChipRow(current: HomeFilter, onSelect: (HomeFilter) -> Unit) {
     }
 }
 
+/** Shown once, after the first task is saved, to add the widget itself. */
 @Composable
-private fun WidgetGuideDialog(onAddNow: () -> Unit, onLater: () -> Unit) {
+private fun FirstWidgetGuideDialog(onAddNow: () -> Unit, onLater: () -> Unit) {
     AlertDialog(
         onDismissRequest = onLater,
         title = { Text(stringResource(R.string.widget_guide_title)) },
@@ -279,6 +317,20 @@ private fun WidgetGuideDialog(onAddNow: () -> Unit, onLater: () -> Unit) {
     )
 }
 
-private fun requestPinWidget(context: android.content.Context) {
-    com.taskflow.app.widget.WidgetHelper.requestPinWidget(context)
+/** Shown for every subsequent new task, asking whether to surface it on the widget. */
+@Composable
+private fun AddToWidgetPromptDialog(onAdd: () -> Unit, onSkip: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onSkip,
+        title = { Text(stringResource(R.string.widget_add_to_widget_title)) },
+        text = { Text(stringResource(R.string.widget_add_to_widget_message)) },
+        confirmButton = {
+            TextButton(onClick = onAdd) {
+                Text(stringResource(R.string.widget_add_to_widget_yes), color = MaterialTheme.colorScheme.primary)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onSkip) { Text(stringResource(R.string.widget_add_to_widget_no)) }
+        }
+    )
 }

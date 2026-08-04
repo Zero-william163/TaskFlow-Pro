@@ -145,7 +145,10 @@ private fun SettingsRow(
     subtitle: String? = null,
     onClick: (() -> Unit)? = null
 ) {
-    SoftCard(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+    // onClick is forwarded to SoftCard so the whole card is tappable. Previously
+    // the chevron was shown but the click was never wired, leaving permission /
+    // update buttons unresponsive.
+    SoftCard(Modifier.fillMaxWidth().padding(vertical = 4.dp), onClick = onClick) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
