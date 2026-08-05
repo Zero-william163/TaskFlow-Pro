@@ -26,7 +26,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Apps
 import androidx.compose.material.icons.outlined.BatteryFull
-import androidx.compose.material.icons.outlined.Bolt
+import androidx.compose.material.icons.outlined.FlashOn
 import androidx.compose.material.icons.outlined.Layers
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Notifications
@@ -407,7 +407,7 @@ private fun iconFor(type: PermissionType): ImageVector = when (type) {
     PermissionType.BATTERY -> Icons.Outlined.BatteryFull
     PermissionType.EXACT_ALARM -> Icons.Outlined.Schedule
     PermissionType.OVERLAY -> Icons.Outlined.Layers
-    PermissionType.FOREGROUND_SERVICE -> Icons.Outlined.Bolt
+    PermissionType.FOREGROUND_SERVICE -> Icons.Outlined.FlashOn
     PermissionType.WIDGET -> Icons.Outlined.Apps
     PermissionType.AUTO_START -> Icons.Outlined.Security
     PermissionType.BACKGROUND_RUN -> Icons.Outlined.BatteryFull
