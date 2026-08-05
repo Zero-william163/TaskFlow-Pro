@@ -26,7 +26,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Apps
 import androidx.compose.material.icons.outlined.BatteryFull
+import androidx.compose.material.icons.outlined.Bolt
+import androidx.compose.material.icons.outlined.Layers
+import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material.icons.rounded.Check
@@ -87,6 +91,7 @@ fun PermissionScreen(onBack: () -> Unit) {
     var widgetGuideMessage by remember { mutableStateOf("") }
     var showGuideDialog by remember { mutableStateOf(false) }
     var guideDialogMessage by remember { mutableStateOf("") }
+    var guideDialogPermissionType by remember { mutableStateOf<PermissionType?>(null) }
 
     // Android 13+ 请求 POST_NOTIFICATIONS 运行时权限
     val notificationLauncher = rememberLauncherForActivityResult(
@@ -151,6 +156,13 @@ fun PermissionScreen(onBack: () -> Unit) {
                 }
             }
 
+            PermissionType.CHANNEL_ALARM -> {
+                // 直达 reminders 通知渠道详情页（最精准，带 channelId）
+                if (!pm.startIntent(PermissionType.CHANNEL_ALARM)) {
+                    Toast.makeText(context, "无法跳转闹钟渠道设置页", Toast.LENGTH_SHORT).show()
+                }
+            }
+
             PermissionType.EXACT_ALARM -> {
                 // 直达本应用精确闹钟权限页（带包名 data）
                 if (!pm.startIntent(PermissionType.EXACT_ALARM)) {
@@ -165,17 +177,32 @@ fun PermissionScreen(onBack: () -> Unit) {
                 }
             }
 
+            PermissionType.OVERLAY -> {
+                // 直达悬浮窗权限页（带 pkgUri，直接弹允许对话框）
+                if (!pm.startIntent(PermissionType.OVERLAY)) {
+                    Toast.makeText(context, "无法跳转悬浮窗设置页", Toast.LENGTH_SHORT).show()
+                }
+            }
+
+            PermissionType.FOREGROUND_SERVICE -> {
+                // AppOps 无公开直达 action，跳应用详情页
+                if (!pm.startIntent(PermissionType.FOREGROUND_SERVICE)) {
+                    Toast.makeText(context, "无法跳转前台服务设置页", Toast.LENGTH_SHORT).show()
+                }
+            }
+
             PermissionType.AUTO_START,
-            PermissionType.BACKGROUND_RUN -> {
+            PermissionType.BACKGROUND_RUN,
+            PermissionType.LOCK_SCREEN -> {
                 // 国产 ROM：优先直达厂商特定页面，失败则显示文字教程
                 if (!pm.startIntent(item.type)) {
-                    // 无法直达 -> 显示厂商文字引导
+                    // 无法直达 -> 显示厂商文字引导，并提供"我已开启"确认按钮
                     val guide = pm.vendorGuideFor(item.type)
                     if (guide != null) {
                         guideDialogMessage = guide
+                        guideDialogPermissionType = item.type
                         showGuideDialog = true
                     } else {
-                        // 兜底：应用详情页
                         runCatching { context.startActivity(pm.appDetailsIntent()) }
                     }
                 }
@@ -246,17 +273,38 @@ fun PermissionScreen(onBack: () -> Unit) {
     if (showGuideDialog) {
         AlertDialog(
             onDismissRequest = { showGuideDialog = false },
-            title = { Text("操作指引") },
+            title = { Text(stringResource(R.string.permission_guide_title)) },
             text = {
-                Text(
-                    guideDialogMessage,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        stringResource(R.string.permission_cannot_jump),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        guideDialogMessage,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             },
             confirmButton = {
+                val t = guideDialogPermissionType
+                if (t != null) {
+                    TextButton(onClick = {
+                        pm.setVendorConfirmed(t, true)
+                        showGuideDialog = false
+                        viewModel.refresh()
+                    }) { Text(stringResource(R.string.permission_confirm_done)) }
+                } else {
+                    TextButton(onClick = { showGuideDialog = false }) {
+                        Text("知道了")
+                    }
+                }
+            },
+            dismissButton = {
                 TextButton(onClick = { showGuideDialog = false }) {
-                    Text("知道了")
+                    Text("关闭")
                 }
             }
         )
@@ -326,6 +374,7 @@ private fun StatusBadge(item: PermissionItem) {
     val color = Color(0xFF15D0AB)
     val labelRes = when (item.status) {
         PermissionStatus.ADDED -> R.string.permission_status_added
+        PermissionStatus.MANUAL -> R.string.permission_status_manual
         else -> R.string.permission_status_granted
     }
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -354,11 +403,15 @@ private fun StatusBadge(item: PermissionItem) {
 
 private fun iconFor(type: PermissionType): ImageVector = when (type) {
     PermissionType.NOTIFICATION -> Icons.Outlined.Notifications
+    PermissionType.CHANNEL_ALARM -> Icons.Outlined.NotificationsActive
     PermissionType.BATTERY -> Icons.Outlined.BatteryFull
     PermissionType.EXACT_ALARM -> Icons.Outlined.Schedule
+    PermissionType.OVERLAY -> Icons.Outlined.Layers
+    PermissionType.FOREGROUND_SERVICE -> Icons.Outlined.Bolt
     PermissionType.WIDGET -> Icons.Outlined.Apps
     PermissionType.AUTO_START -> Icons.Outlined.Security
     PermissionType.BACKGROUND_RUN -> Icons.Outlined.BatteryFull
+    PermissionType.LOCK_SCREEN -> Icons.Outlined.Lock
 }
 
 private fun Intent.start(context: android.content.Context) {

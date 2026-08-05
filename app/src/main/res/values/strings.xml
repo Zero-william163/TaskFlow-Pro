@@ -102,13 +102,25 @@
     <string name="permission_autostart_desc">允许 App 随系统启动，确保后台提醒稳定</string>
     <string name="permission_background_run">后台运行权限</string>
     <string name="permission_background_run_desc">允许 App 在后台运行，确保提醒准时到达</string>
+    <string name="permission_channel_alarm">闹钟通知渠道</string>
+    <string name="permission_channel_alarm_desc">确保闹钟提醒渠道未被单独关闭</string>
+    <string name="permission_overlay">悬浮窗权限</string>
+    <string name="permission_overlay_desc">在全屏通知受限时，作为闹钟提醒的降级方案</string>
+    <string name="permission_foreground_service">前台服务权限</string>
+    <string name="permission_foreground_service_desc">允许前台服务持续播放闹钟铃声和震动</string>
+    <string name="permission_lock_screen">锁屏清理白名单</string>
+    <string name="permission_lock_screen_desc">防止锁屏时被系统清理，导致闹钟不触发</string>
     <string name="permission_status_granted">已开启</string>
     <string name="permission_status_denied">未开启</string>
     <string name="permission_status_added">已添加</string>
     <string name="permission_status_not_added">未添加</string>
     <string name="permission_status_none">需手动开启</string>
+    <string name="permission_status_manual">已确认</string>
     <string name="permission_open_settings">前往设置</string>
     <string name="permission_request_now">立即开启</string>
+    <string name="permission_confirm_done">我已开启</string>
+    <string name="permission_guide_title">操作指引</string>
+    <string name="permission_cannot_jump">无法直达设置页，请按下方步骤操作</string>
 
     <!-- Settings -->
     <string name="settings_about">关于</string>

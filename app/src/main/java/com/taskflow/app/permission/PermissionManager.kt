@@ -2,11 +2,16 @@ package com.taskflow.app.permission
 
 import android.annotation.SuppressLint
 import android.app.AlarmManager
+import android.app.AppOpsManager
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.os.Process
 import android.os.PowerManager
 import android.provider.Settings
 import android.util.Log
@@ -14,20 +19,34 @@ import androidx.annotation.StringRes
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationManagerCompat
 import com.taskflow.app.R
+import com.taskflow.app.notification.NotificationHelper
 import com.taskflow.app.widget.TaskWidgetProvider
 
 private const val TAG = "PermissionManager"
 
+/**
+ * 权限类型标识符。稳定的枚举，用于 UI 列表与持久化。
+ *
+ * 移植自 Countdown PermissionChecker v4：
+ * - 关键权限：通知 / 通知渠道 / 精确闹钟 / 忽略电池优化
+ * - 建议权限：悬浮窗 / 前台服务 AppOps
+ * - 厂商专项：自启动 / 电池手动管理 / 锁屏清理白名单
+ * - Widget 放置状态
+ */
 enum class PermissionType {
-    NOTIFICATION,
-    BATTERY,
-    EXACT_ALARM,
-    WIDGET,
-    AUTO_START,
-    BACKGROUND_RUN
+    NOTIFICATION,           // 通知总开关
+    CHANNEL_ALARM,          // 闹钟通知渠道（reminders 渠道单独检测）
+    EXACT_ALARM,            // 精确闹钟
+    BATTERY,                // 忽略电池优化
+    OVERLAY,                // 悬浮窗
+    FOREGROUND_SERVICE,     // 前台服务 AppOps
+    WIDGET,                 // Widget 放置
+    AUTO_START,             // 厂商自启动
+    BACKGROUND_RUN,         // 厂商电池手动管理
+    LOCK_SCREEN             // 厂商锁屏清理白名单
 }
 
-enum class PermissionStatus { GRANTED, DENIED, ADDED, NOT_ADDED, NONE }
+enum class PermissionStatus { GRANTED, DENIED, ADDED, NOT_ADDED, MANUAL, NONE }
 
 data class PermissionItem(
     val type: PermissionType,
@@ -35,29 +54,40 @@ data class PermissionItem(
     @StringRes val descRes: Int,
     val status: PermissionStatus,
     val applicable: Boolean,
+    val badge: String? = null,
     @StringRes val actionRes: Int = R.string.permission_open_settings
 ) {
     val isOk: Boolean
-        get() = status == PermissionStatus.GRANTED || status == PermissionStatus.ADDED
+        get() = status == PermissionStatus.GRANTED ||
+            status == PermissionStatus.ADDED ||
+            status == PermissionStatus.MANUAL // 厂商专项由用户手动确认
 }
 
 /**
- * 统一权限管理器（v4 — 多级降级跳转链）。
+ * 统一权限管理器（v5 — 完整移植自 Countdown PermissionChecker v4）。
  *
  * ==================== 核心承诺 ====================
  * 每项权限的跳转严格按"多级降级链"执行，**绝不允许最后落在系统设置首页**：
  *
- *   优先级 1  →  本应用对应权限的具体页面（带 package + uid）
+ *   优先级 1  →  本应用对应权限的具体页面（带 package + uid + channelId）
  *   优先级 2  →  本应用详情页 ACTION_APPLICATION_DETAILS_SETTINGS（带 package）
- *   优先级 3  →  权限分类页（如全局精确闹钟页）
+ *   优先级 3  →  权限分类页（如 ACTION_MANAGE_OVERLAY_PERMISSION 全局页）
  *   终止条件：全部 resolveActivity 失败 → 返回 false，由 UI 层显示【操作路径文字引导】
  *
+ * 相比 v4 的增强：
+ * - 新增 CHANNEL_ALARM：直达具体通知渠道设置页（带 channelId）
+ * - 新增 OVERLAY：直达 ACTION_MANAGE_OVERLAY_PERMISSION（带 pkgUri）
+ * - 新增 FOREGROUND_SERVICE：检测 OPSTR_RUN_ANY_IN_BACKGROUND
+ * - 新增 LOCK_SCREEN：锁屏清理白名单厂商专项
+ * - vendorGuideFor 全面改用 PermissionGuideData.forCurrent()（12 品牌 × 4 类）
  * ==================================================
  */
 class PermissionManager(private val context: Context) {
 
     companion object {
         const val RC_NOTIFICATION = 1001
+        private const val PREFS = "permission_confirmations_v5"
+        private const val KEY_PREFIX = "confirmed_"
     }
 
     private val pkgUri: Uri by lazy { Uri.parse("package:${context.packageName}") }
@@ -69,13 +99,20 @@ class PermissionManager(private val context: Context) {
         }.getOrDefault(-1)
     }
 
+    /** 闹钟提醒渠道 ID（与 NotificationHelper 保持一致） */
+    private val alarmChannelId: String get() = NotificationHelper.CHANNEL_REMINDER
+
     fun all(): List<PermissionItem> = listOfNotNull(
         notification(),
+        channelAlarm(),
         exactAlarm(),
         battery(),
+        overlay(),
+        foregroundService(),
         widget(),
         autoStart(),
-        backgroundRun()
+        backgroundRun(),
+        lockScreen()
     )
 
     // ==================== 通知权限 ====================
@@ -87,7 +124,8 @@ class PermissionManager(private val context: Context) {
             titleRes = R.string.permission_notifications,
             descRes = R.string.permission_notifications_desc,
             status = if (enabled) PermissionStatus.GRANTED else PermissionStatus.DENIED,
-            applicable = true
+            applicable = true,
+            badge = "必需"
         )
     }
 
@@ -103,6 +141,32 @@ class PermissionManager(private val context: Context) {
     fun isNotificationEnabled(): Boolean =
         NotificationManagerCompat.from(context).areNotificationsEnabled()
 
+    // ==================== 闹钟通知渠道（关键改进：单独检测 reminders 渠道） ====================
+
+    fun channelAlarm(): PermissionItem {
+        val applicable = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+        val granted = if (applicable) isAlarmChannelEnabled() else isNotificationEnabled()
+        return PermissionItem(
+            type = PermissionType.CHANNEL_ALARM,
+            titleRes = R.string.permission_channel_alarm,
+            descRes = R.string.permission_channel_alarm_desc,
+            status = if (granted) PermissionStatus.GRANTED else PermissionStatus.DENIED,
+            applicable = applicable,
+            badge = "必需"
+        )
+    }
+
+    fun isAlarmChannelEnabled(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return isNotificationEnabled()
+        return try {
+            val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            val ch: NotificationChannel? = nm.getNotificationChannel(alarmChannelId)
+            ch != null && ch.importance != NotificationManager.IMPORTANCE_NONE
+        } catch (_: Throwable) {
+            isNotificationEnabled()
+        }
+    }
+
     // ==================== 精确闹钟权限 ====================
 
     fun exactAlarm(): PermissionItem {
@@ -116,8 +180,15 @@ class PermissionManager(private val context: Context) {
             titleRes = R.string.permission_exact_alarm,
             descRes = R.string.permission_exact_alarm_desc,
             status = if (granted) PermissionStatus.GRANTED else PermissionStatus.DENIED,
-            applicable = applicable
+            applicable = applicable,
+            badge = "必需"
         )
+    }
+
+    fun isExactAlarmGranted(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true
+        val am = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        return am.canScheduleExactAlarms()
     }
 
     // ==================== 电池优化权限 ====================
@@ -131,8 +202,60 @@ class PermissionManager(private val context: Context) {
             titleRes = R.string.permission_battery,
             descRes = R.string.permission_battery_desc,
             status = if (ignoring) PermissionStatus.GRANTED else PermissionStatus.DENIED,
-            applicable = true
+            applicable = true,
+            badge = "必需"
         )
+    }
+
+    fun isBatteryIgnored(): Boolean {
+        val pm = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+        return pm.isIgnoringBatteryOptimizations(context.packageName)
+    }
+
+    // ==================== 悬浮窗权限（建议） ====================
+
+    fun overlay(): PermissionItem {
+        val applicable = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
+        val granted = if (applicable) Settings.canDrawOverlays(context) else true
+        return PermissionItem(
+            type = PermissionType.OVERLAY,
+            titleRes = R.string.permission_overlay,
+            descRes = R.string.permission_overlay_desc,
+            status = if (granted) PermissionStatus.GRANTED else PermissionStatus.DENIED,
+            applicable = applicable
+        )
+    }
+
+    fun isOverlayGranted(): Boolean =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(context)
+
+    // ==================== 前台服务 AppOps（建议） ====================
+
+    fun foregroundService(): PermissionItem {
+        val applicable = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+        val granted = if (applicable) isForegroundServiceAllowed() else true
+        return PermissionItem(
+            type = PermissionType.FOREGROUND_SERVICE,
+            titleRes = R.string.permission_foreground_service,
+            descRes = R.string.permission_foreground_service_desc,
+            status = if (granted) PermissionStatus.GRANTED else PermissionStatus.DENIED,
+            applicable = applicable
+        )
+    }
+
+    fun isForegroundServiceAllowed(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return true
+        return try {
+            val aom = context.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
+            val mode = aom.unsafeCheckOpNoThrow(
+                AppOpsManager.OPSTR_RUN_ANY_IN_BACKGROUND,
+                Process.myUid(),
+                context.packageName
+            )
+            mode == AppOpsManager.MODE_ALLOWED
+        } catch (_: Throwable) {
+            true // AppOps 检测出错时，视为已允许（避免误报）
+        }
     }
 
     // ==================== Widget 状态 ====================
@@ -151,16 +274,14 @@ class PermissionManager(private val context: Context) {
     fun isWidgetPlaced(): Boolean {
         return try {
             val mgr = context.getSystemService(Context.APPWIDGET_SERVICE) as android.appwidget.AppWidgetManager
-            val ids = mgr.getAppWidgetIds(
-                android.content.ComponentName(context, TaskWidgetProvider::class.java)
-            )
+            val ids = mgr.getAppWidgetIds(ComponentName(context, TaskWidgetProvider::class.java))
             ids.isNotEmpty()
-        } catch (t: Throwable) {
+        } catch (_: Throwable) {
             false
         }
     }
 
-    // ==================== 国产系统自启动/后台运行 ====================
+    // ==================== 国产系统厂商专项 ====================
 
     fun autoStart(): PermissionItem? {
         if (!isChineseRom()) return null
@@ -168,8 +289,10 @@ class PermissionManager(private val context: Context) {
             type = PermissionType.AUTO_START,
             titleRes = R.string.permission_autostart,
             descRes = R.string.permission_autostart_desc,
-            status = PermissionStatus.NONE,
-            applicable = true
+            status = if (isVendorConfirmed(PermissionType.AUTO_START))
+                PermissionStatus.MANUAL else PermissionStatus.NONE,
+            applicable = true,
+            badge = vendorBadge()
         )
     }
 
@@ -179,16 +302,42 @@ class PermissionManager(private val context: Context) {
             type = PermissionType.BACKGROUND_RUN,
             titleRes = R.string.permission_background_run,
             descRes = R.string.permission_background_run_desc,
-            status = PermissionStatus.NONE,
-            applicable = true
+            status = if (isVendorConfirmed(PermissionType.BACKGROUND_RUN))
+                PermissionStatus.MANUAL else PermissionStatus.NONE,
+            applicable = true,
+            badge = vendorBadge()
         )
+    }
+
+    fun lockScreen(): PermissionItem? {
+        if (!isChineseRom()) return null
+        return PermissionItem(
+            type = PermissionType.LOCK_SCREEN,
+            titleRes = R.string.permission_lock_screen,
+            descRes = R.string.permission_lock_screen_desc,
+            status = if (isVendorConfirmed(PermissionType.LOCK_SCREEN))
+                PermissionStatus.MANUAL else PermissionStatus.NONE,
+            applicable = true,
+            badge = vendorBadge()
+        )
+    }
+
+    // ==================== 厂商确认存储（让用户可标记已开启） ====================
+
+    fun isVendorConfirmed(type: PermissionType): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getBoolean(KEY_PREFIX + type.name, false)
+
+    fun setVendorConfirmed(type: PermissionType, confirmed: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit().putBoolean(KEY_PREFIX + type.name, confirmed).apply()
     }
 
     // ==================== 多级降级跳转链（核心） ====================
 
     /**
      * 按优先级尝试跳转，返回是否成功启动了某个页面。
-     * 若所有候选都失败，返回 false——UI 层应显示 vendorGuideFor() 文字引导。
+     * 若所有候选都失败，返回 false——UI 层应显示 [vendorGuideFor] 文字引导。
      *
      * **绝不跳转系统设置首页。**
      */
@@ -199,7 +348,7 @@ class PermissionManager(private val context: Context) {
             try {
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 context.startActivity(intent)
-                Log.d(TAG, "startIntent[$type]: jumped via ${intent.action}")
+                Log.d(TAG, "startIntent[$type]: jumped via ${intent.action ?: intent.component}")
                 return true
             } catch (e: Throwable) {
                 Log.w(TAG, "startIntent[$type]: candidate ${intent.action} failed", e)
@@ -212,10 +361,6 @@ class PermissionManager(private val context: Context) {
     /**
      * 为每种权限类型构建按优先级排序的 Intent 候选列表。
      *
-     * 关键改进（vs 旧版 intentFor）：
-     * - 旧版只返回 1 个 Intent，resolveActivity 失败就直接返回 false
-     * - 新版返回完整候选列表，逐个尝试，大幅提高跳转成功率
-     *
      * 候选列表末尾**不允许**是系统设置首页（ACTION_SETTINGS），
      * 最差降级到应用详情页（带 package URI）。
      */
@@ -224,62 +369,83 @@ class PermissionManager(private val context: Context) {
         val pkg = context.packageName
         return when (type) {
 
-            // —— 通知权限 ——
+            // —— 通知总开关 ——
             PermissionType.NOTIFICATION -> listOf(
-                // 1. 本应用通知设置页（+ uid，兼容国产 ROM）
                 Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
                     putExtra(Settings.EXTRA_APP_PACKAGE, pkg)
                     if (appUid != -1) putExtra("android.app.extra.APP_UID", appUid)
                 },
-                // 2. 应用详情页（用户可以从这里进入通知设置）
+                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkgUri)
+            )
+
+            // —— 闹钟通知渠道（最精准：直达 reminders 渠道详情页） ——
+            PermissionType.CHANNEL_ALARM -> listOfNotNull(
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                    Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS).apply {
+                        putExtra(Settings.EXTRA_APP_PACKAGE, pkg)
+                        putExtra(Settings.EXTRA_CHANNEL_ID, alarmChannelId)
+                    } else null,
+                Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                    putExtra(Settings.EXTRA_APP_PACKAGE, pkg)
+                    if (appUid != -1) putExtra("android.app.extra.APP_UID", appUid)
+                },
                 Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkgUri)
             )
 
             // —— 精确闹钟 ——
             PermissionType.EXACT_ALARM -> listOfNotNull(
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
-                    // 1. 本应用精确闹钟请求页（data = pkgUri 才能精准定位本应用）
                     Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
                         data = pkgUri
                     } else null,
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
-                    // 2. 全局精确闹钟设置页（部分 ROM 会在顶部显示本应用条目）
                     Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM) else null,
-                // 3. 应用详情页
                 Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkgUri)
             )
 
             // —— 电池优化 ——
             PermissionType.BATTERY -> listOf(
-                // 1. 直接弹出忽略电池优化对话框（最精准，直接显示本应用）
                 Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
                     data = pkgUri
                 },
-                // 2. 忽略电池优化列表页（带 pkgUri，部分 ROM 会高亮显示本应用）
                 Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS, pkgUri),
-                // 3. 忽略电池优化列表页（不带 pkgUri 的 fallback）
                 Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS),
-                // 4. 应用详情页
+                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkgUri)
+            )
+
+            // —— 悬浮窗（直接弹允许悬浮窗对话框，最精准） ——
+            PermissionType.OVERLAY -> listOfNotNull(
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
+                    Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, pkgUri) else null,
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
+                    Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION) else null,
+                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkgUri)
+            )
+
+            // —— 前台服务 AppOps（无公开直达 action，应用详情页为最优入口） ——
+            PermissionType.FOREGROUND_SERVICE -> listOf(
                 Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkgUri)
             )
 
             // —— Widget ——
             PermissionType.WIDGET -> listOf(
-                // Widget 走系统 Pin 流程，不是设置页跳转；这里只给应用详情页作为 fallback
                 Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkgUri)
             )
 
             // —— 国产 ROM 自启动 ——
             PermissionType.AUTO_START -> buildVendorJumpChain(VendorAction.AUTO_START)
 
-            // —— 国产 ROM 后台运行 ——
+            // —— 国产 ROM 电池手动管理 ——
             PermissionType.BACKGROUND_RUN -> buildVendorJumpChain(VendorAction.BATTERY_MANUAL)
+
+            // —— 国产 ROM 锁屏清理白名单 ——
+            PermissionType.LOCK_SCREEN -> buildVendorJumpChain(VendorAction.LOCKSCREEN)
         }
     }
 
     // ==================== 厂商专属 Intent 候选链 ====================
 
-    private enum class VendorAction { AUTO_START, BATTERY_MANUAL }
+    private enum class VendorAction { AUTO_START, BATTERY_MANUAL, LOCKSCREEN }
 
     /**
      * 厂商专属权限的 Intent 候选链。
@@ -295,13 +461,13 @@ class PermissionManager(private val context: Context) {
             // —— 华为/荣耀 ——
             mfr == "huawei" || mfr == "honor" -> {
                 list += Intent().apply {
-                    component = android.content.ComponentName(
+                    component = ComponentName(
                         "com.huawei.systemmanager",
                         "com.huawei.systemmanager.optimize.process.ProtectActivity"
                     )
                 }
                 list += Intent().apply {
-                    component = android.content.ComponentName(
+                    component = ComponentName(
                         "com.huawei.systemmanager",
                         "com.huawei.systemmanager.appcontrol.activity.StartupAppControlActivity"
                     )
@@ -312,14 +478,14 @@ class PermissionManager(private val context: Context) {
             mfr == "xiaomi" || mfr == "redmi" || mfr == "poco" -> {
                 if (action == VendorAction.AUTO_START) {
                     list += Intent("miui.intent.action.OP_AUTO_START").apply {
-                        component = android.content.ComponentName(
+                        component = ComponentName(
                             "com.miui.securitycenter",
                             "com.miui.permcenter.autostart.AutoStartManagementActivity"
                         )
                     }
                 }
                 list += Intent().apply {
-                    component = android.content.ComponentName(
+                    component = ComponentName(
                         "com.miui.powerkeeper",
                         "com.miui.powerkeeper.ui.HiddenAppsConfigActivity"
                     )
@@ -330,13 +496,13 @@ class PermissionManager(private val context: Context) {
             // —— OPPO/realme/OnePlus ——
             mfr == "oppo" || mfr == "realme" || mfr == "oneplus" -> {
                 list += Intent().apply {
-                    component = android.content.ComponentName(
+                    component = ComponentName(
                         "com.coloros.safecenter",
                         "com.coloros.safecenter.permission.startup.StartupAppListActivity"
                     )
                 }
                 list += Intent().apply {
-                    component = android.content.ComponentName(
+                    component = ComponentName(
                         "com.oplus.safecenter",
                         "com.oplus.safecenter.startupapp.StartupAppListActivity"
                     )
@@ -346,7 +512,7 @@ class PermissionManager(private val context: Context) {
             // —— VIVO/iQOO ——
             mfr == "vivo" || mfr == "iqoo" -> {
                 list += Intent().apply {
-                    component = android.content.ComponentName(
+                    component = ComponentName(
                         "com.vivo.permissionmanager",
                         "com.vivo.permissionmanager.activity.BgStartUpManagerActivity"
                     )
@@ -356,7 +522,7 @@ class PermissionManager(private val context: Context) {
             // —— 魅族 ——
             mfr == "meizu" -> {
                 list += Intent().apply {
-                    component = android.content.ComponentName(
+                    component = ComponentName(
                         "com.meizu.safe",
                         "com.meizu.safe.security.SHOW_APPSEC"
                     )
@@ -366,7 +532,7 @@ class PermissionManager(private val context: Context) {
             // —— 三星 ——
             mfr == "samsung" -> {
                 list += Intent().apply {
-                    component = android.content.ComponentName(
+                    component = ComponentName(
                         "com.samsung.android.lool",
                         "com.samsung.android.sm.battery.ui.BatteryActivity"
                     )
@@ -416,67 +582,47 @@ class PermissionManager(private val context: Context) {
         pkgUri
     ).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
 
-    // ==================== 厂商检测 ====================
+    // ==================== 厂商检测与文案 ====================
 
     private fun isChineseRom(): Boolean {
         val mfr = Build.MANUFACTURER?.lowercase() ?: return false
         return mfr in setOf(
-            "huawei", "honor", "xiaomi", "redmi", "poco",
-            "oppo", "realme", "oneplus", "vivo", "iqoo",
-            "meizu", "samsung", "zte", "lenovo"
+            "huawei", "honor", "xiaomi", "redmi", "poco", "blackshark",
+            "oppo", "realme", "oneplus", "coloros",
+            "vivo", "iqoo", "meizu", "flyme",
+            "samsung", "zte", "lenovo", "motorola", "moto"
         )
     }
 
+    fun vendorName(): String = when (Build.MANUFACTURER?.lowercase()) {
+        "huawei" -> "华为"
+        "honor" -> "荣耀"
+        "xiaomi", "redmi", "poco", "blackshark" -> "小米"
+        "oppo", "realme", "oneplus", "coloros" -> "OPPO"
+        "vivo", "iqoo" -> "VIVO"
+        "meizu", "flyme" -> "魅族"
+        "samsung" -> "三星"
+        "lenovo", "motorola", "moto" -> "Moto/联想"
+        "sony" -> "索尼"
+        else -> Build.MANUFACTURER?.replaceFirstChar { it.uppercase() } ?: "当前"
+    }
+
+    private fun vendorBadge(): String? = if (isChineseRom()) vendorName() else null
+
     /**
-     * 国产 ROM 自启动+后台运行引导文案。
+     * 国产 ROM 操作路径文字引导。
      * 当 [startIntent] 返回 false 时，由 UI 层调用此方法显示文字教程。
+     *
+     * 完整移植自 Countdown PermissionGuideData：12 品牌 × 4 类权限。
      */
     fun vendorGuideFor(type: PermissionType): String? {
-        val mfr = Build.MANUFACTURER?.lowercase() ?: return null
-        return when {
-            type == PermissionType.AUTO_START && (mfr == "huawei" || mfr == "honor") ->
-                "华为/荣耀：\n设置 → 应用和服务 → 应用启动管理\n找到 TaskFlow → 关闭自动管理\n→ 开启「自动启动」「关联启动」「后台活动」三个开关"
-
-            type == PermissionType.AUTO_START && (mfr == "xiaomi" || mfr == "redmi" || mfr == "poco") ->
-                "小米/红米/POCO：\n安全中心（或手机管家）→ 应用权限 → 自启动\n找到 TaskFlow → 开启「允许自启动」"
-
-            type == PermissionType.AUTO_START && (mfr == "oppo" || mfr == "realme" || mfr == "oneplus") ->
-                "OPPO/realme/一加：\n设置 → 电池 → 更多电池设置 → 应用耗电管理\n找到 TaskFlow → 开启「允许自启动」和「允许后台运行」"
-
-            type == PermissionType.AUTO_START && (mfr == "vivo" || mfr == "iqoo") ->
-                "VIVO/iQOO：\ni管家 → 应用管理 → 权限管理 → 自启动\n找到 TaskFlow → 开启「允许自启动」"
-
-            type == PermissionType.AUTO_START && mfr == "meizu" ->
-                "魅族：\n手机管家 → 权限管理 → 自启动管理\n找到 TaskFlow → 允许"
-
-            type == PermissionType.AUTO_START && mfr == "samsung" ->
-                "三星：\n设置 → 应用 → TaskFlow → 电池 → 后台使用限制 → 从不休眠"
-
-            type == PermissionType.BACKGROUND_RUN && (mfr == "huawei" || mfr == "honor") ->
-                "华为/荣耀：\n设置 → 应用和服务 → 应用启动管理\n找到 TaskFlow → 关闭自动管理\n→ 开启「后台活动」开关"
-
-            type == PermissionType.BACKGROUND_RUN && (mfr == "xiaomi" || mfr == "redmi" || mfr == "poco") ->
-                "小米/红米/POCO：\n安全中心 → 电池 → 应用智能省电\n找到 TaskFlow → 设为「无限制」"
-
-            type == PermissionType.BACKGROUND_RUN && (mfr == "oppo" || mfr == "realme" || mfr == "oneplus") ->
-                "OPPO/realme/一加：\n设置 → 电池 → 更多 → 应用耗电管理\n找到 TaskFlow → 开启「允许后台运行」"
-
-            type == PermissionType.BACKGROUND_RUN && (mfr == "vivo" || mfr == "iqoo") ->
-                "VIVO/iQOO：\ni管家 → 应用管理 → 后台管理\n找到 TaskFlow → 允许后台运行"
-
-            type == PermissionType.BACKGROUND_RUN && mfr == "meizu" ->
-                "魅族：\n设置 → 电量管理 → 应用电量管理\n→ TaskFlow → 待机耗电优化 → 关闭"
-
-            type == PermissionType.BACKGROUND_RUN && mfr == "samsung" ->
-                "三星：\n设置 → 电池和设备维护 → 电池 → 后台使用限制\n→ 将 TaskFlow 加入「从不休眠的应用」"
-
-            type == PermissionType.WIDGET && isChineseRom() ->
-                "国产 ROM 可能需要手动开启创建小组件权限：\n设置 → 应用和服务 → 权限管理\n找到 TaskFlow → 开启「允许创建小组件」\n\n然后长按桌面空白处 → 小组件 → 找到 TaskFlow → 拖拽到桌面"
-
+        val guide = PermissionGuideData.forCurrent()
+        return when (type) {
+            PermissionType.AUTO_START -> guide.autoStartPath
+            PermissionType.BACKGROUND_RUN -> guide.batteryManualPath
+            PermissionType.LOCK_SCREEN -> guide.lockScreenWhiteListPath
+            PermissionType.WIDGET -> if (isChineseRom()) guide.widgetPath else null
             else -> null
         }
     }
-
-    fun vendorName(): String? =
-        Build.MANUFACTURER?.lowercase()?.replaceFirstChar { it.uppercase() }
 }

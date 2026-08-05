@@ -8,6 +8,34 @@ The GitHub Actions release workflow extracts the section matching the pushed tag
 (e.g. `## v1.0.0`) and uses it as the GitHub / Gitee release notes, and embeds it
 into `release.json` as the `log` field consumed by the in-app updater.
 
+## v1.4.0
+
+### 重构
+1. **完整移植 Countdown 项目 PermissionChecker v4 的精准跳转能力**
+   - 解决 v1.3.x 仍然存在的"跳转不精准"问题：从仅 1 个候选 Intent 改为多级降级跳转链
+   - 每项权限的候选链严格按优先级降级，**绝不跳转系统设置首页**
+2. **新增 4 项权限检测与直达跳转**：
+   - **闹钟通知渠道**（CHANNEL_ALARM）：使用 `ACTION_CHANNEL_NOTIFICATION_SETTINGS` + `EXTRA_CHANNEL_ID`，直达 reminders 渠道详情页（最精准），即使通知总开关已开启也能发现渠道被单独关闭
+   - **悬浮窗权限**（OVERLAY）：使用 `ACTION_MANAGE_OVERLAY_PERMISSION` + `data=package URI`，直接弹出"允许悬浮窗"对话框定位到本应用
+   - **前台服务 AppOps**（FOREGROUND_SERVICE）：检测 `OPSTR_RUN_ANY_IN_BACKGROUND`，解决闹钟响铃几秒后被系统中断
+   - **锁屏清理白名单**（LOCK_SCREEN）：新增厂商专项，解决锁屏状态下闹钟完全不触发
+3. **12 品牌 × 4 类权限的详细文字引导**（新增 PermissionGuideData.kt）
+   - 华为/荣耀/小米/红米/POCO/OPPO/realme/一加/VIVO/iQOO/魅族/三星/Moto/索尼/Google
+   - 每条都是分步操作路径，当厂商 Intent 无法 resolveActivity 时显示
+   - 引导对话框新增「我已开启」按钮，用户确认后标记为已开启状态
+4. **厂商专项权限持久化**：用户手动确认的自启动/后台运行/锁屏白名单状态保存到 SharedPreferences，避免重复提示
+5. PermissionType 枚举稳定化，PermissionStatus 新增 MANUAL 状态（厂商专项已确认）
+6. 厂商识别扩展：新增 blackshark、coloros、flyme、moto 等别名
+
+### 跳转链明细（v1.4.0）
+- 通知总开关：APP_NOTIFICATION_SETTINGS(+pkg+uid) → 应用详情页
+- 闹钟渠道：CHANNEL_NOTIFICATION_SETTINGS(+channelId) → APP_NOTIFICATION_SETTINGS → 应用详情页
+- 精确闹钟：REQUEST_SCHEDULE_EXACT_ALARM(+data=pkgUri) → 全局精确闹钟页 → 应用详情页
+- 电池优化：REQUEST_IGNORE_BATTERY_OPTIMIZATIONS(+data=pkgUri) → 列表页(+pkgUri) → 列表页 → 应用详情页
+- 悬浮窗：MANAGE_OVERLAY_PERMISSION(+data=pkgUri) → 全局悬浮窗页 → 应用详情页
+- 前台服务：应用详情页（AppOps 无公开直达 action）
+- 厂商自启动/电池/锁屏：厂商专属组件（多候选）→ 应用详情页
+
 ## v1.3.2
 
 ### 重构
