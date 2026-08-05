@@ -171,6 +171,7 @@ fun PermissionScreen(onBack: () -> Unit) {
                     }
                 }
             }
+            else -> { /* WIDGET 等已移除的类型，忽略点击 */ }
         }
     }
 
@@ -343,6 +344,7 @@ private fun iconFor(type: PermissionType): ImageVector = when (type) {
     PermissionType.AUTO_START -> Icons.Outlined.Security
     PermissionType.BACKGROUND_RUN -> Icons.Outlined.BatteryFull
     PermissionType.LOCK_SCREEN -> Icons.Outlined.Lock
+    else -> Icons.Outlined.Security // WIDGET 等
 }
 
 private fun Intent.start(context: android.content.Context) {
