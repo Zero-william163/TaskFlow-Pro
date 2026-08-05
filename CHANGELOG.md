@@ -8,6 +8,25 @@ The GitHub Actions release workflow extracts the section matching the pushed tag
 (e.g. `## v1.0.0`) and uses it as the GitHub / Gitee release notes, and embeds it
 into `release.json` as the `log` field consumed by the in-app updater.
 
+## v1.3.2
+
+### 重构
+1. 权限跳转系统重构为**多级降级跳转链**（移植自 Countdown 项目 PermissionChecker v4）
+   - 旧版：`intentFor()` 只返回 1 个 Intent，resolveActivity 失败就直接放弃
+   - 新版：`buildJumpChain()` 返回完整候选列表，逐个尝试，大幅提高跳转成功率
+2. 每项权限的候选链严格按优先级降级，**绝不跳转系统设置首页**：
+   - 通知权限：通知页（+package+uid）→ 应用详情页
+   - 精确闹钟：精确闹钟请求页（+data=pkgUri）→ 全局精确闹钟页 → 应用详情页
+   - 电池优化：直接弹忽略对话框 → 列表页（+pkgUri）→ 列表页 → 应用详情页
+   - 厂商自启动/后台运行：厂商专属组件（多个候选）→ 应用详情页
+3. 厂商候选链扩充：
+   - 华为：ProtectActivity + StartupAppControlActivity 双候选
+   - 小米：AutoStartManagementActivity + HiddenAppsConfigActivity 双候选
+   - OPPO：coloros.safecenter + oplus.safecenter 双候选
+   - 新增魅族、三星厂商适配
+4. `startIntent()` 返回 false 时由 UI 层显示 `vendorGuideFor()` 文字引导
+5. POCO/OnePlus 品牌识别修正
+
 ## v1.3.1
 
 ### 修复
