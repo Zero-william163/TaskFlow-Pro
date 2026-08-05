@@ -248,7 +248,9 @@ class PermissionManager(private val context: Context) {
         return try {
             val aom = context.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
             val mode = aom.unsafeCheckOpNoThrow(
-                AppOpsManager.OPSTR_RUN_ANY_IN_BACKGROUND,
+                // OPSTR_RUN_ANY_IN_BACKGROUND 在 SDK 34 android.jar 中未暴露（@SystemApi），
+                // 直接使用其字符串值 "android:run_any_in_background"
+                "android:run_any_in_background",
                 Process.myUid(),
                 context.packageName
             )
