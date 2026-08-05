@@ -199,13 +199,18 @@ jobs:
           fi
 
       - name: Mirror to Gitee
-        if: ${{ vars.GITEE_MIRROR == 'true' && secrets.GITEE_TOKEN != '' }}
+        if: ${{ vars.GITEE_MIRROR == 'true' }}
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
           TAG: ${{ steps.tag.outputs.name }}
           NOTES_FILE: ${{ steps.notes.outputs.path }}
         run: |
           set -eu
+          # secrets 不能在 if 表达式里判断，只能在 shell 里检查
+          if [ -z "$GITEE_TOKEN" ]; then
+            echo "GITEE_TOKEN 未配置，跳过 Gitee 镜像步骤"
+            exit 0
+          fi
           # 1) Sync repo (force push tags + main)
           git remote remove gitee 2>/dev/null || true
           git remote add gitee "https://${GITEE_TOKEN}@gitee.com/${GITEE_OWNER}/${GITEE_REPO}.git"
