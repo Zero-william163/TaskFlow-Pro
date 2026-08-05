@@ -6,7 +6,6 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.util.Log
-import com.taskflow.app.data.preferences.UserPreferences
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -18,6 +17,9 @@ private const val TAG = "WidgetPinCallback"
  *
  * 关键：只有在收到此回调且 EXTRA_APPWIDGET_ID 有效时，才表示 Widget 真正创建。
  * 不要在 requestPinWidget() 返回 true 时就认为成功。
+ *
+ * v6 重构：不再写入 UserPreferences 本地缓存。Widget 放置状态唯一可信源是
+ * AppWidgetManager.getAppWidgetIds()，避免"APP 显示已创建但桌面无组件"的不一致。
  */
 class WidgetPinResultReceiver : BroadcastReceiver() {
 
@@ -56,9 +58,8 @@ class WidgetPinResultReceiver : BroadcastReceiver() {
         val pendingResult = goAsync()
         CoroutineScope(Dispatchers.Default).launch {
             try {
-                // 只有系统真实创建了 Widget，才保存状态
-                UserPreferences.get(context).setWidgetAdded(true)
-                Log.d(TAG, "onReceive: widget confirmed, setWidgetAdded(true)")
+                // 不再写入本地缓存——状态由系统 API 实时提供，避免双源不一致。
+                Log.d(TAG, "onReceive: widget confirmed by system (state tracked via AppWidgetManager)")
 
                 // 刷新 Widget 显示
                 WidgetHelper.refresh(context)

@@ -8,6 +8,42 @@ The GitHub Actions release workflow extracts the section matching the pushed tag
 (e.g. `## v1.0.0`) and uses it as the GitHub / Gitee release notes, and embeds it
 into `release.json` as the `log` field consumed by the in-app updater.
 
+## v2.0.0
+
+### 重构 — 权限管理中心 / Widget 状态检测系统（大型商业 APP 标准）
+
+1. **权限三级分类（A级 / B级 / 厂商专项）**
+   - 新增 `PermissionLevel` 枚举：REQUIRED（A级必需）/ RECOMMENDED（B级推荐）/ VENDOR（厂商专项）
+   - A 级：通知、闹钟通知渠道、精确闹钟、忽略电池优化 —— 未开启将导致提醒无法触发
+   - B 级：悬浮窗 —— 全屏提醒降级方案
+   - 厂商专项：自启动、后台运行、锁屏清理白名单 —— 国产 ROM 专属，需手动确认
+   - 权限管理页按分级分组展示，每组带标题与说明
+
+2. **移除不应展示给用户的权限**
+   - 移除 FOREGROUND_SERVICE：`OPSTR_RUN_ANY_IN_BACKGROUND` 为 @SystemApi，非用户可见权限，展示只会造成困惑
+   - 移除 WIDGET：Widget 状态独立管理，不再混入权限列表
+
+3. **Widget 状态检测系统重构（修复"APP 显示已创建但桌面无组件"）**
+   - 根因：`TaskWidgetProvider.onEnabled/onDisabled` 与 `WidgetPinResultReceiver` 写入 `UserPreferences.widgetAdded` 本地缓存，与系统真实状态产生双源不一致
+   - 修复：彻底移除所有 `setWidgetAdded` 调用，Widget 放置状态唯一可信源为 `AppWidgetManager.getAppWidgetIds()`
+   - 权限管理页新增独立的「桌面小组件」区块，状态实时读取系统 API，返回 APP 自动刷新
+   - 禁止重复创建：点击添加前先通过系统 API 确认桌面是否已存在 Widget
+
+4. **统一日志体系**
+   - 新增 `PermissionLogger`：权限检测、点击跳转、Intent resolve、跳转成功/失败、降级引导、手动确认、刷新等全链路日志
+   - logcat 统一 tag `TaskFlow-Perm`，便于排查权限跳转问题
+
+5. **权限状态模型**
+   - 新增 `PermissionState` / `PermissionStateItem` 模型，定义权限等级与状态枚举，为后续扩展提供统一数据结构
+
+6. **权限精准跳转系统保持不变**
+   - 多级降级跳转链：优先级 1 直达具体权限页（带 package + uid + channelId）→ 优先级 2 应用详情页 → 全部失败显示文字引导
+   - 绝不跳转系统设置首页
+
+### 升级须知
+- Widget 状态不再依赖本地缓存，已添加的 Widget 会在下次进入权限页时通过系统 API 重新确认
+- 厂商专项权限的"已确认"状态保持不变（SharedPreferences 持久化）
+
 ## v1.4.1
 
 ### 修复

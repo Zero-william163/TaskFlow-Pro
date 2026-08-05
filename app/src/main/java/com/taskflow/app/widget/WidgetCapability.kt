@@ -9,7 +9,6 @@ import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
 import com.taskflow.app.permission.PermissionManager
-import com.taskflow.app.permission.PermissionType
 
 /**
  * Widget 能力与引导工具。
@@ -51,7 +50,7 @@ object WidgetCapability {
             return when {
                 alreadyPlaced -> "桌面已存在小组件，无需重复添加"
                 vendorRestricted -> {
-                    pm.vendorGuideFor(PermissionType.WIDGET)
+                    pm.widgetVendorGuide()
                         ?: "${vendorName ?: "当前"} 设备可能需要先开启创建小组件权限"
                 }
                 !launcherSupported -> "当前桌面启动器不支持自动添加小组件，请手动添加：长按桌面 → 小组件 → 找到 TaskFlow → 拖拽到桌面"

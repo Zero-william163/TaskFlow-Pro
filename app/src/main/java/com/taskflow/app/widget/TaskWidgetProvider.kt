@@ -5,7 +5,6 @@ import android.appwidget.AppWidgetProvider
 import android.content.Context
 import android.content.Intent
 import android.util.Log
-import com.taskflow.app.data.preferences.UserPreferences
 import com.taskflow.app.data.repository.TaskRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -49,9 +48,11 @@ class TaskWidgetProvider : AppWidgetProvider() {
         }
     }
 
+    // onEnabled / onDisabled 不再写入本地缓存。
+    // Widget 放置状态唯一可信源是 AppWidgetManager.getAppWidgetIds()，
+    // 由 WidgetHelper.isWidgetPlaced() 实时读取，避免本地缓存与系统状态不一致。
     override fun onEnabled(context: Context) {
-        Log.d(TAG, "onEnabled: first widget placed")
-        scope.launch { UserPreferences.get(context).setWidgetAdded(true) }
+        Log.d(TAG, "onEnabled: first widget placed (state tracked via system API)")
     }
 
     override fun onDeleted(context: Context, appWidgetIds: IntArray) {
@@ -60,8 +61,7 @@ class TaskWidgetProvider : AppWidgetProvider() {
     }
 
     override fun onDisabled(context: Context) {
-        Log.d(TAG, "onDisabled: last widget removed")
-        scope.launch { UserPreferences.get(context).setWidgetAdded(false) }
+        Log.d(TAG, "onDisabled: last widget removed (state tracked via system API)")
     }
 
     override fun onReceive(context: Context, intent: Intent) {

@@ -2,7 +2,6 @@ package com.taskflow.app.permission
 
 import android.annotation.SuppressLint
 import android.app.AlarmManager
-import android.app.AppOpsManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.ComponentName
@@ -11,27 +10,25 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
-import android.os.Process
 import android.os.PowerManager
 import android.provider.Settings
-import android.util.Log
 import androidx.annotation.StringRes
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationManagerCompat
 import com.taskflow.app.R
 import com.taskflow.app.notification.NotificationHelper
-import com.taskflow.app.widget.TaskWidgetProvider
-
-private const val TAG = "PermissionManager"
 
 /**
  * 权限类型标识符。稳定的枚举，用于 UI 列表与持久化。
  *
- * 移植自 Countdown PermissionChecker v4：
- * - 关键权限：通知 / 通知渠道 / 精确闹钟 / 忽略电池优化
- * - 建议权限：悬浮窗 / 前台服务 AppOps
- * - 厂商专项：自启动 / 电池手动管理 / 锁屏清理白名单
- * - Widget 放置状态
+ * 设计原则（v6 重构）：
+ * - A 级（REQUIRED）：通知 / 通知渠道 / 精确闹钟 / 忽略电池优化 —— 核心提醒功能依赖
+ * - B 级（RECOMMENDED）：悬浮窗 —— 全屏提醒降级方案
+ * - 厂商专项（VENDOR）：自启动 / 电池手动管理 / 锁屏清理白名单 —— 无法系统检测，需手动确认
+ *
+ * 已移除（不应展示给用户）：
+ * - FOREGROUND_SERVICE：OPSTR_RUN_ANY_IN_BACKGROUND 为 @SystemApi，非用户可见权限
+ * - WIDGET：Widget 状态独立管理（见 WidgetHelper / WidgetCapability），不混入权限列表
  */
 enum class PermissionType {
     NOTIFICATION,           // 通知总开关
@@ -39,8 +36,6 @@ enum class PermissionType {
     EXACT_ALARM,            // 精确闹钟
     BATTERY,                // 忽略电池优化
     OVERLAY,                // 悬浮窗
-    FOREGROUND_SERVICE,     // 前台服务 AppOps
-    WIDGET,                 // Widget 放置
     AUTO_START,             // 厂商自启动
     BACKGROUND_RUN,         // 厂商电池手动管理
     LOCK_SCREEN             // 厂商锁屏清理白名单
@@ -50,6 +45,8 @@ enum class PermissionStatus { GRANTED, DENIED, ADDED, NOT_ADDED, MANUAL, NONE }
 
 data class PermissionItem(
     val type: PermissionType,
+    /** 权限等级：A级必需 / B级推荐 / 厂商专项 */
+    val level: PermissionLevel,
     @StringRes val titleRes: Int,
     @StringRes val descRes: Int,
     val status: PermissionStatus,
@@ -64,7 +61,7 @@ data class PermissionItem(
 }
 
 /**
- * 统一权限管理器（v5 — 完整移植自 Countdown PermissionChecker v4）。
+ * 统一权限管理器（v6 — 大型商业 APP 标准重构）。
  *
  * ==================== 核心承诺 ====================
  * 每项权限的跳转严格按"多级降级链"执行，**绝不允许最后落在系统设置首页**：
@@ -74,12 +71,12 @@ data class PermissionItem(
  *   优先级 3  →  权限分类页（如 ACTION_MANAGE_OVERLAY_PERMISSION 全局页）
  *   终止条件：全部 resolveActivity 失败 → 返回 false，由 UI 层显示【操作路径文字引导】
  *
- * 相比 v4 的增强：
- * - 新增 CHANNEL_ALARM：直达具体通知渠道设置页（带 channelId）
- * - 新增 OVERLAY：直达 ACTION_MANAGE_OVERLAY_PERMISSION（带 pkgUri）
- * - 新增 FOREGROUND_SERVICE：检测 OPSTR_RUN_ANY_IN_BACKGROUND
- * - 新增 LOCK_SCREEN：锁屏清理白名单厂商专项
- * - vendorGuideFor 全面改用 PermissionGuideData.forCurrent()（12 品牌 × 4 类）
+ * ==================== v6 重构要点 ====================
+ * - 引入 [PermissionLevel] 三级分类：REQUIRED(A级) / RECOMMENDED(B级) / VENDOR(厂商专项)
+ * - 移除 FOREGROUND_SERVICE：OPSTR_RUN_ANY_IN_BACKGROUND 为 @SystemApi，非用户可见
+ * - 移除 WIDGET：Widget 状态独立管理（见 WidgetHelper / WidgetCapability）
+ * - 全链路接入 [PermissionLogger] 统一日志体系
+ * - 全部检测只信任系统 API，不信任任何本地缓存
  * ==================================================
  */
 class PermissionManager(private val context: Context) {
@@ -108,23 +105,39 @@ class PermissionManager(private val context: Context) {
         exactAlarm(),
         battery(),
         overlay(),
-        foregroundService(),
         autoStart(),
         backgroundRun(),
         lockScreen()
     )
 
+    /** A 级（必需）权限：核心提醒功能依赖 */
+    fun requiredItems(): List<PermissionItem> = all().filter {
+        it.level == PermissionLevel.REQUIRED
+    }
+
+    /** B 级（推荐）权限：提升稳定性 */
+    fun recommendedItems(): List<PermissionItem> = all().filter {
+        it.level == PermissionLevel.RECOMMENDED
+    }
+
+    /** 厂商专项权限：无法系统检测，需手动确认 */
+    fun vendorItems(): List<PermissionItem> = all().filter {
+        it.level == PermissionLevel.VENDOR
+    }
+
     // ==================== 通知权限 ====================
 
     fun notification(): PermissionItem {
         val enabled = NotificationManagerCompat.from(context).areNotificationsEnabled()
+        PermissionLogger.logCheck(PermissionType.NOTIFICATION, enabled)
         return PermissionItem(
             type = PermissionType.NOTIFICATION,
+            level = PermissionLevel.REQUIRED,
             titleRes = R.string.permission_notifications,
             descRes = R.string.permission_notifications_desc,
             status = if (enabled) PermissionStatus.GRANTED else PermissionStatus.DENIED,
             applicable = true,
-            badge = "必需"
+            badge = "A级"
         )
     }
 
@@ -145,13 +158,15 @@ class PermissionManager(private val context: Context) {
     fun channelAlarm(): PermissionItem {
         val applicable = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
         val granted = if (applicable) isAlarmChannelEnabled() else isNotificationEnabled()
+        PermissionLogger.logCheck(PermissionType.CHANNEL_ALARM, granted)
         return PermissionItem(
             type = PermissionType.CHANNEL_ALARM,
+            level = PermissionLevel.REQUIRED,
             titleRes = R.string.permission_channel_alarm,
             descRes = R.string.permission_channel_alarm_desc,
             status = if (granted) PermissionStatus.GRANTED else PermissionStatus.DENIED,
             applicable = applicable,
-            badge = "必需"
+            badge = "A级"
         )
     }
 
@@ -174,13 +189,15 @@ class PermissionManager(private val context: Context) {
             val am = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
             am.canScheduleExactAlarms()
         } else true
+        PermissionLogger.logCheck(PermissionType.EXACT_ALARM, granted)
         return PermissionItem(
             type = PermissionType.EXACT_ALARM,
+            level = PermissionLevel.REQUIRED,
             titleRes = R.string.permission_exact_alarm,
             descRes = R.string.permission_exact_alarm_desc,
             status = if (granted) PermissionStatus.GRANTED else PermissionStatus.DENIED,
             applicable = applicable,
-            badge = "必需"
+            badge = "A级"
         )
     }
 
@@ -196,13 +213,15 @@ class PermissionManager(private val context: Context) {
     fun battery(): PermissionItem {
         val pm = context.getSystemService(Context.POWER_SERVICE) as PowerManager
         val ignoring = pm.isIgnoringBatteryOptimizations(context.packageName)
+        PermissionLogger.logCheck(PermissionType.BATTERY, ignoring)
         return PermissionItem(
             type = PermissionType.BATTERY,
+            level = PermissionLevel.REQUIRED,
             titleRes = R.string.permission_battery,
             descRes = R.string.permission_battery_desc,
             status = if (ignoring) PermissionStatus.GRANTED else PermissionStatus.DENIED,
             applicable = true,
-            badge = "必需"
+            badge = "A级"
         )
     }
 
@@ -211,87 +230,38 @@ class PermissionManager(private val context: Context) {
         return pm.isIgnoringBatteryOptimizations(context.packageName)
     }
 
-    // ==================== 悬浮窗权限（建议） ====================
+    // ==================== 悬浮窗权限（B 级推荐） ====================
 
     fun overlay(): PermissionItem {
         val applicable = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
         val granted = if (applicable) Settings.canDrawOverlays(context) else true
+        PermissionLogger.logCheck(PermissionType.OVERLAY, granted)
         return PermissionItem(
             type = PermissionType.OVERLAY,
+            level = PermissionLevel.RECOMMENDED,
             titleRes = R.string.permission_overlay,
             descRes = R.string.permission_overlay_desc,
             status = if (granted) PermissionStatus.GRANTED else PermissionStatus.DENIED,
-            applicable = applicable
+            applicable = applicable,
+            badge = "B级"
         )
     }
 
     fun isOverlayGranted(): Boolean =
         Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(context)
 
-    // ==================== 前台服务 AppOps（建议） ====================
-
-    fun foregroundService(): PermissionItem {
-        val applicable = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
-        val granted = if (applicable) isForegroundServiceAllowed() else true
-        return PermissionItem(
-            type = PermissionType.FOREGROUND_SERVICE,
-            titleRes = R.string.permission_foreground_service,
-            descRes = R.string.permission_foreground_service_desc,
-            status = if (granted) PermissionStatus.GRANTED else PermissionStatus.DENIED,
-            applicable = applicable
-        )
-    }
-
-    fun isForegroundServiceAllowed(): Boolean {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return true
-        return try {
-            val aom = context.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
-            val mode = aom.unsafeCheckOpNoThrow(
-                // OPSTR_RUN_ANY_IN_BACKGROUND 在 SDK 34 android.jar 中未暴露（@SystemApi），
-                // 直接使用其字符串值 "android:run_any_in_background"
-                "android:run_any_in_background",
-                Process.myUid(),
-                context.packageName
-            )
-            mode == AppOpsManager.MODE_ALLOWED
-        } catch (_: Throwable) {
-            true // AppOps 检测出错时，视为已允许（避免误报）
-        }
-    }
-
-    // ==================== Widget 状态 ====================
-
-    fun widget(): PermissionItem {
-        val added = isWidgetPlaced()
-        return PermissionItem(
-            type = PermissionType.WIDGET,
-            titleRes = R.string.permission_widget,
-            descRes = R.string.permission_widget_desc,
-            status = if (added) PermissionStatus.ADDED else PermissionStatus.NOT_ADDED,
-            applicable = true
-        )
-    }
-
-    fun isWidgetPlaced(): Boolean {
-        return try {
-            val mgr = context.getSystemService(Context.APPWIDGET_SERVICE) as android.appwidget.AppWidgetManager
-            val ids = mgr.getAppWidgetIds(ComponentName(context, TaskWidgetProvider::class.java))
-            ids.isNotEmpty()
-        } catch (_: Throwable) {
-            false
-        }
-    }
-
-    // ==================== 国产系统厂商专项 ====================
+    // ==================== 国产系统厂商专项（VENDOR） ====================
 
     fun autoStart(): PermissionItem? {
         if (!isChineseRom()) return null
+        val confirmed = isVendorConfirmed(PermissionType.AUTO_START)
+        PermissionLogger.logCheck(PermissionType.AUTO_START, confirmed, "manual")
         return PermissionItem(
             type = PermissionType.AUTO_START,
+            level = PermissionLevel.VENDOR,
             titleRes = R.string.permission_autostart,
             descRes = R.string.permission_autostart_desc,
-            status = if (isVendorConfirmed(PermissionType.AUTO_START))
-                PermissionStatus.MANUAL else PermissionStatus.NONE,
+            status = if (confirmed) PermissionStatus.MANUAL else PermissionStatus.NONE,
             applicable = true,
             badge = vendorBadge()
         )
@@ -299,12 +269,14 @@ class PermissionManager(private val context: Context) {
 
     fun backgroundRun(): PermissionItem? {
         if (!isChineseRom()) return null
+        val confirmed = isVendorConfirmed(PermissionType.BACKGROUND_RUN)
+        PermissionLogger.logCheck(PermissionType.BACKGROUND_RUN, confirmed, "manual")
         return PermissionItem(
             type = PermissionType.BACKGROUND_RUN,
+            level = PermissionLevel.VENDOR,
             titleRes = R.string.permission_background_run,
             descRes = R.string.permission_background_run_desc,
-            status = if (isVendorConfirmed(PermissionType.BACKGROUND_RUN))
-                PermissionStatus.MANUAL else PermissionStatus.NONE,
+            status = if (confirmed) PermissionStatus.MANUAL else PermissionStatus.NONE,
             applicable = true,
             badge = vendorBadge()
         )
@@ -312,12 +284,14 @@ class PermissionManager(private val context: Context) {
 
     fun lockScreen(): PermissionItem? {
         if (!isChineseRom()) return null
+        val confirmed = isVendorConfirmed(PermissionType.LOCK_SCREEN)
+        PermissionLogger.logCheck(PermissionType.LOCK_SCREEN, confirmed, "manual")
         return PermissionItem(
             type = PermissionType.LOCK_SCREEN,
+            level = PermissionLevel.VENDOR,
             titleRes = R.string.permission_lock_screen,
             descRes = R.string.permission_lock_screen_desc,
-            status = if (isVendorConfirmed(PermissionType.LOCK_SCREEN))
-                PermissionStatus.MANUAL else PermissionStatus.NONE,
+            status = if (confirmed) PermissionStatus.MANUAL else PermissionStatus.NONE,
             applicable = true,
             badge = vendorBadge()
         )
@@ -332,6 +306,7 @@ class PermissionManager(private val context: Context) {
     fun setVendorConfirmed(type: PermissionType, confirmed: Boolean) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit().putBoolean(KEY_PREFIX + type.name, confirmed).apply()
+        PermissionLogger.logManualConfirm(type, confirmed)
     }
 
     // ==================== 多级降级跳转链（核心） ====================
@@ -343,19 +318,22 @@ class PermissionManager(private val context: Context) {
      * **绝不跳转系统设置首页。**
      */
     fun startIntent(type: PermissionType): Boolean {
+        PermissionLogger.logClick(type)
         val candidates = buildJumpChain(type)
         for (intent in candidates) {
-            if (!canResolve(intent)) continue
+            val resolved = canResolve(intent)
+            PermissionLogger.logResolve(type, intent, resolved)
+            if (!resolved) continue
             try {
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 context.startActivity(intent)
-                Log.d(TAG, "startIntent[$type]: jumped via ${intent.action ?: intent.component}")
+                PermissionLogger.logJumpSuccess(type, intent)
                 return true
             } catch (e: Throwable) {
-                Log.w(TAG, "startIntent[$type]: candidate ${intent.action} failed", e)
+                PermissionLogger.logJumpFail(type, intent, e)
             }
         }
-        Log.w(TAG, "startIntent[$type]: all ${candidates.size} candidates exhausted, fallback to text guide")
+        PermissionLogger.logFallbackToGuide(type, candidates.size)
         return false
     }
 
@@ -420,16 +398,6 @@ class PermissionManager(private val context: Context) {
                     Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, pkgUri) else null,
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
                     Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION) else null,
-                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkgUri)
-            )
-
-            // —— 前台服务 AppOps（无公开直达 action，应用详情页为最优入口） ——
-            PermissionType.FOREGROUND_SERVICE -> listOf(
-                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkgUri)
-            )
-
-            // —— Widget ——
-            PermissionType.WIDGET -> listOf(
                 Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkgUri)
             )
 
@@ -619,6 +587,7 @@ class PermissionManager(private val context: Context) {
      * 当 [startIntent] 返回 false 时，由 UI 层调用此方法显示文字教程。
      *
      * 完整移植自 Countdown PermissionGuideData：12 品牌 × 4 类权限。
+     * Widget 引导由 [WidgetCapability] 独立调用 PermissionGuideData.widgetPath。
      */
     fun vendorGuideFor(type: PermissionType): String? {
         val guide = PermissionGuideData.forCurrent()
@@ -626,8 +595,11 @@ class PermissionManager(private val context: Context) {
             PermissionType.AUTO_START -> guide.autoStartPath
             PermissionType.BACKGROUND_RUN -> guide.batteryManualPath
             PermissionType.LOCK_SCREEN -> guide.lockScreenWhiteListPath
-            PermissionType.WIDGET -> if (isChineseRom()) guide.widgetPath else null
             else -> null
         }
     }
+
+    /** Widget 厂商操作路径引导（独立管理，不混入权限列表） */
+    fun widgetVendorGuide(): String? =
+        if (isChineseRom()) PermissionGuideData.forCurrent().widgetPath else null
 }

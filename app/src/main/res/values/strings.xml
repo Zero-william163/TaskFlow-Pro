@@ -121,6 +121,18 @@
     <string name="permission_confirm_done">我已开启</string>
     <string name="permission_guide_title">操作指引</string>
     <string name="permission_cannot_jump">无法直达设置页，请按下方步骤操作</string>
+    <string name="permission_section_required">必需权限（A级）</string>
+    <string name="permission_section_required_desc">未开启将导致任务提醒无法准时触发</string>
+    <string name="permission_section_recommended">推荐权限（B级）</string>
+    <string name="permission_section_recommended_desc">提升提醒稳定性与全屏体验</string>
+    <string name="permission_section_vendor">厂商专项权限</string>
+    <string name="permission_section_vendor_desc">国产 ROM 专属，需手动确认</string>
+    <string name="permission_section_widget">桌面小组件</string>
+    <string name="permission_section_widget_desc">独立管理，状态实时读取系统 API</string>
+    <string name="permission_widget_status_placed">已添加到桌面</string>
+    <string name="permission_widget_status_not_placed">未添加</string>
+    <string name="permission_widget_add">添加小组件</string>
+    <string name="permission_widget_already_placed">桌面已存在小组件，无需重复添加</string>
 
     <!-- Settings -->
     <string name="settings_about">关于</string>

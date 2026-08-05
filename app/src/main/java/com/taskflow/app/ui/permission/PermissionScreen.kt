@@ -1,7 +1,6 @@
 package com.taskflow.app.ui.permission
 
 import android.Manifest
-import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.widget.Toast
@@ -15,17 +14,15 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.Apps
 import androidx.compose.material.icons.outlined.BatteryFull
-import androidx.compose.material.icons.outlined.FlashOn
 import androidx.compose.material.icons.outlined.Layers
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Notifications
@@ -65,11 +62,15 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.taskflow.app.R
 import com.taskflow.app.permission.PermissionItem
+import com.taskflow.app.permission.PermissionLevel
+import com.taskflow.app.permission.PermissionLogger
 import com.taskflow.app.permission.PermissionManager
 import com.taskflow.app.permission.PermissionStatus
 import com.taskflow.app.permission.PermissionType
 import com.taskflow.app.ui.AppViewModelFactory
 import com.taskflow.app.ui.components.SoftCard
+import com.taskflow.app.widget.WidgetCapability
+import com.taskflow.app.widget.WidgetHelper
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -81,8 +82,15 @@ fun PermissionScreen(onBack: () -> Unit) {
 
     LaunchedEffect(Unit) { viewModel.refresh() }
 
+    // Widget 放置状态——唯一可信源：AppWidgetManager，不信任任何本地缓存
+    var widgetPlaced by remember { mutableStateOf(WidgetHelper.isWidgetPlaced(context)) }
+
     // 进入页面 + 从系统返回时都刷新一次，确保状态实时
-    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.refresh() }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        PermissionLogger.logRefresh("PermissionScreen ON_RESUME")
+        viewModel.refresh()
+        widgetPlaced = WidgetHelper.isWidgetPlaced(context)
+    }
 
     var showGuideDialog by remember { mutableStateOf(false) }
     var guideDialogMessage by remember { mutableStateOf("") }
@@ -149,13 +157,6 @@ fun PermissionScreen(onBack: () -> Unit) {
                 }
             }
 
-            PermissionType.FOREGROUND_SERVICE -> {
-                // AppOps 无公开直达 action，跳应用详情页
-                if (!pm.startIntent(PermissionType.FOREGROUND_SERVICE)) {
-                    Toast.makeText(context, "无法跳转前台服务设置页", Toast.LENGTH_SHORT).show()
-                }
-            }
-
             PermissionType.AUTO_START,
             PermissionType.BACKGROUND_RUN,
             PermissionType.LOCK_SCREEN -> {
@@ -171,9 +172,41 @@ fun PermissionScreen(onBack: () -> Unit) {
                     }
                 }
             }
-            else -> { /* WIDGET 等已移除的类型，忽略点击 */ }
         }
     }
+
+    fun addWidget() {
+        // 禁止重复创建：先通过系统 API 确认桌面是否已有 Widget
+        if (WidgetHelper.isWidgetPlaced(context)) {
+            Toast.makeText(
+                context,
+                context.getString(R.string.permission_widget_already_placed),
+                Toast.LENGTH_SHORT
+            ).show()
+            widgetPlaced = true
+            return
+        }
+        val report = WidgetCapability.report(context)
+        when {
+            report.canAttemptAutoPin -> {
+                val pinned = WidgetHelper.requestPinWidget(context)
+                if (!pinned) {
+                    guideDialogMessage = report.blockingReason(context)
+                    guideDialogPermissionType = null
+                    showGuideDialog = true
+                }
+            }
+            else -> {
+                guideDialogMessage = report.blockingReason(context)
+                guideDialogPermissionType = null
+                showGuideDialog = true
+            }
+        }
+    }
+
+    val requiredItems = items.filter { it.level == PermissionLevel.REQUIRED }
+    val recommendedItems = items.filter { it.level == PermissionLevel.RECOMMENDED }
+    val vendorItems = items.filter { it.level == PermissionLevel.VENDOR }
 
     Scaffold(
         topBar = {
@@ -197,8 +230,57 @@ fun PermissionScreen(onBack: () -> Unit) {
             contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            items(items, key = { it.type }) { item ->
-                PermissionRow(item, onAction = { handleItemClick(item) })
+            // —— A 级：必需权限 ——
+            if (requiredItems.isNotEmpty()) {
+                item("req_header") {
+                    SectionHeader(
+                        title = stringResource(R.string.permission_section_required),
+                        desc = stringResource(R.string.permission_section_required_desc)
+                    )
+                }
+                items(requiredItems, key = { "req_${it.type}" }) { item ->
+                    PermissionRow(item, onAction = { handleItemClick(item) })
+                }
+            }
+
+            // —— B 级：推荐权限 ——
+            if (recommendedItems.isNotEmpty()) {
+                item("rec_header") {
+                    SectionHeader(
+                        title = stringResource(R.string.permission_section_recommended),
+                        desc = stringResource(R.string.permission_section_recommended_desc)
+                    )
+                }
+                items(recommendedItems, key = { "rec_${it.type}" }) { item ->
+                    PermissionRow(item, onAction = { handleItemClick(item) })
+                }
+            }
+
+            // —— 厂商专项权限 ——
+            if (vendorItems.isNotEmpty()) {
+                item("vendor_header") {
+                    SectionHeader(
+                        title = stringResource(R.string.permission_section_vendor),
+                        desc = stringResource(R.string.permission_section_vendor_desc)
+                    )
+                }
+                items(vendorItems, key = { "vendor_${it.type}" }) { item ->
+                    PermissionRow(item, onAction = { handleItemClick(item) })
+                }
+            }
+
+            // —— 桌面小组件（独立管理） ——
+            item("widget_header") {
+                SectionHeader(
+                    title = stringResource(R.string.permission_section_widget),
+                    desc = stringResource(R.string.permission_section_widget_desc)
+                )
+            }
+            item("widget_row") {
+                WidgetRow(
+                    placed = widgetPlaced,
+                    onAction = { addWidget() }
+                )
             }
         }
     }
@@ -240,6 +322,23 @@ fun PermissionScreen(onBack: () -> Unit) {
                     Text("关闭")
                 }
             }
+        )
+    }
+}
+
+@Composable
+private fun SectionHeader(title: String, desc: String) {
+    Column(modifier = Modifier.padding(top = 8.dp, bottom = 2.dp)) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary
+        )
+        Text(
+            text = desc,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }
@@ -303,6 +402,77 @@ private fun PermissionRow(item: PermissionItem, onAction: () -> Unit) {
 }
 
 @Composable
+private fun WidgetRow(placed: Boolean, onAction: () -> Unit) {
+    SoftCard(Modifier.fillMaxWidth(), onClick = onAction) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(CircleShape)
+                    .background(
+                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Outlined.Apps,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            }
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    stringResource(R.string.permission_widget),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    stringResource(R.string.permission_widget_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            if (placed) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    val color = Color(0xFF15D0AB)
+                    Box(
+                        modifier = Modifier
+                            .size(20.dp)
+                            .clip(CircleShape)
+                            .background(color.copy(alpha = 0.16f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Rounded.Check,
+                            contentDescription = null,
+                            tint = color,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = stringResource(R.string.permission_widget_status_placed),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = color
+                    )
+                }
+            } else {
+                Button(
+                    onClick = onAction,
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
+                ) {
+                    Text(stringResource(R.string.permission_widget_add))
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun StatusBadge(item: PermissionItem) {
     val color = Color(0xFF15D0AB)
     val labelRes = when (item.status) {
@@ -340,13 +510,7 @@ private fun iconFor(type: PermissionType): ImageVector = when (type) {
     PermissionType.BATTERY -> Icons.Outlined.BatteryFull
     PermissionType.EXACT_ALARM -> Icons.Outlined.Schedule
     PermissionType.OVERLAY -> Icons.Outlined.Layers
-    PermissionType.FOREGROUND_SERVICE -> Icons.Outlined.FlashOn
     PermissionType.AUTO_START -> Icons.Outlined.Security
     PermissionType.BACKGROUND_RUN -> Icons.Outlined.BatteryFull
     PermissionType.LOCK_SCREEN -> Icons.Outlined.Lock
-    else -> Icons.Outlined.Security // WIDGET 等
-}
-
-private fun Intent.start(context: android.content.Context) {
-    runCatching { context.startActivity(this) }
 }
