@@ -340,7 +340,6 @@ private fun iconFor(type: PermissionType): ImageVector = when (type) {
     PermissionType.EXACT_ALARM -> Icons.Outlined.Schedule
     PermissionType.OVERLAY -> Icons.Outlined.Layers
     PermissionType.FOREGROUND_SERVICE -> Icons.Outlined.FlashOn
-    PermissionType.WIDGET -> Icons.Outlined.Apps
     PermissionType.AUTO_START -> Icons.Outlined.Security
     PermissionType.BACKGROUND_RUN -> Icons.Outlined.BatteryFull
     PermissionType.LOCK_SCREEN -> Icons.Outlined.Lock
