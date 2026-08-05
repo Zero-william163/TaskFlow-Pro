@@ -8,6 +8,18 @@ The GitHub Actions release workflow extracts the section matching the pushed tag
 (e.g. `## v1.0.0`) and uses it as the GitHub / Gitee release notes, and embeds it
 into `release.json` as the `log` field consumed by the in-app updater.
 
+## v1.4.1
+
+### 修复
+1. **厂商专项权限（自启动/后台运行/锁屏白名单）不再回退到应用详情页**
+   - 根因：buildVendorJumpChain 在厂商 Intent 全部失败后回退到 ACTION_APPLICATION_DETAILS_SETTINGS，
+     该页面"看起来像主设置"，用户无法感知具体操作路径
+   - 修复：移除应用详情页 fallback，厂商 Intent 全失败时 startIntent 返回 false，
+     UI 层显示 PermissionGuideData 中的详细文字引导
+2. **从权限管理页面移除"桌面组件"项**（按用户要求）
+3. **清理 Widget 相关代码**：移除 handleItemClick 中的 WIDGET 分支、showWidgetGuideDialog 状态、
+   WidgetCapability/WidgetHelper imports
+
 ## v1.4.0
 
 ### 重构

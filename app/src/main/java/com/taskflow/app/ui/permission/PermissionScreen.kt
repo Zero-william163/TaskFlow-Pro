@@ -24,7 +24,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.Apps
 import androidx.compose.material.icons.outlined.BatteryFull
 import androidx.compose.material.icons.outlined.FlashOn
 import androidx.compose.material.icons.outlined.Layers
@@ -71,8 +70,6 @@ import com.taskflow.app.permission.PermissionStatus
 import com.taskflow.app.permission.PermissionType
 import com.taskflow.app.ui.AppViewModelFactory
 import com.taskflow.app.ui.components.SoftCard
-import com.taskflow.app.widget.WidgetCapability
-import com.taskflow.app.widget.WidgetHelper
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -87,8 +84,6 @@ fun PermissionScreen(onBack: () -> Unit) {
     // 进入页面 + 从系统返回时都刷新一次，确保状态实时
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.refresh() }
 
-    var showWidgetGuideDialog by remember { mutableStateOf(false) }
-    var widgetGuideMessage by remember { mutableStateOf("") }
     var showGuideDialog by remember { mutableStateOf(false) }
     var guideDialogMessage by remember { mutableStateOf("") }
     var guideDialogPermissionType by remember { mutableStateOf<PermissionType?>(null) }
@@ -109,36 +104,6 @@ fun PermissionScreen(onBack: () -> Unit) {
 
     fun handleItemClick(item: PermissionItem) {
         when (item.type) {
-            PermissionType.WIDGET -> {
-                val report = WidgetCapability.report(context)
-                when {
-                    report.alreadyPlaced -> {
-                        Toast.makeText(
-                            context,
-                            R.string.settings_widget_status_added,
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    }
-                    report.canAttemptAutoPin -> {
-                        val pinned = WidgetHelper.requestPinWidget(context)
-                        if (pinned) {
-                            Toast.makeText(
-                                context,
-                                R.string.settings_widget_prompt_success,
-                                Toast.LENGTH_LONG
-                            ).show()
-                        } else {
-                            widgetGuideMessage = report.blockingReason(context)
-                            showWidgetGuideDialog = true
-                        }
-                    }
-                    else -> {
-                        widgetGuideMessage = report.blockingReason(context)
-                        showWidgetGuideDialog = true
-                    }
-                }
-            }
-
             PermissionType.NOTIFICATION -> {
                 // Android 13+ 先走运行时权限请求；其他版本直接跳通知设置页
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
@@ -194,16 +159,15 @@ fun PermissionScreen(onBack: () -> Unit) {
             PermissionType.AUTO_START,
             PermissionType.BACKGROUND_RUN,
             PermissionType.LOCK_SCREEN -> {
-                // 国产 ROM：优先直达厂商特定页面，失败则显示文字教程
+                // 国产 ROM：尝试直达厂商特定页面
+                // 如果 startIntent 返回 false（全部厂商 Intent 无法 resolveActivity），
+                // 则显示详细文字引导，绝不回退到"看起来像主设置"的应用详情页
                 if (!pm.startIntent(item.type)) {
-                    // 无法直达 -> 显示厂商文字引导，并提供"我已开启"确认按钮
                     val guide = pm.vendorGuideFor(item.type)
                     if (guide != null) {
                         guideDialogMessage = guide
                         guideDialogPermissionType = item.type
                         showGuideDialog = true
-                    } else {
-                        runCatching { context.startActivity(pm.appDetailsIntent()) }
                     }
                 }
             }
@@ -236,38 +200,6 @@ fun PermissionScreen(onBack: () -> Unit) {
                 PermissionRow(item, onAction = { handleItemClick(item) })
             }
         }
-    }
-
-    if (showWidgetGuideDialog) {
-        AlertDialog(
-            onDismissRequest = { showWidgetGuideDialog = false },
-            title = { Text("添加桌面小组件") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        widgetGuideMessage,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        "请长按桌面空白处 → 选择「小组件」→ 找到 TaskFlow → 拖拽到桌面。",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    showWidgetGuideDialog = false
-                    WidgetCapability.openAppDetails(context)
-                }) { Text("前往设置") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showWidgetGuideDialog = false }) {
-                    Text("知道了")
-                }
-            }
-        )
     }
 
     if (showGuideDialog) {

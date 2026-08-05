@@ -109,7 +109,6 @@ class PermissionManager(private val context: Context) {
         battery(),
         overlay(),
         foregroundService(),
-        widget(),
         autoStart(),
         backgroundRun(),
         lockScreen()
@@ -453,7 +452,11 @@ class PermissionManager(private val context: Context) {
      * 厂商专属权限的 Intent 候选链。
      *
      * 每个厂商提供多个候选 Component，逐个 resolveActivity 检查。
-     * 最后降级到应用详情页（带 package URI），**绝不降级到设置首页**。
+     *
+     * 关键设计：**不添加应用详情页 fallback**。
+     * 如果厂商 Intent 全部失败，startIntent 返回 false，
+     * 由 UI 层显示 PermissionGuideData 中的文字引导，
+     * 而不是跳回一个"看起来像主设置"的应用详情页。
      */
     private fun buildVendorJumpChain(action: VendorAction): List<Intent> {
         val mfr = Build.MANUFACTURER?.lowercase() ?: return emptyList()
@@ -542,8 +545,8 @@ class PermissionManager(private val context: Context) {
             }
         }
 
-        // —— 所有厂商的共同最后降级：应用详情页（仍然比设置首页更精准！） ——
-        list += Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkgUri)
+        // 不添加应用详情页 fallback——全部失败时返回空列表，让 startIntent 返回 false
+        // 由 UI 层显示文字引导
         return list
     }
 
