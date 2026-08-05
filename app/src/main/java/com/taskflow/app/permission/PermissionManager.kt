@@ -299,22 +299,22 @@ class PermissionManager(private val context: Context) {
     fun jumpToRestrictedSettings(): Boolean {
         // 步骤 1：先跳悬浮窗权限页（带包名），触发系统受限对话框
         try {
-            Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, pkgUri).apply {
+            val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, pkgUri).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                context.startActivity(this)
-                PermissionLogger.logJumpSuccess(PermissionType.OVERLAY, this)
-                return true
             }
+            context.startActivity(intent)
+            PermissionLogger.logJumpSuccess(PermissionType.OVERLAY, intent)
+            return true
         } catch (e: Throwable) {
             PermissionLogger.logJumpFail(PermissionType.OVERLAY, Intent(), e)
         }
         // 步骤 2：降级跳应用详情页
         return try {
-            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkgUri).apply {
+            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkgUri).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                context.startActivity(this)
-                true
             }
+            context.startActivity(intent)
+            true
         } catch (_: Throwable) {
             false
         }
