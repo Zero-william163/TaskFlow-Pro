@@ -8,6 +8,24 @@ The GitHub Actions release workflow extracts the section matching the pushed tag
 (e.g. `## v1.0.0`) and uses it as the GitHub / Gitee release notes, and embeds it
 into `release.json` as the `log` field consumed by the in-app updater.
 
+## v2.0.1
+
+### 修复 — 悬浮窗权限变灰 + Widget 添加无反应
+
+1. **悬浮窗权限变灰（Android 13+ Restricted Settings）**
+   - 根因：单文件侧载安装的应用被系统标记为「受限设置」，`SYSTEM_ALERT_WINDOW` 开关显示为灰色
+   - 修复：新增 `isOverlayRestricted()` 检测，通过 `AppOpsManager.checkOp()` 判断权限是否被限制
+   - 修复：新增 `jumpToRestrictedSettings()` 跳转方法，直达「允许受限制的设置」页面
+   - 修复：`buildJumpChain(OVERLAY)` 优先级 1 新增 `ACTION_MANAGE_APP_ROLE_PERMISSIONS` 跳转让链
+   - 修复：PermissionScreen 悬浮窗点击时检测受限状态，自动跳转解封页面或显示图文引导
+
+2. **Widget 添加无反应（华为等厂商设备）**
+   - 根因：`WidgetCapability.report()` 中 `canAutoPin = apiSupported && launcherSupported && !vendorRestricted`，
+     华为在 `restrictedVendors` 列表中导致 `canAutoPin=false`，直接跳过了 `requestPinAppWidget` 尝试
+   - 修复：`canAutoPin` 不再因厂商限制而跳过，只要 `apiSupported && launcherSupported` 就尝试自动添加
+   - 修复：`addWidget()` 流程优化——先尝试 `requestPinAppWidget`，成功则等待系统弹窗确认；失败再降级引导
+   - 修复：即使 `isRequestPinAppWidgetSupported=false`，也会先尝试一次 `requestPinAppWidget` 让系统返回真实结果
+
 ## v2.0.0
 
 ### 重构 — 权限管理中心 / Widget 状态检测系统（大型商业 APP 标准）

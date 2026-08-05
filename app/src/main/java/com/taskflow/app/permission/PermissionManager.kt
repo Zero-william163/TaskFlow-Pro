@@ -250,6 +250,68 @@ class PermissionManager(private val context: Context) {
     fun isOverlayGranted(): Boolean =
         Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(context)
 
+    /**
+     * 检测悬浮窗权限是否被 Android 13+ Restricted Settings 机制限制。
+     *
+     * 当 APK 通过单文件侧载（非官方应用商店）安装时，系统会将
+     * SYSTEM_ALERT_WINDOW、ACCESSIBILITY 等敏感权限标记为「受限」，
+     * 在设置页显示为灰色开关。
+     *
+     * 解决方案：引导用户前往「允许受限制的设置」页面解封。
+     *
+     * 检测逻辑：
+     * 1. Android 13+ 且未授予悬浮窗权限
+     * 2. 通过 AppOpsManager.checkOp() 检查 OPSTR_SYSTEM_ALERT_WINDOW 状态
+     * 3. 如果状态为 MODE_DEFAULT（未授权且受限），则判定为受限
+     */
+    fun isOverlayRestricted(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return false
+        // 如果已有悬浮窗权限，说明不受限制
+        if (Settings.canDrawOverlays(context)) return false
+        // 检测是否处于受限状态
+        return try {
+            val aom = context.getSystemService(Context.APP_OPS_SERVICE) as android.app.AppOpsManager
+            val mode = aom.checkOp(
+                android.app.AppOpsManager.OPSTR_SYSTEM_ALERT_WINDOW,
+                android.os.Process.myUid(),
+                context.packageName
+            )
+            // MODE_DEFAULT = 0 通常表示未授权且受限
+            mode == android.app.AppOpsManager.MODE_DEFAULT
+        } catch (_: Throwable) {
+            false
+        }
+    }
+
+    /**
+     * 跳转到「允许受限制的设置」页面。
+     * 这是解决 Android 13+ 侧载应用权限变灰的核心入口。
+     *
+     * 跳转链：
+     * 1. ACTION_MANAGE_APP_ROLE_PERMISSIONS（部分 OEM 支持）
+     * 2. ACTION_APPLICATION_DETAILS_SETTINGS → 用户需手动点击右上角三点菜单
+     *    → 允许受限制的设置 → 验证身份
+     */
+    fun jumpToRestrictedSettings(): Boolean {
+        val candidates = listOfNotNull(
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
+                Intent(Settings.ACTION_MANAGE_APP_ROLE_PERMISSIONS, pkgUri) else null,
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkgUri)
+        )
+        for (intent in candidates) {
+            if (!canResolve(intent)) continue
+            try {
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(intent)
+                PermissionLogger.logJumpSuccess(PermissionType.OVERLAY, intent)
+                return true
+            } catch (e: Throwable) {
+                PermissionLogger.logJumpFail(PermissionType.OVERLAY, intent, e)
+            }
+        }
+        return false
+    }
+
     // ==================== 国产系统厂商专项（VENDOR） ====================
 
     fun autoStart(): PermissionItem? {
@@ -392,14 +454,25 @@ class PermissionManager(private val context: Context) {
                 Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkgUri)
             )
 
-            // —— 悬浮窗（直接弹允许悬浮窗对话框，最精准） ——
-            PermissionType.OVERLAY -> listOfNotNull(
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
-                    Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, pkgUri) else null,
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
-                    Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION) else null,
-                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkgUri)
-            )
+            // —— 悬浮窗 ——
+            // 优先级 1：如果检测到 Restricted Settings（Android 13+ 侧载应用开关变灰），
+            //           先跳「允许受限制的设置」页面解封
+            // 优先级 2：直达悬浮窗权限管理页（带 pkgUri）
+            // 优先级 3：不带包名的全局悬浮窗管理页
+            // 优先级 4：应用详情页（用户需手动找权限）
+            PermissionType.OVERLAY -> run {
+                val chain = mutableListOf<Intent>()
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    // 先尝试直达「允许受限制的设置」页面
+                    chain += Intent(Settings.ACTION_MANAGE_APP_ROLE_PERMISSIONS, pkgUri)
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    chain += Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, pkgUri)
+                    chain += Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION)
+                }
+                chain += Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkgUri)
+                chain
+            }
 
             // —— 国产 ROM 自启动 ——
             PermissionType.AUTO_START -> buildVendorJumpChain(VendorAction.AUTO_START)

@@ -133,6 +133,7 @@
     <string name="permission_widget_status_not_placed">未添加</string>
     <string name="permission_widget_add">添加小组件</string>
     <string name="permission_widget_already_placed">桌面已存在小组件，无需重复添加</string>
+    <string name="permission_overlay_restricted_guide">检测到悬浮窗权限被系统限制（开关为灰色）。\n\n解决方法：\n1. 点击下方「前往设置」进入应用详情页\n2. 点击右上角三点菜单 ⋮\n3. 点击「允许受限制的设置」\n4. 验证身份后即可开启悬浮窗权限\n\n这是 Android 13+ 对侧载应用的安全限制，通过官方应用商店安装可避免此问题。</string>
 
     <!-- Settings -->
     <string name="settings_about">关于</string>

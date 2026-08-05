@@ -152,9 +152,20 @@ fun PermissionScreen(onBack: () -> Unit) {
             }
 
             PermissionType.OVERLAY -> {
-                // 直达悬浮窗权限页（带 pkgUri，直接弹允许对话框）
-                if (!pm.startIntent(PermissionType.OVERLAY)) {
-                    Toast.makeText(context, "无法跳转悬浮窗设置页", Toast.LENGTH_SHORT).show()
+                // 检测是否被 Restricted Settings 机制限制（Android 13+ 侧载应用开关变灰）
+                if (pm.isOverlayRestricted()) {
+                    // 先尝试直达「允许受限制的设置」页面
+                    if (!pm.jumpToRestrictedSettings()) {
+                        // 降级：显示图文引导
+                        guideDialogMessage = context.getString(R.string.permission_overlay_restricted_guide)
+                        guideDialogPermissionType = null
+                        showGuideDialog = true
+                    }
+                } else {
+                    // 正常跳转悬浮窗权限页
+                    if (!pm.startIntent(PermissionType.OVERLAY)) {
+                        Toast.makeText(context, "无法跳转悬浮窗设置页", Toast.LENGTH_SHORT).show()
+                    }
                 }
             }
 
@@ -188,21 +199,27 @@ fun PermissionScreen(onBack: () -> Unit) {
             return
         }
         val report = WidgetCapability.report(context)
-        when {
-            report.canAttemptAutoPin -> {
-                val pinned = WidgetHelper.requestPinWidget(context)
-                if (!pinned) {
-                    guideDialogMessage = report.blockingReason(context)
-                    guideDialogPermissionType = null
-                    showGuideDialog = true
-                }
+
+        // 先尝试自动添加（即使是厂商设备也尝试，让系统决定是否支持）
+        if (report.canAutoPin) {
+            val pinned = WidgetHelper.requestPinWidget(context)
+            if (pinned) {
+                // 系统接受了请求，等待用户确认放置后 WidgetPinResultReceiver 回调
+                Toast.makeText(
+                    context,
+                    "请在系统弹窗中确认添加小组件",
+                    Toast.LENGTH_SHORT
+                ).show()
+                return
             }
-            else -> {
-                guideDialogMessage = report.blockingReason(context)
-                guideDialogPermissionType = null
-                showGuideDialog = true
-            }
+            // requestPinAppWidget 返回 false：系统不支持或请求失败
+            // 降级到引导
         }
+
+        // 降级：显示引导文案
+        guideDialogMessage = report.blockingReason(context)
+        guideDialogPermissionType = null
+        showGuideDialog = true
     }
 
     val requiredItems = items.filter { it.level == PermissionLevel.REQUIRED }

@@ -17,6 +17,10 @@ import com.taskflow.app.permission.PermissionManager
  * 1. 状态只信任系统 API（AppWidgetManager / PowerManager），不信任任何本地缓存
  * 2. 引导文案对所有国产 ROM 给出可操作的文字教程
  * 3. 所有跳转都直达**具体权限页**，绝不返回设置首页
+ *
+ * v6 修复：厂商设备也尝试 requestPinAppWidget。
+ * 华为/小米等设备并非完全不支持自动添加，只是部分旧 ROM 或特殊 Launcher 不支持。
+ * 正确做法：先尝试 requestPinAppWidget，失败后再根据 vendorRestricted 显示厂商引导。
  */
 object WidgetCapability {
 
@@ -32,11 +36,14 @@ object WidgetCapability {
         val launcherSupported: Boolean,
         val batteryOptimized: Boolean
     ) {
-        /** 派生字段：是否可以尝试 requestPinAppWidget */
+        /** 派生字段：是否可以尝试 requestPinAppWidget
+         *  只要 API 支持 + Launcher 支持 + 桌面无 Widget，就可以尝试。
+         *  不再因厂商限制而跳过尝试——让系统自己决定是否支持。 */
         val canAttemptAutoPin: Boolean get() = canAutoPin && !alreadyPlaced
 
-        /** 派生字段：是否需要手动引导 */
-        val needsManualGuide: Boolean get() = vendorRestricted || !launcherSupported
+        /** 派生字段：是否需要手动引导
+         *  当自动添加不可行时，判断是否需要厂商特定引导。 */
+        val needsManualGuide: Boolean get() = !canAutoPin || vendorRestricted
 
         /** 兼容 SettingsScreen 的字段名 */
         val widgetAlreadyPlaced: Boolean get() = alreadyPlaced
@@ -89,8 +96,14 @@ object WidgetCapability {
         val vendorName = Build.MANUFACTURER?.lowercase()
         val vendorRestricted = vendorName in restrictedVendors
 
+        // v6 修复：canAutoPin 不再因厂商限制而跳过。
+        // 只要 API 支持 + Launcher 支持，就尝试 requestPinAppWidget。
+        // 华为/小米等设备的部分 Launcher 确实支持自动添加，
+        // 让系统自己返回成功/失败，而不是我们预判。
+        val canAutoPin = apiSupported && launcherSupported
+
         return WidgetReport(
-            canAutoPin = apiSupported && launcherSupported && !vendorRestricted,
+            canAutoPin = canAutoPin,
             alreadyPlaced = alreadyPlaced,
             vendorRestricted = vendorRestricted,
             vendorName = vendorName?.replaceFirstChar { it.uppercase() },
