@@ -2,6 +2,7 @@ package com.taskflow.app.widget
 
 import android.content.Context
 import android.content.Intent
+import android.util.Log
 import android.widget.RemoteViews
 import android.widget.RemoteViewsService
 import com.taskflow.app.MainActivity
@@ -11,6 +12,8 @@ import com.taskflow.app.data.repository.TaskRepository
 import kotlinx.coroutines.runBlocking
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+
+private const val TAG = "WidgetListService"
 
 /**
  * Backs the widget's scrollable [android.widget.ListView].
@@ -22,10 +25,19 @@ import java.time.format.DateTimeFormatter
  */
 class TaskListRemoteViewsService : RemoteViewsService() {
 
-    override fun onGetViewFactory(intent: Intent): RemoteViewsFactory =
-        TaskListFactory(applicationContext)
+    override fun onGetViewFactory(intent: Intent): RemoteViewsFactory {
+        val widgetId = intent.getIntExtra(
+            android.appwidget.AppWidgetManager.EXTRA_APPWIDGET_ID,
+            android.appwidget.AppWidgetManager.INVALID_APPWIDGET_ID
+        )
+        Log.d(TAG, "onGetViewFactory: widgetId=$widgetId")
+        return TaskListFactory(applicationContext, widgetId)
+    }
 
-    private class TaskListFactory(private val context: Context) : RemoteViewsFactory {
+    private class TaskListFactory(
+        private val context: Context,
+        private val widgetId: Int
+    ) : RemoteViewsFactory {
 
         private val timeFmt = DateTimeFormatter.ofPattern("HH:mm")
         private val dayFmt = DateTimeFormatter.ofPattern("MM/dd")
@@ -34,18 +46,34 @@ class TaskListRemoteViewsService : RemoteViewsService() {
         @Volatile
         private var tasks: List<Task> = emptyList()
 
-        override fun onCreate() { /* no-op */ }
+        override fun onCreate() {
+            Log.d(TAG, "factory[$widgetId].onCreate")
+        }
 
-        override fun onDestroy() { /* no-op */ }
+        override fun onDestroy() {
+            Log.d(TAG, "factory[$widgetId].onDestroy")
+        }
 
         override fun onDataSetChanged() {
             // Runs on a background thread; blocking read is safe and standard here.
-            tasks = runBlocking { TaskRepository.get(context).getPinnedPending() }
+            Log.d(TAG, "factory[$widgetId].onDataSetChanged: querying Room...")
+            tasks = try {
+                runBlocking { TaskRepository.get(context).getPinnedPending() }
+            } catch (e: Throwable) {
+                Log.e(TAG, "factory[$widgetId].onDataSetChanged: Room query failed", e)
+                emptyList()
+            }
+            Log.d(TAG, "factory[$widgetId].onDataSetChanged: tasks=${tasks.size}")
         }
 
-        override fun getCount(): Int = tasks.size
+        override fun getCount(): Int {
+            val count = tasks.size
+            Log.d(TAG, "factory[$widgetId].getCount=$count")
+            return count
+        }
 
         override fun getViewAt(position: Int): RemoteViews {
+            Log.d(TAG, "factory[$widgetId].getViewAt($position)")
             if (position >= tasks.size) return loadingView()
             val task = tasks[position]
             val views = RemoteViews(context.packageName, R.layout.widget_task_item)

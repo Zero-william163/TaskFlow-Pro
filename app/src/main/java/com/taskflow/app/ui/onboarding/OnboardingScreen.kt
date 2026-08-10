@@ -224,7 +224,13 @@ fun OnboardingScreen(onComplete: () -> Unit) {
                                 report.canAttemptAutoPin -> {
                                     val pinned = com.taskflow.app.widget.WidgetHelper.requestPinWidget(context)
                                     if (!pinned) {
-                                        widgetGuideMessage = "系统未弹出添加面板，可能需要先开启创建小组件的权限。"
+                                        val err = com.taskflow.app.widget.WidgetHelper.lastPinError
+                                        val diag = com.taskflow.app.widget.WidgetHelper.lastPinDiagnostic
+                                        widgetGuideMessage = if (err != null) {
+                                            "自动添加失败：${err.javaClass.simpleName}\n原因：${err.message}\n\n诊断：$diag"
+                                        } else {
+                                            "系统未弹出添加面板（当前 Launcher 可能不支持自动添加）。\n\n诊断：$diag"
+                                        }
                                         showWidgetGuideDialog = true
                                     }
                                 }
@@ -279,7 +285,8 @@ fun OnboardingScreen(onComplete: () -> Unit) {
                         )
                     }
                     Text(
-                        "请前往系统设置开启「允许创建小组件」权限，然后返回本应用重试。",
+                        "Android 没有专门的「小组件权限」。如系统未弹出添加面板，请手动添加：\n" +
+                            "长按桌面空白处 → 选择「小组件」→ 找到 TaskFlow → 拖拽到桌面。",
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.SemiBold
                     )

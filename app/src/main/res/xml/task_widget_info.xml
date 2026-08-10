@@ -13,6 +13,4 @@
     android:widgetCategory="home_screen"
     android:previewLayout="@layout/widget_preview"
     android:updatePeriodMillis="1800000"
-    android:configure=""
-    android:description="@string/app_tagline"
-    android:widgetFeatures="reconfigurable|configuration_optional" />
+    android:description="@string/app_tagline" />

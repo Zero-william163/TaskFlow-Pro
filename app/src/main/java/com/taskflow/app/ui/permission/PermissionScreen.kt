@@ -185,8 +185,10 @@ fun PermissionScreen(onBack: () -> Unit) {
     }
 
     fun addWidget() {
+        android.util.Log.d("PermissionScreen", "addWidget clicked")
         // 禁止重复创建：先通过系统 API 确认桌面是否已有 Widget
         if (WidgetHelper.isWidgetPlaced(context)) {
+            android.util.Log.d("PermissionScreen", "addWidget: widget already placed, skip")
             Toast.makeText(
                 context,
                 context.getString(R.string.permission_widget_already_placed),
@@ -196,21 +198,54 @@ fun PermissionScreen(onBack: () -> Unit) {
             return
         }
         val report = WidgetCapability.report(context)
+        android.util.Log.d("PermissionScreen",
+            "addWidget: canAutoPin=${report.canAutoPin}, " +
+            "launcherSupported=${report.launcherSupported}, " +
+            "vendor=${report.vendorName}, vendorRestricted=${report.vendorRestricted}")
 
         // 先尝试自动添加（即使是厂商设备也尝试，让系统决定是否支持）
         if (report.canAutoPin) {
             val pinned = WidgetHelper.requestPinWidget(context)
+            android.util.Log.d("PermissionScreen", "addWidget: requestPinWidget returned $pinned")
             if (pinned) {
-                // 系统接受了请求，等待用户确认放置后 WidgetPinResultReceiver 回调
-                Toast.makeText(
-                    context,
-                    "请在系统弹窗中确认添加小组件",
-                    Toast.LENGTH_SHORT
-                ).show()
+                // 系统接受了请求，但**不代表 Widget 真正创建**。
+                // 关键修复：不再只弹 Toast 就 return，而是同时显示引导 Dialog，
+                // 告知用户"如果系统没弹确认窗请用手动添加"，避免用户感知为"没反应"。
+                val err = WidgetHelper.lastPinError
+                guideDialogMessage = if (err != null) {
+                    "系统接受了添加请求，但发生异常：${err.javaClass.simpleName}: ${err.message}\n\n" +
+                        "如果桌面没有弹出确认框，请手动添加：\n" +
+                        "长按桌面 → 小组件 → TaskFlow → 拖到桌面"
+                } else {
+                    "系统正在请求添加小组件。\n\n" +
+                        "请在桌面弹出的系统确认框中点击「添加」。\n\n" +
+                        "如果未弹出确认框（部分华为/小米 ROM 会拦截自动添加），" +
+                        "请手动添加：\n长按桌面 → 小组件 → TaskFlow → 拖到桌面"
+                }
+                guideDialogPermissionType = null
+                showGuideDialog = true
                 return
             }
             // requestPinAppWidget 返回 false：系统不支持或请求失败
-            // 降级到引导
+            // 降级到引导，并显示诊断信息
+            val err = WidgetHelper.lastPinError
+            val diag = WidgetHelper.lastPinDiagnostic
+            android.util.Log.w("PermissionScreen",
+                "addWidget: requestPinWidget failed, error=$err, diagnostic=$diag")
+            guideDialogMessage = if (err != null) {
+                "添加失败：${err.javaClass.simpleName}\n原因：${err.message}\n\n" +
+                    "诊断：$diag\n\n" +
+                    "请手动添加：\n长按桌面 → 小组件 → TaskFlow → 拖到桌面"
+            } else if (!report.launcherSupported) {
+                "当前桌面启动器不支持应用内自动添加小组件。\n\n" +
+                    "请手动添加：\n长按桌面 → 小组件 → TaskFlow → 拖到桌面\n\n" +
+                    "诊断：$diag"
+            } else {
+                report.blockingReason(context) + "\n\n诊断：$diag"
+            }
+            guideDialogPermissionType = null
+            showGuideDialog = true
+            return
         }
 
         // 降级：显示引导文案

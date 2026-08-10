@@ -8,6 +8,26 @@ The GitHub Actions release workflow extracts the section matching the pushed tag
 (e.g. `## v1.0.0`) and uses it as the GitHub / Gitee release notes, and embeds it
 into `release.json` as the `log` field consumed by the in-app updater.
 
+## v2.1.1
+
+### 修复 — Widget「点击添加无反应」+ 静默吞异常 + 元数据矛盾
+
+#### 真实根因
+1. **`WidgetHelper.requestPinWidget()` 静默吞掉所有异常**：`catch (_: Throwable) { false }` 用 `_` 丢弃异常对象，Logcat 完全看不到 `SecurityException` / `IllegalArgumentException`，叠加 `pinned==true` 时只弹 Toast 直接 return，用户感知为"点击没反应"
+2. **`task_widget_info.xml` 元数据自相矛盾**：`android:configure=""`（空字符串非合法值）+ `widgetFeatures="reconfigurable"`（声明可重配置但 configure 指向空），部分国产 Launcher 行为异常
+3. **`addWidget()` 全链路无日志**：无法从 Logcat 还原 `isRequestPinAppWidgetSupported` / `requestPinAppWidget` 返回值 / 当前 Launcher 包名等关键诊断信息
+4. **`UserPreferences.widgetAdded` 死代码残留**：Widget 状态本应由 `AppWidgetManager.getAppWidgetIds()` 实时查询，但 `widgetAdded` Key/Flow/setter 未清理彻底
+
+#### 修复项
+1. **暴露异常 + 诊断字段**：`WidgetHelper.requestPinWidget()` 改为打印完整 stacktrace 到 Logcat，同时暴露 `lastPinError` / `lastPinDiagnostic` 两个 @Volatile 字段供 UI 读取
+2. **新增 `getLauncherPackage()`**：诊断日志记录当前默认 Launcher 包名，便于区分「Launcher 不支持」还是「异常失败」
+3. **`PermissionScreen.addWidget()` 优化**：`pinned==true` 不再只弹 Toast 直接 return，改为同时显示引导 Dialog；`pinned==false` 显示异常类型 + 诊断信息
+4. **`task_widget_info.xml` 修复**：删除 `android:configure=""` 和 `widgetFeatures="reconfigurable|configuration_optional"`，元数据与代码（无配置 Activity）一致
+5. **移除 `UserPreferences.widgetAdded` 死代码**：删除 Key / Flow / setWidgetAdded()，彻底消除双源不一致风险
+6. **修正 Onboarding 误导文案**：不再提示"开启允许创建小组件权限"，改为说明 Android 无小组件权限，给出手动添加步骤
+7. **全链路调试日志**：`TaskWidgetProvider` / `WidgetPinResultReceiver` / `TaskListRemoteViewsService` / `WidgetHelper.buildViews` / `refresh` 全部添加分隔线 + ✅/❌ 标记日志，Logcat 过滤 `WidgetHelper|WidgetProvider|WidgetPinCallback|WidgetListService|PermissionScreen` 即可还原完整链路
+8. **国内镜像仓库前置**：`settings.gradle.kts` 把阿里云 / 腾讯云镜像放在 `google()` / `mavenCentral()` 之前，国内构建更稳定
+
 ## v2.1.0
 
 ### 增强 — 桌面滑动小组件 + 受限设置精准引导

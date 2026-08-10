@@ -17,15 +17,17 @@ class TaskWidgetProvider : AppWidgetProvider() {
     private val scope = CoroutineScope(Dispatchers.Default)
 
     override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
-        Log.d(TAG, "onUpdate: ids=${appWidgetIds.toList()}")
+        Log.d(TAG, "================ onUpdate ================")
+        Log.d(TAG, "onUpdate: ids=${appWidgetIds.toList()}, count=${appWidgetIds.size}")
         appWidgetIds.forEach { id ->
             scope.launch {
                 try {
+                    Log.d(TAG, "onUpdate: building views for widget $id...")
                     val views = WidgetHelper.buildForId(context, id)
                     appWidgetManager.updateAppWidget(id, views)
-                    Log.d(TAG, "onUpdate: widget $id updated")
+                    Log.d(TAG, "onUpdate: ✅ widget $id updated successfully")
                 } catch (e: Throwable) {
-                    Log.e(TAG, "onUpdate: widget $id failed", e)
+                    Log.e(TAG, "onUpdate: ❌ widget $id failed", e)
                 }
             }
         }
@@ -37,11 +39,12 @@ class TaskWidgetProvider : AppWidgetProvider() {
         appWidgetId: Int,
         newOptions: android.os.Bundle
     ) {
-        Log.d(TAG, "onAppWidgetOptionsChanged: id=$appWidgetId")
+        Log.d(TAG, "onAppWidgetOptionsChanged: id=$appWidgetId, options=$newOptions")
         scope.launch {
             try {
                 val views = WidgetHelper.buildForId(context, appWidgetId)
                 appWidgetManager.updateAppWidget(appWidgetId, views)
+                Log.d(TAG, "onAppWidgetOptionsChanged: widget $appWidgetId rebuilt")
             } catch (e: Throwable) {
                 Log.e(TAG, "onAppWidgetOptionsChanged: failed", e)
             }
@@ -52,31 +55,38 @@ class TaskWidgetProvider : AppWidgetProvider() {
     // Widget 放置状态唯一可信源是 AppWidgetManager.getAppWidgetIds()，
     // 由 WidgetHelper.isWidgetPlaced() 实时读取，避免本地缓存与系统状态不一致。
     override fun onEnabled(context: Context) {
-        Log.d(TAG, "onEnabled: first widget placed (state tracked via system API)")
+        Log.d(TAG, "================ onEnabled ================")
+        Log.d(TAG, "onEnabled: ✅ 首个 Widget 被放置到桌面 (state tracked via system API)")
     }
 
     override fun onDeleted(context: Context, appWidgetIds: IntArray) {
+        Log.d(TAG, "================ onDeleted ================")
         Log.d(TAG, "onDeleted: ids=${appWidgetIds.toList()}")
         super.onDeleted(context, appWidgetIds)
     }
 
     override fun onDisabled(context: Context) {
-        Log.d(TAG, "onDisabled: last widget removed (state tracked via system API)")
+        Log.d(TAG, "================ onDisabled ================")
+        Log.d(TAG, "onDisabled: 所有 Widget 已从桌面移除 (state tracked via system API)")
     }
 
     override fun onReceive(context: Context, intent: Intent) {
-        Log.d(TAG, "onReceive: action=${intent.action}")
+        Log.d(TAG, "onReceive: action=${intent.action}, extras=${intent.extras}")
         super.onReceive(context, intent)
         when (intent.action) {
             ACTION_TASKS_CHANGED, ACTION_WIDGET_REFRESH -> WidgetHelper.refresh(context)
             ACTION_TOGGLE_TASK -> {
                 val taskId = intent.getLongExtra(EXTRA_TASK_ID, -1L)
+                Log.d(TAG, "onReceive: TOGGLE_TASK taskId=$taskId")
                 if (taskId > 0) {
                     scope.launch {
                         val repo = TaskRepository.get(context)
                         val task = repo.getTask(taskId)
                         if (task != null) {
                             repo.setCompleted(task, !task.isCompleted)
+                            Log.d(TAG, "onReceive: task $taskId toggled to ${!task.isCompleted}")
+                        } else {
+                            Log.w(TAG, "onReceive: task $taskId not found")
                         }
                     }
                 }

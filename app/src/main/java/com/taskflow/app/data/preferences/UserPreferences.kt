@@ -22,7 +22,6 @@ class UserPreferences private constructor(private val context: Context) {
         val THEME_MODE = stringPreferencesKey("theme_mode")
         val DYNAMIC_COLOR = booleanPreferencesKey("dynamic_color")
         val WIDGET_GUIDE_SHOWN = booleanPreferencesKey("widget_guide_shown")
-        val WIDGET_ADDED = booleanPreferencesKey("widget_added")
         val IGNORED_UPDATE = stringPreferencesKey("ignored_update_version")
         val LAST_UPDATE_CHECK_TIME = longPreferencesKey("last_update_check_time")
         val ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
@@ -37,9 +36,6 @@ class UserPreferences private constructor(private val context: Context) {
 
     val widgetGuideShown: Flow<Boolean> =
         context.dataStore.data.map { it[Keys.WIDGET_GUIDE_SHOWN] ?: false }
-
-    val widgetAdded: Flow<Boolean> =
-        context.dataStore.data.map { it[Keys.WIDGET_ADDED] ?: false }
 
     val ignoredUpdateVersion: Flow<String?> =
         context.dataStore.data.map { it[Keys.IGNORED_UPDATE] }
@@ -60,10 +56,6 @@ class UserPreferences private constructor(private val context: Context) {
 
     suspend fun setWidgetGuideShown(shown: Boolean) {
         context.dataStore.edit { it[Keys.WIDGET_GUIDE_SHOWN] = shown }
-    }
-
-    suspend fun setWidgetAdded(added: Boolean) {
-        context.dataStore.edit { it[Keys.WIDGET_ADDED] = added }
     }
 
     suspend fun setIgnoredUpdateVersion(version: String?) {

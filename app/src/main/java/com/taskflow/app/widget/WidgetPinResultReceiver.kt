@@ -24,7 +24,9 @@ private const val TAG = "WidgetPinCallback"
 class WidgetPinResultReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
+        Log.d(TAG, "================ PinResult onReceive ================")
         Log.d(TAG, "onReceive: action=${intent.action}")
+        Log.d(TAG, "onReceive: extras=${intent.extras}")
 
         val ids = intent.getIntArrayExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS)
         val singleId = intent.getIntExtra(
@@ -32,42 +34,51 @@ class WidgetPinResultReceiver : BroadcastReceiver() {
             AppWidgetManager.INVALID_APPWIDGET_ID
         )
 
-        Log.d(TAG, "onReceive: ids=${ids?.toList()}, singleId=$singleId")
+        Log.d(TAG, "onReceive: EXTRA_APPWIDGET_IDS=${ids?.toList()}, " +
+            "EXTRA_APPWIDGET_ID=$singleId, " +
+            "INVALID_APPWIDGET_ID=${AppWidgetManager.INVALID_APPWIDGET_ID}")
 
         // 系统在用户确认放置后才会传递有效的 widget id
         val hasValidId = (ids != null && ids.isNotEmpty()) ||
             singleId != AppWidgetManager.INVALID_APPWIDGET_ID
 
         if (!hasValidId) {
-            Log.w(TAG, "onReceive: no valid widget id, user may have cancelled")
+            Log.w(TAG, "onReceive: no valid widget id → 用户可能取消了系统确认弹窗，" +
+                "或厂商 ROM 静默拒绝了请求")
             return
         }
 
         // 二次验证：通过系统 API 确认 Widget 真实存在
         val manager = AppWidgetManager.getInstance(context)
-        val actualIds = manager.getAppWidgetIds(
-            ComponentName(context, TaskWidgetProvider::class.java)
-        )
-        Log.d(TAG, "onReceive: actual appWidgetIds from system=${actualIds.toList()}")
-
-        if (actualIds.isEmpty()) {
-            Log.w(TAG, "onReceive: system reports no widget, treating as failed")
+        val provider = ComponentName(context, TaskWidgetProvider::class.java)
+        val actualIds = try {
+            manager.getAppWidgetIds(provider)
+        } catch (e: Throwable) {
+            Log.e(TAG, "onReceive: getAppWidgetIds failed", e)
             return
         }
+        Log.d(TAG, "onReceive: provider=${provider.flattenToShortString()}, " +
+            "actual appWidgetIds from system=${actualIds.toList()}")
+
+        if (actualIds.isEmpty()) {
+            Log.w(TAG, "onReceive: 系统回调传了 widget id，但 getAppWidgetIds 返回空 → " +
+                "Launcher 接受了请求但未真正创建 Widget（部分国产 ROM 行为）")
+            return
+        }
+
+        Log.d(TAG, "onReceive: ✅ Widget 确认创建成功，widgetCount=${actualIds.size}")
 
         val pendingResult = goAsync()
         CoroutineScope(Dispatchers.Default).launch {
             try {
-                // 不再写入本地缓存——状态由系统 API 实时提供，避免双源不一致。
-                Log.d(TAG, "onReceive: widget confirmed by system (state tracked via AppWidgetManager)")
-
-                // 刷新 Widget 显示
+                Log.d(TAG, "onReceive: 触发 WidgetHelper.refresh 让新 Widget 渲染内容")
                 WidgetHelper.refresh(context)
-                Log.d(TAG, "onReceive: refresh triggered")
+                Log.d(TAG, "onReceive: refresh 完成")
             } catch (e: Throwable) {
-                Log.e(TAG, "onReceive: error", e)
+                Log.e(TAG, "onReceive: refresh 异常", e)
             } finally {
                 pendingResult.finish()
+                Log.d(TAG, "onReceive: pendingResult.finish() called")
             }
         }
     }
