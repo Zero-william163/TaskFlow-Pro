@@ -221,6 +221,11 @@
     <string name="settings_widget_status_not_added">状态：未添加（点击下方按钮添加）</string>
     <string name="settings_widget_prompt_success">请在系统弹窗中确认添加小组件</string>
 
+    <string name="widget_mark_complete_title">标记任务完成</string>
+    <string name="widget_mark_complete_message">是否将「%1$s」标记为已完成？</string>
+    <string name="widget_mark_complete_yes">标记完成</string>
+    <string name="widget_mark_complete_no">取消</string>
+
     <!-- Categories -->
     <string name="category_default">默认</string>
     <string name="category_work">工作</string>

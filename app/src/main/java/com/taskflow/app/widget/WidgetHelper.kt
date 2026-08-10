@@ -217,7 +217,7 @@ object WidgetHelper {
             throw e
         }
         val template = Intent(context, MainActivity::class.java).apply {
-            action = MainActivity.ACTION_OPEN_TASK
+            action = MainActivity.ACTION_MARK_COMPLETE
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         }
         val templatePi = try {

@@ -24,6 +24,7 @@ import kotlinx.coroutines.launch
 class MainActivity : ComponentActivity() {
 
     private var openTaskId = mutableStateOf<Long?>(null)
+    private var markCompleteTaskId = mutableStateOf<Long?>(null)
     private var lastBackgroundTime = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -78,9 +79,12 @@ class MainActivity : ComponentActivity() {
                     })
                 } else {
                     val taskToOpen by remember { openTaskId }
+                    val markCompleteId by remember { markCompleteTaskId }
                     TaskFlowNavHost(
                         openTaskId = taskToOpen,
-                        onTaskConsumed = { openTaskId.value = null }
+                        markCompleteTaskId = markCompleteId,
+                        onTaskConsumed = { openTaskId.value = null },
+                        onMarkCompleteConsumed = { markCompleteTaskId.value = null }
                     )
                 }
             }
@@ -104,11 +108,20 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun consumeIntent(intent: Intent?) {
-        if (intent?.action == ACTION_OPEN_TASK) {
-            val id = intent.getLongExtra(EXTRA_TASK_ID, -1L)
-            if (id > 0L) {
-                openTaskId.value = id
-                Log.d(TAG, "consumeIntent: setting openTaskId=$id")
+        when (intent?.action) {
+            ACTION_OPEN_TASK -> {
+                val id = intent.getLongExtra(EXTRA_TASK_ID, -1L)
+                if (id > 0L) {
+                    openTaskId.value = id
+                    Log.d(TAG, "consumeIntent: setting openTaskId=$id")
+                }
+            }
+            ACTION_MARK_COMPLETE -> {
+                val id = intent.getLongExtra(EXTRA_TASK_ID, -1L)
+                if (id > 0L) {
+                    markCompleteTaskId.value = id
+                    Log.d(TAG, "consumeIntent: setting markCompleteTaskId=$id")
+                }
             }
         }
     }
@@ -116,6 +129,7 @@ class MainActivity : ComponentActivity() {
     companion object {
         private const val TAG = "TaskFlow-Pro"
         const val ACTION_OPEN_TASK = "com.taskflow.app.action.OPEN_TASK"
+        const val ACTION_MARK_COMPLETE = "com.taskflow.app.action.MARK_COMPLETE"
         const val EXTRA_TASK_ID = "extra_task_id"
     }
 }

@@ -135,8 +135,9 @@ class TaskListRemoteViewsService : RemoteViewsService() {
                     Log.e(TAG, "factory[$widgetId].getViewAt($position): toggle PendingIntent FAILED", e)
                 }
 
-                // Per-item click → open the task's detail page. The ListView carries the
-                // template PendingIntent (set by WidgetHelper); we only fill in the id.
+                // Per-item click → ask user to mark the task as complete. The ListView
+                // carries the template PendingIntent (set by WidgetHelper) with
+                // action ACTION_MARK_COMPLETE; we only fill in the task id.
                 try {
                     val fillIn = Intent().apply {
                         putExtra(MainActivity.EXTRA_TASK_ID, task.id)

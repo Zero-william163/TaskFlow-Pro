@@ -1,10 +1,9 @@
 package com.taskflow.app.ui.navigation
 
+import android.util.Log
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
@@ -23,6 +22,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -38,6 +38,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.taskflow.app.R
+import com.taskflow.app.data.repository.TaskRepository
 import com.taskflow.app.ui.AppViewModelFactory
 import com.taskflow.app.ui.calendar.CalendarScreen
 import com.taskflow.app.ui.home.HomeScreen
@@ -47,16 +48,25 @@ import com.taskflow.app.ui.stats.StatsScreen
 import com.taskflow.app.ui.task.TaskDetailScreen
 import com.taskflow.app.ui.update.UpdateScreen
 import com.taskflow.app.ui.update.UpdateViewModel
+import com.taskflow.app.widget.WidgetHelper
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+private const val TAG = "TaskFlowNavHost"
 
 @Composable
 fun TaskFlowNavHost(
     openTaskId: Long? = null,
-    onTaskConsumed: () -> Unit = {}
+    markCompleteTaskId: Long? = null,
+    onTaskConsumed: () -> Unit = {},
+    onMarkCompleteConsumed: () -> Unit = {}
 ) {
     val navController = rememberNavController()
     val backStack by navController.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     // ====== Auto update check on startup (silent, 24h-throttled) ======
     val updateViewModel: UpdateViewModel = viewModel(factory = AppViewModelFactory)
@@ -66,7 +76,6 @@ fun TaskFlowNavHost(
     }
 
     // ====== Lifecycle safety: dismiss auto-update dialog on background ======
-    // This prevents a stale AlertDialog from blocking touch events after resume.
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
         if (autoUpdateInfo != null) {
             updateViewModel.dismissAutoUpdate()
@@ -74,9 +83,11 @@ fun TaskFlowNavHost(
     }
 
     // ====== Guard for LaunchedEffect(openTaskId): track already-navigated IDs
-    // to prevent duplicate navigation when the Activity is resumed from background
-    // and the LaunchedEffect re-triggers with the same key. ======
+    // to prevent duplicate navigation when the Activity is resumed ======
     var navigatedTaskId by remember { mutableStateOf<Long?>(null) }
+
+    // ====== Track which mark-complete dialog IDs have already been shown ======
+    var shownMarkCompleteIds by remember { mutableStateOf(setOf<Long>()) }
 
     val showBottomBar = currentRoute in bottomItems.map { it.route }
 
@@ -152,8 +163,7 @@ fun TaskFlowNavHost(
         }
 
         // ====== Guarded navigation: only navigate if this taskId hasn't been
-        // navigated to yet. Prevents duplicate navigation when the Activity is
-        // resumed from background and the LaunchedEffect re-fires. ======
+        // navigated to yet. Prevents duplicate navigation on resume. ======
         LaunchedEffect(openTaskId) {
             openTaskId?.let { id ->
                 if (id != navigatedTaskId) {
@@ -189,6 +199,62 @@ fun TaskFlowNavHost(
             dismissButton = {
                 TextButton(onClick = { updateViewModel.dismissAutoUpdate() }) {
                     Text(stringResource(R.string.update_later))
+                }
+            }
+        )
+    }
+
+    // ====== Mark-complete confirmation dialog (triggered by widget card click) ======
+    val showMarkCompleteDialog = markCompleteTaskId != null && markCompleteTaskId !in shownMarkCompleteIds
+    if (showMarkCompleteDialog) {
+        val taskId = markCompleteTaskId!!
+        // Fetch task title for the dialog message
+        var taskTitle by remember { mutableStateOf("") }
+        LaunchedEffect(taskId) {
+            val task = withContext(Dispatchers.IO) {
+                TaskRepository.get(context).getTask(taskId)
+            }
+            taskTitle = task?.title ?: ""
+        }
+
+        AlertDialog(
+            onDismissRequest = {
+                shownMarkCompleteIds = shownMarkCompleteIds + taskId
+                onMarkCompleteConsumed()
+            },
+            title = { Text(stringResource(R.string.widget_mark_complete_title)) },
+            text = {
+                Text(
+                    stringResource(R.string.widget_mark_complete_message, taskTitle.ifBlank { "该任务" }),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    scope.launch {
+                        Log.d(TAG, "markComplete: confirming taskId=$taskId")
+                        val repo = TaskRepository.get(context)
+                        val task = withContext(Dispatchers.IO) { repo.getTask(taskId) }
+                        if (task != null) {
+                            withContext(Dispatchers.IO) {
+                                repo.setCompleted(task, true)
+                            }
+                            Log.d(TAG, "markComplete: task $taskId marked as completed")
+                            WidgetHelper.refresh(context)
+                        }
+                        shownMarkCompleteIds = shownMarkCompleteIds + taskId
+                        onMarkCompleteConsumed()
+                    }
+                }) {
+                    Text(stringResource(R.string.widget_mark_complete_yes))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    shownMarkCompleteIds = shownMarkCompleteIds + taskId
+                    onMarkCompleteConsumed()
+                }) {
+                    Text(stringResource(R.string.widget_mark_complete_no))
                 }
             }
         )
