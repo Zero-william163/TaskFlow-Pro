@@ -76,43 +76,76 @@ class TaskListRemoteViewsService : RemoteViewsService() {
             Log.d(TAG, "factory[$widgetId].getViewAt($position)")
             if (position >= tasks.size) return loadingView()
             val task = tasks[position]
-            val views = RemoteViews(context.packageName, R.layout.widget_task_item)
+            return try {
+                val views = RemoteViews(context.packageName, R.layout.widget_task_item)
+                Log.d(TAG, "factory[$widgetId].getViewAt($position): widget_task_item inflate OK")
 
-            views.setTextViewText(R.id.item_title, task.title)
+                try {
+                    views.setTextViewText(R.id.item_title, task.title)
+                } catch (e: Throwable) {
+                    Log.e(TAG, "factory[$widgetId].getViewAt($position): R.id.item_title FAILED", e)
+                }
 
-            val meta = task.dueDate?.let { describeTime(it) }
-            if (meta != null) {
-                views.setViewVisibility(R.id.item_meta, android.view.View.VISIBLE)
-                views.setTextViewText(R.id.item_meta, meta)
-            } else {
-                views.setViewVisibility(R.id.item_meta, android.view.View.GONE)
+                val meta = try {
+                    task.dueDate?.let { describeTime(it) }
+                } catch (e: Throwable) {
+                    Log.e(TAG, "factory[$widgetId].getViewAt($position): describeTime FAILED", e)
+                    null
+                }
+                if (meta != null) {
+                    views.setViewVisibility(R.id.item_meta, android.view.View.VISIBLE)
+                    try {
+                        views.setTextViewText(R.id.item_meta, meta)
+                    } catch (e: Throwable) {
+                        Log.e(TAG, "factory[$widgetId].getViewAt($position): R.id.item_meta FAILED", e)
+                    }
+                } else {
+                    views.setViewVisibility(R.id.item_meta, android.view.View.GONE)
+                }
+
+                try {
+                    views.setImageViewResource(R.id.item_check, R.drawable.widget_check_circle)
+                } catch (e: Throwable) {
+                    Log.e(TAG, "factory[$widgetId].getViewAt($position): R.id.item_check drawable FAILED", e)
+                }
+
+                // Checkbox click → broadcast to toggle task completion directly from widget.
+                try {
+                    val toggleIntent = Intent(TaskWidgetProvider.ACTION_TOGGLE_TASK).apply {
+                        setPackage(context.packageName)
+                        putExtra(TaskWidgetProvider.EXTRA_TASK_ID, task.id)
+                    }
+                    views.setOnClickPendingIntent(
+                        R.id.item_check,
+                        android.app.PendingIntent.getBroadcast(
+                            context,
+                            task.id.toInt(),
+                            toggleIntent,
+                            android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT
+                        )
+                    )
+                } catch (e: Throwable) {
+                    Log.e(TAG, "factory[$widgetId].getViewAt($position): toggle PendingIntent FAILED", e)
+                }
+
+                // Per-item click → open the task's detail page. The ListView carries the
+                // template PendingIntent (set by WidgetHelper); we only fill in the id.
+                try {
+                    val fillIn = Intent().apply {
+                        putExtra(MainActivity.EXTRA_TASK_ID, task.id)
+                    }
+                    views.setOnClickFillInIntent(R.id.widget_item_root, fillIn)
+                } catch (e: Throwable) {
+                    Log.e(TAG, "factory[$widgetId].getViewAt($position): fillIn FAILED", e)
+                }
+
+                Log.d(TAG, "factory[$widgetId].getViewAt($position): ✅ OK")
+                views
+            } catch (e: Throwable) {
+                // 顶层兜底：任何 getViewAt 失败 → 返回 loading_view（空壳）不抛异常
+                Log.e(TAG, "factory[$widgetId].getViewAt($position): ❌ 外层失败 → 返回 loadingView()", e)
+                loadingView()
             }
-
-            views.setImageViewResource(R.id.item_check, R.drawable.widget_check_circle)
-
-            // Checkbox click → broadcast to toggle task completion directly from widget.
-            val toggleIntent = Intent(TaskWidgetProvider.ACTION_TOGGLE_TASK).apply {
-                setPackage(context.packageName)
-                putExtra(TaskWidgetProvider.EXTRA_TASK_ID, task.id)
-            }
-            views.setOnClickPendingIntent(
-                R.id.item_check,
-                android.app.PendingIntent.getBroadcast(
-                    context,
-                    task.id.toInt(),
-                    toggleIntent,
-                    android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT
-                )
-            )
-
-            // Per-item click → open the task's detail page. The ListView carries the
-            // template PendingIntent (set by WidgetHelper); we only fill in the id.
-            val fillIn = Intent().apply {
-                putExtra(MainActivity.EXTRA_TASK_ID, task.id)
-            }
-            views.setOnClickFillInIntent(R.id.widget_item_root, fillIn)
-
-            return views
         }
 
         override fun getLoadingView(): RemoteViews? = null

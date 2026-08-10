@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  最小化测试布局：仅使用 RemoteViews 100% 支持的原生组件
+  不包含 ListView、Material 组件、自定义 View、复杂属性
+  如果这个布局能显示：说明问题在 ListView / Room / RemoteViewsService / 复杂布局
+  如果这个布局也显示 Problem loading：说明问题在 drawable / color / Provider / Launcher 本身
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:background="#FFFFFF"
+    android:padding="16dp">
+
+    <TextView
+        android:id="@+id/test_text"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="TaskFlow Widget Test"
+        android:textColor="#000000"
+        android:textSize="16sp"
+        android:textStyle="bold" />
+
+</LinearLayout>
