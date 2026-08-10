@@ -5,6 +5,8 @@ import android.appwidget.AppWidgetProvider
 import android.content.Context
 import android.content.Intent
 import android.util.Log
+import android.widget.RemoteViews
+import com.taskflow.app.R
 import com.taskflow.app.data.repository.TaskRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -19,6 +21,27 @@ class TaskWidgetProvider : AppWidgetProvider() {
     override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
         Log.d(TAG, "================ onUpdate ================")
         Log.d(TAG, "onUpdate: ids=${appWidgetIds.toList()}, count=${appWidgetIds.size}")
+
+        // 先立即更新一次：使用绝对安全的 fallback，确保 Launcher 不会显示 Problem loading
+        // 等协程内部读取完 Room 再做第二次更新（实际内容）。
+        appWidgetIds.forEach { id ->
+            try {
+                val immediate = RemoteViews(context.packageName, R.layout.widget_loading)
+                appWidgetManager.updateAppWidget(id, immediate)
+                Log.d(TAG, "onUpdate: widget $id 立即显示 loading layout")
+            } catch (e: Throwable) {
+                Log.e(TAG, "onUpdate: ❌ widget_loading inflate FAILED for $id", e)
+                // widget_loading 也失败 → 使用 widget_test.xml (最朴素)
+                try {
+                    val safe = RemoteViews(context.packageName, R.layout.widget_test)
+                    appWidgetManager.updateAppWidget(id, safe)
+                    Log.d(TAG, "onUpdate: widget $id 使用 widget_test.xml 作为立即可视")
+                } catch (e2: Throwable) {
+                    Log.e(TAG, "onUpdate: ❌ even widget_test.xml FAILED for $id", e2)
+                }
+            }
+        }
+
         appWidgetIds.forEach { id ->
             scope.launch {
                 try {
@@ -27,7 +50,15 @@ class TaskWidgetProvider : AppWidgetProvider() {
                     appWidgetManager.updateAppWidget(id, views)
                     Log.d(TAG, "onUpdate: ✅ widget $id updated successfully")
                 } catch (e: Throwable) {
-                    Log.e(TAG, "onUpdate: ❌ widget $id failed", e)
+                    // buildForId 理论上不会抛异常（4 层 fallback），但这里兜底以防万一
+                    Log.e(TAG, "onUpdate: ❌ widget $id failed even after fallbacks", e)
+                    try {
+                        appWidgetManager.updateAppWidget(id,
+                            RemoteViews(context.packageName, R.layout.widget_loading))
+                        Log.d(TAG, "onUpdate: widget $id → widget_loading fallback")
+                    } catch (e2: Throwable) {
+                        Log.e(TAG, "onUpdate: ❌ widget_loading also FAILED", e2)
+                    }
                 }
             }
         }

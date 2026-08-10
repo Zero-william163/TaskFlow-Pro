@@ -8,6 +8,31 @@ The GitHub Actions release workflow extracts the section matching the pushed tag
 (e.g. `## v1.0.0`) and uses it as the GitHub / Gitee release notes, and embeds it
 into `release.json` as the `log` field consumed by the in-app updater.
 
+## v2.1.2
+
+### 修复 — 小组件已成功添加到桌面但显示「Problem loading widget」
+
+#### 真实根因
+1. **`onUpdate()` 异步加载 RemoteViews，中间无任何即时占位**：Launcher 拿到 Provider 回调后要求在 `onUpdate()` 同步返回合法 RemoteViews，而我们只在 IO 线程完成后才 `updateAppWidget`，Launcher 在此空档期直接显示「Problem loading widget」
+2. **`WidgetHelper.buildViews()` 任何步骤抛异常都未捕获**：Room 查询、`describeTime` 时区、`setRemoteAdapter`、PendingIntent flag 等任何一个异常 → Launcher 判定 Widget 构建失败 →「Problem loading widget」
+3. **`TaskListRemoteViewsService.Factory.getViewAt()` 没兜底**：`setTextViewText(R.id.item_title,...)`、`describeTime`、`PendingIntent.getBroadcast` 任一异常 → 工厂返回异常 → ListView 整列失败
+4. **TaskWidgetProvider 未处理「第一次创建还没完成数据加载」**：创建 Widget 的几十毫秒窗口无法读到 Room，直接抛错
+
+#### 修复项
+1. **`TaskWidgetProvider.onUpdate()` 立即返回占位 RemoteViews**：在 forEach 循环内 `try { appWidgetManager.updateAppWidget(id, RemoteViews(context.packageName, R.layout.widget_loading)) } catch(...)`，确保 Launcher 第一时间收到合法 UI，再异步调用 `WidgetHelper.refreshAppWidget(id)` 加载实际数据
+2. **新增 `widget_test.xml` 最小化兜底布局**：纯原生 `LinearLayout + TextView "TaskFlow Widget Test"`，无引用 drawable、无 ListView、无 constraint，作为最终 fallback
+3. **`WidgetHelper.buildForId()` 四级 Fallback**：
+   - Level 1：完整 Room + ListView 版本
+   - Level 2：remaining=0 简化版（仍有 ListView，空数据）
+   - Level 3：彻底移除 ListView，只显示标题栏 + 日期 + 「暂无任务」
+   - Level 4：`widget_test.xml` 最小化
+   每一级失败都记录 stacktrace，并打印 fallback 决策
+4. **`TaskListRemoteViewsService.Factory.onDataSetChanged()` 加 try/catch**：Room 查出来后再按 `position < tasks.size` 再判一次，杜绝越界；`getLoadingView()` 返回 `widget_loading_view.xml`（单独 layout，不会依赖 task_list）
+5. **`Factory.getViewAt()` 逐语句 try/catch + 顶层兜底**：`setTextViewText` / `describeTime` / `setImageViewResource` / `toggle PendingIntent` / `fillIn` 分别 try，最终外层再兜底，失败一律返回 `loadingView()`，绝不抛异常给 Launcher
+6. **TaskWidgetProvider 缺失 import 修复**：补上 `android.widget.RemoteViews` 与 `com.taskflow.app.R`
+
+---
+
 ## v2.1.1
 
 ### 修复 — Widget「点击添加无反应」+ 静默吞异常 + 元数据矛盾

@@ -16,6 +16,7 @@ import com.taskflow.app.data.repository.TaskRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 
 private const val TAG = "WidgetHelper"
@@ -52,32 +53,209 @@ object WidgetHelper {
             val ids = manager.getAppWidgetIds(providerComponent(context))
             Log.d(TAG, "refresh: appWidgetIds=${ids.toList()}")
             if (ids.isEmpty()) return@launch
-            val pending = withContext(Dispatchers.IO) {
-                TaskRepository.get(context).getPinnedPending().size
+            val pending = try {
+                withContext(Dispatchers.IO) {
+                    TaskRepository.get(context).getPinnedPending().size
+                }
+            } catch (e: Throwable) {
+                Log.e(TAG, "refresh: TaskRepository.getPinnedPending FAILED", e)
+                -1  // 标记为 Room 失败，后续 buildForId 会走 fallback
             }
             Log.d(TAG, "refresh: pinnedPending count=$pending")
             ids.forEach { id ->
                 try {
-                    val views = buildViews(context, id, pending)
+                    val views = buildForIdInternal(context, id, pending)
                     manager.updateAppWidget(id, views)
-                    Log.d(TAG, "refresh: widget $id updated")
+                    Log.d(TAG, "refresh: widget $id ✅ 成功")
                 } catch (e: Throwable) {
-                    Log.e(TAG, "refresh: widget $id buildViews failed", e)
+                    // 最后保障：连 buildSafeFallback 都抛异常？这种情况极端罕见
+                    Log.e(TAG, "refresh: widget $id ❌ buildSafeFallback 也失败", e)
+                    try {
+                        manager.updateAppWidget(id, buildSafeFallback(context, e))
+                        Log.d(TAG, "refresh: widget $id 使用终极 white-screen fallback")
+                    } catch (e2: Throwable) {
+                        Log.e(TAG, "refresh: widget $id ❌ ultimate inflate FAILED", e2)
+                    }
                 }
             }
         }
     }
 
+    /**
+     * Provider 调用入口（suspend）。内部同样走分层 fallback。
+     */
     suspend fun buildForId(context: Context, appWidgetId: Int): RemoteViews {
-        val remaining = withContext(Dispatchers.IO) {
-            TaskRepository.get(context).getPinnedPending().size
+        val pending = try {
+            withContext(Dispatchers.IO) {
+                TaskRepository.get(context).getPinnedPending().size
+            }
+        } catch (e: Throwable) {
+            Log.e(TAG, "buildForId[$appWidgetId]: TaskRepository FAILED → 使用 fallback", e)
+            -1
         }
-        return buildViews(context, appWidgetId, remaining)
+        return buildForIdInternal(context, appWidgetId, pending)
+    }
+
+    /**
+     * 分层 fallback 构建逻辑：
+     *   Level 1) buildViews: Room + ListView + RemoteViewsService + PendingIntent (完整版本)
+     *   Level 2) buildViews 传 remaining=0: 不依赖 Room 实际数量 (仅当 Level1=Room异常以外的情况失败时)
+     *   Level 3) buildNoListView: 去掉 ListView/RemoteViewsService，只渲染 widget_content 的 header + 空状态
+     *   Level 4) buildSafeFallback: widget_test.xml 最小化布局 (纯白+TextView) —— 最后保障
+     *
+     * 任何一层成功都直接返回，Launcher 拿到合法 RemoteViews 就不会显示 Problem loading widget。
+     * 失败的每一层都打印完整 stacktrace 到 Logcat，便于定位到底卡在哪一层。
+     */
+    private fun buildForIdInternal(
+        context: Context,
+        appWidgetId: Int,
+        rawRemaining: Int
+    ): RemoteViews {
+        val tagId = appWidgetId
+        // ---------- Level 1: 完整版本 ----------
+        if (rawRemaining >= 0) {
+            return try {
+                Log.d(TAG, "buildForId[$tagId]: === Level 1 buildViews (Room=$rawRemaining, ListView) ===")
+                val result = buildViews(context, tagId, rawRemaining)
+                Log.d(TAG, "buildForId[$tagId]: ✅ Level 1 成功")
+                result
+            } catch (e: Throwable) {
+                Log.e(TAG, "buildForId[$tagId]: ❌ Level 1 失败", e)
+                Log.e(TAG, "buildForId[$tagId]:   type=${e.javaClass.name}, msg=${e.message}")
+                // Level 1 失败继续降级
+                level234Fallback(context, tagId, e)
+            }
+        } else {
+            // rawRemaining < 0 表示上游明确知道 Room 已经失败，直接跳到 Level 2
+            Log.w(TAG, "buildForId[$tagId]: Room 失败 (rawRemaining=$rawRemaining), 跳过 Level 1")
+            return level234Fallback(context, tagId, RuntimeException("Room 查询失败"))
+        }
+    }
+
+    private fun level234Fallback(context: Context, appWidgetId: Int, rootCause: Throwable): RemoteViews {
+        // ---------- Level 2: buildViews(remaining=0) ----------
+        return try {
+            Log.d(TAG, "buildForId[$appWidgetId]: === Level 2 buildViews remaining=0 ===")
+            val result = buildViews(context, appWidgetId, 0)
+            Log.d(TAG, "buildForId[$appWidgetId]: ✅ Level 2 成功")
+            result
+        } catch (e2: Throwable) {
+            Log.e(TAG, "buildForId[$appWidgetId]: ❌ Level 2 失败", e2)
+            // ---------- Level 3: buildNoListView ----------
+            return try {
+                Log.d(TAG, "buildForId[$appWidgetId]: === Level 3 buildNoListView ===")
+                val result = buildNoListView(context, appWidgetId, rootCause)
+                Log.d(TAG, "buildForId[$appWidgetId]: ✅ Level 3 成功")
+                result
+            } catch (e3: Throwable) {
+                Log.e(TAG, "buildForId[$appWidgetId]: ❌ Level 3 失败", e3)
+                // ---------- Level 4: buildSafeFallback (最后的保障) ----------
+                Log.w(TAG, "buildForId[$appWidgetId]: === Level 4 buildSafeFallback (终极白屏) ===")
+                buildSafeFallback(context, e3)
+            }
+        }
     }
 
     private fun buildViews(context: Context, appWidgetId: Int, remaining: Int): RemoteViews {
-        Log.d(TAG, "buildViews: widgetId=$appWidgetId, remaining=$remaining")
+        Log.d(TAG, "buildViews[$appWidgetId]: remaining=$remaining")
+        val views = try {
+            RemoteViews(context.packageName, R.layout.widget_content).also {
+                Log.d(TAG, "buildViews[$appWidgetId]: widget_content inflate OK")
+            }
+        } catch (e: Throwable) {
+            Log.e(TAG, "buildViews[$appWidgetId]: ❌ widget_content inflate FAILED", e)
+            throw e
+        }
+        val headerPi = try {
+            PendingIntent.getActivity(
+                context, 0,
+                Intent(context, MainActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                },
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
+        } catch (e: Throwable) {
+            Log.e(TAG, "buildViews[$appWidgetId]: ❌ header PendingIntent FAILED", e)
+            throw e
+        }
+        try {
+            views.setOnClickPendingIntent(R.id.widget_header, headerPi)
+        } catch (e: Throwable) {
+            Log.e(TAG, "buildViews[$appWidgetId]: ❌ R.id.widget_header 失败", e)
+            throw e
+        }
+        try {
+            views.setTextViewText(
+                R.id.count_text,
+                if (remaining > 0) context.getString(R.string.widget_remaining, remaining)
+                else context.getString(R.string.widget_all_done)
+            )
+        } catch (e: Throwable) {
+            Log.e(TAG, "buildViews[$appWidgetId]: ❌ R.id.count_text 失败", e)
+            throw e
+        }
+        val listIntent = Intent(context, TaskListRemoteViewsService::class.java).apply {
+            putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+            data = Uri.parse(toUri(Intent.URI_INTENT_SCHEME))
+        }
+        try {
+            views.setRemoteAdapter(R.id.task_list, listIntent)
+        } catch (e: Throwable) {
+            Log.e(TAG, "buildViews[$appWidgetId]: ❌ R.id.task_list setRemoteAdapter FAILED", e)
+            throw e
+        }
+        val template = Intent(context, MainActivity::class.java).apply {
+            action = MainActivity.ACTION_OPEN_TASK
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        }
+        val templatePi = try {
+            PendingIntent.getActivity(
+                context, appWidgetId, template,
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
+        } catch (e: Throwable) {
+            Log.e(TAG, "buildViews[$appWidgetId]: ❌ template PendingIntent FAILED", e)
+            throw e
+        }
+        try {
+            views.setPendingIntentTemplate(R.id.task_list, templatePi)
+        } catch (e: Throwable) {
+            Log.e(TAG, "buildViews[$appWidgetId]: ❌ setPendingIntentTemplate FAILED", e)
+            throw e
+        }
+        if (remaining == 0) {
+            try {
+                views.setViewVisibility(R.id.task_list, View.GONE)
+                views.setViewVisibility(R.id.empty_text, View.VISIBLE)
+                views.setTextViewText(R.id.empty_text, context.getString(R.string.widget_no_tasks))
+                views.setOnClickPendingIntent(R.id.empty_text, headerPi)
+                Log.d(TAG, "buildViews[$appWidgetId]: empty_state OK")
+            } catch (e: Throwable) {
+                Log.e(TAG, "buildViews[$appWidgetId]: ❌ R.id.empty_text FAILED", e)
+                throw e
+            }
+        } else {
+            try {
+                views.setViewVisibility(R.id.task_list, View.VISIBLE)
+                views.setViewVisibility(R.id.empty_text, View.GONE)
+                Log.d(TAG, "buildViews[$appWidgetId]: with_list_state OK")
+            } catch (e: Throwable) {
+                Log.e(TAG, "buildViews[$appWidgetId]: ❌ list visibility FAILED", e)
+                throw e
+            }
+        }
+        Log.d(TAG, "buildViews[$appWidgetId]: ✅ 完整版本构建成功")
+        return views
+    }
+
+    /**
+     * Level 3：去掉 ListView/RemoteViewsService，仅保留 widget_content 框架 +
+     * 把根因打印到 empty_text，保证用户有东西看（并能点击打开 App），
+     * 同时把具体错误类型留到 Logcat 里精确排查。
+     */
+    private fun buildNoListView(context: Context, appWidgetId: Int, rootCause: Throwable): RemoteViews {
         val views = RemoteViews(context.packageName, R.layout.widget_content)
+        Log.d(TAG, "buildNoListView[$appWidgetId]: widget_content inflate OK")
         val headerPi = PendingIntent.getActivity(
             context, 0,
             Intent(context, MainActivity::class.java).apply {
@@ -86,36 +264,41 @@ object WidgetHelper {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         views.setOnClickPendingIntent(R.id.widget_header, headerPi)
-        views.setTextViewText(
-            R.id.count_text,
-            if (remaining > 0) context.getString(R.string.widget_remaining, remaining)
-            else context.getString(R.string.widget_all_done)
-        )
-        val listIntent = Intent(context, TaskListRemoteViewsService::class.java).apply {
-            putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
-            data = Uri.parse(toUri(Intent.URI_INTENT_SCHEME))
-        }
-        views.setRemoteAdapter(R.id.task_list, listIntent)
-        val template = Intent(context, MainActivity::class.java).apply {
-            action = MainActivity.ACTION_OPEN_TASK
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-        }
-        val templatePi = PendingIntent.getActivity(
-            context, appWidgetId, template,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
-        views.setPendingIntentTemplate(R.id.task_list, templatePi)
-        if (remaining == 0) {
-            views.setViewVisibility(R.id.task_list, View.GONE)
-            views.setViewVisibility(R.id.empty_text, View.VISIBLE)
-            views.setTextViewText(R.id.empty_text, context.getString(R.string.widget_no_tasks))
-            views.setOnClickPendingIntent(R.id.empty_text, headerPi)
-        } else {
-            views.setViewVisibility(R.id.task_list, View.VISIBLE)
-            views.setViewVisibility(R.id.empty_text, View.GONE)
-        }
-        Log.d(TAG, "buildViews: ✅ RemoteViews built for widgetId=$appWidgetId")
+        views.setViewVisibility(R.id.task_list, View.GONE)
+        views.setViewVisibility(R.id.empty_text, View.VISIBLE)
+        // 在 count_text 显示标题，在 empty_text 显示根因（限长避免截断问题）
+        views.setTextViewText(R.id.count_text, "TaskFlow")
+        val cause = rootCause.javaClass.simpleName
+        val msg = rootCause.message?.take(80) ?: "(null)"
+        views.setTextViewText(R.id.empty_text, "加载失败($cause)\n$msg")
+        views.setOnClickPendingIntent(R.id.empty_text, headerPi)
+        Log.d(TAG, "buildNoListView[$appWidgetId]: ✅ 降级构建成功")
         return views
+    }
+
+    /**
+     * Level 4：终极保障。只使用 widget_test.xml（纯白背景 + 1 个 TextView），
+     * 100% 为 RemoteViews 原生支持，不引用任何 drawable/color 资源。
+     * 这里不应该失败——如果这一层失败，基本就是 Launcher/打包资源层面的问题。
+     */
+    private fun buildSafeFallback(context: Context, rootCause: Throwable): RemoteViews {
+        Log.w(TAG, "buildSafeFallback[$context.packageName]: rootCause=${rootCause.javaClass.name}")
+        val cls = rootCause.javaClass.simpleName
+        val msg = rootCause.message?.take(40) ?: "(null)"
+        return try {
+            RemoteViews(context.packageName, R.layout.widget_test).also { views ->
+                try {
+                    views.setTextViewText(R.id.test_text, "TaskFlow $cls $msg")
+                } catch (e: Throwable) {
+                    // setTextViewText 失败就放弃，但保证 RemoteViews 对象被返回
+                    Log.e(TAG, "buildSafeFallback: setText failed (继续返回，不抛)", e)
+                }
+            }
+        } catch (e: Throwable) {
+            // widget_test.xml 也 inflate 失败 → 打印原因，然后重试 inflate 但不设置任何内容
+            Log.e(TAG, "buildSafeFallback: widget_test inflate FAILED → 终极 fallback", e)
+            RemoteViews(context.packageName, R.layout.widget_test)
+        }
     }
 
     fun providerComponent(context: Context): ComponentName =
