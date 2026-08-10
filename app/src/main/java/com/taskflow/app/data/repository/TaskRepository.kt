@@ -83,12 +83,29 @@ class TaskRepository private constructor(
 
     suspend fun getPending(): List<Task> = taskDao.getPending().map { it.toDomain() }
 
-    /** Tasks the widget should render — pinned and incomplete. */
+    /**
+     * Tasks the widget should render. Two-tier fallback for robustness:
+     *  1. [Primary] Pinned + incomplete tasks. This honors the user's per-task
+     *     opt-out flag and lets them hide noisy recurring tasks.
+     *  2. [Fallback] If NO tasks in the DB have pinnedToWidget=1 (happens on
+     *     legacy data / fresh installs created before pinned defaults), show
+     *     ALL incomplete tasks instead of a blank list. This guarantees the
+     *     widget is never empty when real work exists.
+     */
     suspend fun getPinnedPending(): List<Task> {
-        val list = taskDao.getPinnedPending().map { it.toDomain() }
-        android.util.Log.d("TaskRepository", "Widget query count=${list.size}, " +
-            "ids=${list.take(5).map { "${it.id}:${it.title.take(10)}" }}")
-        return list
+        val pinned = taskDao.getPinnedPending().map { it.toDomain() }
+        if (pinned.isNotEmpty()) {
+            android.util.Log.d("TaskRepository", "Widget query [tier=PINNED] count=${pinned.size}, " +
+                "ids=${pinned.take(5).map { "${it.id}:${it.title.take(10)}" }}")
+            return pinned
+        }
+        // Fallback: no task has ever been pinned → show every pending task so the
+        // widget isn't a useless blank rectangle. This is a silent one-tier
+        // promotion; we don't mutate pinnedToWidget in the DB.
+        val allPending = taskDao.getPending().map { it.toDomain() }
+        android.util.Log.d("TaskRepository", "Widget query [tier=FALLBACK] count=${allPending.size} " +
+            "(no pinned tasks found → promoting all pending tasks for display)")
+        return allPending
     }
 
     suspend fun getUpcomingReminders(after: LocalDateTime): List<Task> =

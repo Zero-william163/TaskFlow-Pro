@@ -53,14 +53,16 @@ class UpdateSourceManager {
     }
 
     /**
-     * Sources ordered by region.
-     * GitHubApiSource is prioritized over raw files because raw files (release.json)
-     * can become stale if not updated, while the Releases API always returns the
-     * latest published release.
+     * Sources ordered by region. GitHubApiSource is placed first because the
+     * Releases API always returns the latest published release, while raw
+     * release.json files can become stale. However, fetchLatest() no longer
+     * stops at the first success — it probes ALL sources and returns the
+     * HIGHEST version found, preventing "downgrade" prompts when a domestic
+     * mirror is out of date.
      */
     fun getSortedSources(isDomestic: Boolean): List<UpdateSource> =
         if (isDomestic) {
-            listOf(GiteeApiSource(), GitHubApiSource(), GiteeRawSource(), GitHubRawSource(), JSDelivrSource())
+            listOf(GitHubApiSource(), GiteeApiSource(), GitHubRawSource(), GiteeRawSource(), JSDelivrSource())
         } else {
             listOf(GitHubApiSource(), GitHubRawSource(), JSDelivrSource(), GiteeApiSource(), GiteeRawSource())
         }
@@ -83,18 +85,45 @@ class UpdateSourceManager {
         return urls.sortedBy { score(it) }
     }
 
-    /** Tries every source in order and returns the first successful [UpdateInfo]. */
+    /**
+     * Tries every source, collects all successful results, and returns the
+     * HIGHEST version found (via semantic version comparison). This prevents
+     * "downgrade" prompts when a domestic mirror (e.g. Gitee) is out of date
+     * while GitHub already has a newer release.
+     *
+     * Version comparison uses semantic version parsing only — mixing code
+     * values from different sources (API returns 0, raw returns build code)
+     * would produce incorrect ordering.
+     */
     fun fetchLatest(): UpdateInfo? {
         val isDomestic = probeNetworkRegion()
         UpdateLogger.i("Update region: ${if (isDomestic) "domestic" else "international"}")
-        for (source in getSortedSources(isDomestic)) {
+        val sources = getSortedSources(isDomestic)
+        val candidates = mutableListOf<Pair<UpdateSource, UpdateInfo>>()
+        for (source in sources) {
             val info = runCatching { source.fetch(fetchClient) }.getOrNull()
             if (info != null) {
-                UpdateLogger.i("Fetched update info from ${source.javaClass.simpleName}: ${info.version}")
-                return sortDownloadUrls(info.resolvedUrls, isDomestic)
-                    .let { info.copy(downloadUrls = it) }
+                UpdateLogger.i("Fetched update info from ${source.javaClass.simpleName}: ${info.version} (code=${info.code})")
+                candidates.add(source to info)
             }
         }
-        return null
+        if (candidates.isEmpty()) {
+            UpdateLogger.w("fetchLatest: no source returned valid update info")
+            return null
+        }
+        val best = candidates.maxByOrNull { (_, info) ->
+            val sv = SemanticVersion.parse(info.version)
+            if (sv != null) {
+                // Weighted score: major*1_000_000 + minor*10_000 + patch
+                sv.major.toLong() * 1_000_000L + sv.minor.toLong() * 10_000L + sv.patch.toLong()
+            } else 0L
+        }?.second
+        if (best == null) {
+            UpdateLogger.w("fetchLatest: could not determine best version from ${candidates.size} candidates")
+            return null
+        }
+        UpdateLogger.i("fetchLatest: selected best version = ${best.version}")
+        return sortDownloadUrls(best.resolvedUrls, isDomestic)
+            .let { best.copy(downloadUrls = it) }
     }
 }

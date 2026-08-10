@@ -1,5 +1,6 @@
 package com.taskflow.app.ui.home
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.taskflow.app.data.model.Category
@@ -123,17 +124,25 @@ class HomeViewModel(
         if (task.reminderTime != null && !task.isCompleted) reminderScheduler.schedule(task)
     }
 
-    /** Pin a freshly-created task so it appears on the home-screen widget.
+    /**
+     * Pin a task to the home-screen widget.
      *
-     * 串行等待 DB 写入完成并执行 Widget refresh，保证：
-     * 1) pinnedToWidget=1 真正落库后再刷新
-     * 2) notifyAppWidgetViewDataChanged 在 DB 状态正确之后触发，
-     *    避免"pin fire-and-forget → refresh 跑在 DB 写入前 → Factory 看到旧数据"的竞态。
+     * CRITICAL — this function is NOT fire-and-forget. The caller MUST pass a
+     * suspend [onDone] callback and invoke pinToWidget inside a coroutine (e.g.
+     * via the suspending wrapper below). Database writes happen synchronously
+     * on the current coroutine so WidgetHelper.refresh inside onDone will
+     * observe the newly-pinned rows.
      */
+    suspend fun pinToWidgetAndThen(taskId: Long, onDone: suspend () -> Unit = {}) {
+        taskRepository.setPinnedToWidget(taskId, true)
+        Log.d("HomeViewModel", "pinToWidgetAndThen: id=$taskId → DB write complete")
+        onDone()
+    }
+
+    /** Legacy async wrapper — retained for backward compatibility. */
     fun pinToWidget(taskId: Long, onDone: suspend () -> Unit = {}) {
         viewModelScope.launch {
-            taskRepository.setPinnedToWidget(taskId, true)
-            onDone()
+            pinToWidgetAndThen(taskId, onDone)
         }
     }
 }

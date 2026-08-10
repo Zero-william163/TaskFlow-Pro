@@ -271,10 +271,11 @@ fun HomeScreen(
                 val id = pendingTaskId
                 scope.launch {
                     if (id != null) {
-                        // 串行：DB 写入完成后再刷新 Widget
-                        viewModel.pinToWidget(id)
-                        WidgetHelper.refresh(context)
-                        Log.d("HomeScreen", "FirstGuide.onAddNow: pinned id=$id, widget refreshed")
+                        // ✅ 真正串行：suspend 函数等待 DB 写入完成 → 再 refresh
+                        viewModel.pinToWidgetAndThen(id) {
+                            WidgetHelper.refresh(context)
+                            Log.d("HomeScreen", "FirstGuide.onAddNow: pinned id=$id, DB write confirmed → widget refreshed")
+                        }
                     }
                 }
                 // Pre-flight capability check before attempting to pin. Spec:
@@ -309,10 +310,11 @@ fun HomeScreen(
                 val taskId = pendingTaskId
                 scope.launch {
                     if (taskId != null) {
-                        // 串行：pin DB 写入完成 → refresh Widget
-                        viewModel.pinToWidget(taskId)
-                        WidgetHelper.refresh(context)
-                        Log.d("HomeScreen", "AddToWidget.onAdd: pinned id=$taskId, widget refreshed")
+                        // ✅ 真正串行：suspend 函数等待 DB 写入 → 再 refresh
+                        viewModel.pinToWidgetAndThen(taskId) {
+                            WidgetHelper.refresh(context)
+                            Log.d("HomeScreen", "AddToWidget.onAdd: pinned id=$taskId, DB write confirmed → widget refreshed")
+                        }
                     }
                 }
                 // If no widget has actually been placed yet, also try pinning one so

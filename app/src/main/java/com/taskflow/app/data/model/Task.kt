@@ -39,7 +39,13 @@ data class Task(
     val completedAt: LocalDateTime? = null,
     val createdAt: LocalDateTime = LocalDateTime.now(),
     val updatedAt: LocalDateTime = LocalDateTime.now(),
-    val pinnedToWidget: Boolean = false,
+    /**
+     * Default = true so newly-created tasks automatically appear on any
+     * already-placed home-screen widget. Users can opt out per task via the
+     * detail UI; this opt-in default aligns with user expectation that "I
+     * added a task → I want to see it on my widget".
+     */
+    val pinnedToWidget: Boolean = true,
     /**
      * Sound URI for task reminder. `null` / blank = use system default.
      * Value comes from RingtoneManager picker (content:// URI) and is persisted

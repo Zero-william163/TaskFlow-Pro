@@ -44,10 +44,11 @@ data class TaskEntity(
     val createdAt: LocalDateTime = LocalDateTime.now(),
     val updatedAt: LocalDateTime = LocalDateTime.now(),
     /**
-     * Per-task pin flag for the home-screen widget. Only pinned, incomplete tasks
-     * are rendered by the collection widget.
+     * Per-task pin flag for the home-screen widget. Defaults to true so tasks
+     * appear automatically on any already-placed widget. Only pinned, incomplete
+     * tasks are rendered by the collection widget.
      */
-    val pinnedToWidget: Boolean = false,
+    val pinnedToWidget: Boolean = true,
     /** Reminder sound URI (RingtoneManager content://). Null = system default. */
     val alarmSoundUri: String? = null
 )
