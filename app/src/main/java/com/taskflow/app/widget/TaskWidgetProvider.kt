@@ -50,7 +50,14 @@ class TaskWidgetProvider : AppWidgetProvider() {
                 Log.d(TAG, "buildWidgetAsync[$appWidgetId]: start")
                 val views = WidgetHelper.buildForId(context, appWidgetId)
                 appWidgetManager.updateAppWidget(appWidgetId, views)
-                Log.d(TAG, "buildWidgetAsync[$appWidgetId]: ✅ OK")
+                // 断点 #1 同根因修复：onUpdate / onAppWidgetOptionsChanged 也必须 notify
+                // ListView 刷新，否则 Factory 永远不重新读 DB。
+                try {
+                    appWidgetManager.notifyAppWidgetViewDataChanged(appWidgetId, R.id.task_list)
+                    Log.d(TAG, "buildWidgetAsync[$appWidgetId]: ✅ OK (ListView notified)")
+                } catch (e: Throwable) {
+                    Log.e(TAG, "buildWidgetAsync[$appWidgetId]: ❌ notifyAppWidgetViewDataChanged FAILED", e)
+                }
             } catch (e: Throwable) {
                 // WidgetHelper.buildForId 内部已经 4 层 fallback，理论上不会抛；
                 // 这里兜底防止极端情况。

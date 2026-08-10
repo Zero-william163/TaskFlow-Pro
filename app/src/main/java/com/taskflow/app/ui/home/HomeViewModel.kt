@@ -123,8 +123,17 @@ class HomeViewModel(
         if (task.reminderTime != null && !task.isCompleted) reminderScheduler.schedule(task)
     }
 
-    /** Pin a freshly-created task so it appears on the home-screen widget. */
-    fun pinToWidget(taskId: Long) {
-        viewModelScope.launch { taskRepository.setPinnedToWidget(taskId, true) }
+    /** Pin a freshly-created task so it appears on the home-screen widget.
+     *
+     * 串行等待 DB 写入完成并执行 Widget refresh，保证：
+     * 1) pinnedToWidget=1 真正落库后再刷新
+     * 2) notifyAppWidgetViewDataChanged 在 DB 状态正确之后触发，
+     *    避免"pin fire-and-forget → refresh 跑在 DB 写入前 → Factory 看到旧数据"的竞态。
+     */
+    fun pinToWidget(taskId: Long, onDone: suspend () -> Unit = {}) {
+        viewModelScope.launch {
+            taskRepository.setPinnedToWidget(taskId, true)
+            onDone()
+        }
     }
 }

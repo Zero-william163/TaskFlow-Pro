@@ -62,9 +62,15 @@ class TaskViewModel(
         }
     }
 
-    /** Pin a freshly-created task to the widget so it shows up immediately. */
-    fun pinToWidget(taskId: Long) {
-        viewModelScope.launch { taskRepository.setPinnedToWidget(taskId, true) }
+    /** Pin a freshly-created task to the widget so it shows up immediately.
+     *
+     * 串行等待 DB 写入完成后再触发 onDone（例如 Widget refresh），
+     * 避免 fire-and-forget 导致的 refresh 读旧值竞态。 */
+    fun pinToWidget(taskId: Long, onDone: suspend () -> Unit = {}) {
+        viewModelScope.launch {
+            taskRepository.setPinnedToWidget(taskId, true)
+            onDone()
+        }
     }
 
     fun deleteTask(task: Task, onDone: () -> Unit) {

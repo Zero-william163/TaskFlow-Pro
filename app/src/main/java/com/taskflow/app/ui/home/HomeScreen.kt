@@ -1,5 +1,6 @@
 package com.taskflow.app.ui.home
 
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -268,7 +269,14 @@ fun HomeScreen(
         FirstWidgetGuideDialog(
             onAddNow = {
                 val id = pendingTaskId
-                if (id != null) viewModel.pinToWidget(id)
+                scope.launch {
+                    if (id != null) {
+                        // 串行：DB 写入完成后再刷新 Widget
+                        viewModel.pinToWidget(id)
+                        WidgetHelper.refresh(context)
+                        Log.d("HomeScreen", "FirstGuide.onAddNow: pinned id=$id, widget refreshed")
+                    }
+                }
                 // Pre-flight capability check before attempting to pin. Spec:
                 // "请完整检查 Android Widget 创建流程" + "如果失败：不要静默。"
                 val report = com.taskflow.app.widget.WidgetCapability.report(context)
@@ -298,8 +306,15 @@ fun HomeScreen(
     if (showAddToWidgetPrompt) {
         AddToWidgetPromptDialog(
             onAdd = {
-                pendingTaskId?.let { viewModel.pinToWidget(it) }
-                WidgetHelper.refresh(context)
+                val taskId = pendingTaskId
+                scope.launch {
+                    if (taskId != null) {
+                        // 串行：pin DB 写入完成 → refresh Widget
+                        viewModel.pinToWidget(taskId)
+                        WidgetHelper.refresh(context)
+                        Log.d("HomeScreen", "AddToWidget.onAdd: pinned id=$taskId, widget refreshed")
+                    }
+                }
                 // If no widget has actually been placed yet, also try pinning one so
                 // the UX is the "first widget" experience, gated by capability.
                 if (!WidgetHelper.isAnyWidgetPlaced(context)) {

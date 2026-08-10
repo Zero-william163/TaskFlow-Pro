@@ -177,9 +177,9 @@ class TaskListRemoteViewsService : RemoteViewsService() {
         private fun loadingView(): RemoteViews = buildInlineEmptyView()
 
         /**
-         * 内联构建空态 RemoteViews。避免对 widget_test.xml / widget_task_item.xml 的依赖，
-         * 完全使用 RemoteViews 支持的 API 构建 LinearLayout + TextView + ImageView，
-         * 是最健壮的空态/加载态视图。
+         * Widget ListView item 级别的内联空态视图。
+         * 使用专用布局 widget_empty_item.xml（wrap_content + minHeight=72dp），
+         * 避免之前用 widget_test.xml (match_parent) 导致的 ListView item 高度异常。
          */
         private fun buildInlineEmptyView(): RemoteViews {
             val text = if (tasks.isEmpty()) {
@@ -188,22 +188,27 @@ class TaskListRemoteViewsService : RemoteViewsService() {
                 context.getString(R.string.widget_loading)
             }
             return try {
-                RemoteViews(context.packageName, R.layout.widget_test).also { views ->
+                RemoteViews(context.packageName, R.layout.widget_empty_item).also { views ->
                     try {
-                        views.setTextViewText(R.id.test_text, text)
-                        views.setTextColor(
-                            R.id.test_text,
-                            context.getColor(R.color.widget_on_surface_variant)
-                        )
+                        views.setTextViewText(R.id.empty_item_text, text)
                     } catch (e: Throwable) {
-                        Log.w(TAG, "buildInlineEmptyView: setTextColor failed (ignore)", e)
+                        Log.w(TAG, "buildInlineEmptyView: setTextViewText FAILED", e)
                     }
                 }
             } catch (e: Throwable) {
-                // 终极兜底：连 widget_test inflate 都失败，直接 new 一个空 RemoteViews，
-                // 至少保证 Launcher 不会因为我们抛异常而把整个 ListView 置空。
-                Log.e(TAG, "buildInlineEmptyView: ❌ widget_test inflate FAILED", e)
-                RemoteViews(context.packageName, R.layout.widget_test)
+                // 终极兜底：widget_empty_item 也 inflate 失败 → 回退 widget_task_item
+                // 把标题设为 text，保证内容可见。
+                Log.e(TAG, "buildInlineEmptyView: ❌ widget_empty_item inflate FAILED", e)
+                try {
+                    RemoteViews(context.packageName, R.layout.widget_task_item).also { views ->
+                        views.setTextViewText(R.id.item_title, text)
+                        views.setViewVisibility(R.id.item_check, android.view.View.GONE)
+                        views.setViewVisibility(R.id.item_meta, android.view.View.GONE)
+                    }
+                } catch (e2: Throwable) {
+                    Log.e(TAG, "buildInlineEmptyView: ❌ widget_task_item 也 FAILED", e2)
+                    RemoteViews(context.packageName, R.layout.widget_test)
+                }
             }
         }
     }

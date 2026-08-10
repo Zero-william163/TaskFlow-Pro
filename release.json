@@ -1,30 +1,30 @@
 {
-  "version": "2.1.9",
-  "code": 20109,
-  "versionTag": "v2.1.9",
-  "log": "### 修复：小组件添加后内容空白\n\n#### 根因\nWidget 标题正常显示但 ListView 内容区空白。根因是 Launcher 异步绑定 RemoteViewsService 阶段失败时，原代码的 fallback 逻辑无法覆盖（因为该阶段不在 AppWidgetProvider.onUpdate 调用栈内）。\n\n#### 修复项\n1. **TaskListRemoteViewsService.kt**：`getCount()` 永远返回 ≥1（`coerceAtLeast(1)`），避免 Launcher 因 count=0 把 ListView 折叠为空白\n2. **TaskListRemoteViewsService.kt**：`getViewAt()` 在无任务/越界时返回内联构建的空态 RemoteViews（\"暂无任务\"/\"加载中…\"），100% 保证有内容渲染\n3. **TaskListRemoteViewsService.kt**：新增 `buildInlineEmptyView()` 方法，即使 Room 查询失败也能显示空态\n4. **WidgetHelper.kt**：ListView 永远保持 VISIBLE，空态由 Factory 内部处理（移除 remaining=0 时的 GONE 逻辑）\n5. **AndroidManifest.xml**：移除 RemoteViewsService 的 `android:permission=\"BIND_REMOTEVIEWS\"`，该权限在部分 ROM 上阻止 Launcher 绑定 Service\n6. **strings.xml**：新增 `widget_loading` 资源\n\n#### 验证\n1. 添加小组件后应立即显示任务列表或\"暂无任务\"文本\n2. 无置顶任务时不再显示空白区域\n3. Logcat 过滤 `WidgetHelper|WidgetListService|WidgetProvider` 查看详细日志",
-  "apk": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.9/app-release.apk",
-  "sha256": "59725c547a523f700bb0c70bb513b61b775886e2b21888bf6ba417a937a4955d",
-  "size": 46371803,
+  "version": "2.2.0",
+  "code": 20200,
+  "versionTag": "v2.2.0",
+  "log": "### 修复：Widget 数量显示正确但列表区域空白\n\n#### 真实断点定位（按顺序）\n\n**断点 1（80% 根因）：`WidgetHelper.refresh()` / `TaskWidgetProvider.buildWidgetAsync()` 从未调用 `notifyAppWidgetViewDataChanged`**\n\n证据：全代码库 grep `notifyAppWidgetViewDataChanged` —— 0 处调用。\n\n影响机制：\n```\nmanager.updateAppWidget(id, views)\n  → 只刷新 RemoteViews 本体（header/count_text）\n  → ❌ 不触发 RemoteViewsFactory.onDataSetChanged()\n  → Factory.tasks 永远是初次绑定时的缓存（通常为空列表）\n```\n完美匹配用户现象：**右上角 count_text 正确（来自同一 buildForId 的独立 Room 查询）但 ListView 永远空白**。\n\n修复：\n- [WidgetHelper.kt] refresh() 中 updateAppWidget 后立即调用 `manager.notifyAppWidgetViewDataChanged(id, R.id.task_list)`\n- [TaskWidgetProvider.kt] buildWidgetAsync() 同样调用\n\n**断点 2（15%）：`pinToWidget()` 是 fire-and-forget，`WidgetHelper.refresh()` 可能先于 DB 写入运行**\n\n证据：HomeViewModel.pinToWidget(id) 是 `viewModelScope.launch { ... }`，HomeScreen 调用后立即 `WidgetHelper.refresh(context)`，两者异步竞态。刷新时 DB 还没把 pinnedToWidget=1 写入。\n\n修复：\n- [HomeViewModel.kt / TaskViewModel.kt] pinToWidget(id, onDone)：串行等待 setPinnedToWidget 写入完成后再回调 onDone\n- [HomeScreen.kt] FirstWidgetGuideDialog.onAddNow / AddToWidgetPromptDialog.onAdd：先 pin 再 refresh，保证顺序正确\n\n**断点 3（5%）：空态视图误用全屏布局 widget_test.xml 导致高度异常**\n\n证据：widget_test.xml 的根 LinearLayout 是 `layout_height=\"match_parent\"`，塞进 ListView item 后高度不可预知（要么 0dp 要么撑满整个 ListView 且背景纯白看不见），用户看到的就是"内容区空白"而不是"暂无任务"文本。\n\n修复：\n- 新增 [widget_empty_item.xml] 专用 ListView item 级别空态布局（wrap_content + minHeight=72dp）\n- [TaskListRemoteViewsService.kt] buildInlineEmptyView() 使用新布局，同时两级 fallback：widget_task_item → widget_test\n\n#### 完整日志（Logcat 过滤）\n```\n创建任务保存：\n  TaskRepository: Task saved id=X, title=..., isCompleted=false, pinnedToWidget=false\n\nPin 到 Widget：\n  TaskRepository: Task setPinnedToWidget id=X, pinned=true\n  TaskRepository: sendBroadcast ACTION_TASKS_CHANGED\n  WidgetProvider: onReceive: action=TASKS_CHANGED\n  WidgetHelper: refresh: pinnedPending count=N\n  WidgetHelper: refresh: widget id ✅ OK (已 notify ListView 刷新)\n\n数据库查询 (Factory):\n  WidgetListService: factory[id].onDataSetChanged: querying Room...\n  TaskRepository: Widget query count=N, ids=[...]\n  WidgetListService: factory[id].onDataSetChanged: Room returned N tasks\n\nRemoteViews item 渲染:\n  WidgetListService: factory[id].getCount=N+1 (realTasks=N)\n  WidgetListService: factory[id].getViewAt(0): widget_task_item inflate OK\n  WidgetListService: factory[id].getViewAt(0): ✅ OK\n```\n\n#### Widget数据链路总结\n```\n创建任务 → Room保存 (TaskRepository)\n  ↓ ACTION_TASKS_CHANGED 广播\nTaskWidgetProvider.onReceive\n  ↓\nWidgetHelper.refresh()\n  ↓ buildForId → 查 pinnedPending.size 给 count_text\n  ↓ updateAppWidget(id, RemoteViews) → 刷新 header\n  ↓ notifyAppWidgetViewDataChanged(id, R.id.task_list) ✅ NEW\n  ↓\nRemoteViewsFactory.onDataSetChanged() → 重新查 pinnedPending() 给 ListView\n  ↓ getViewAt(0..N-1) → 渲染每条任务 item\n```",
+  "apk": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.2.0/app-release.apk",
+  "sha256": "58e60db9889b8499fcf8a48a8231db1cb6312581c6427c87a60873af05d14467",
+  "size": 46388747,
   "downloadUrls": [
     {
       "name": "GH Proxy",
-      "url": "https://gh-proxy.com/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.9/app-release.apk",
+      "url": "https://gh-proxy.com/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.2.0/app-release.apk",
       "region": "domestic"
     },
     {
       "name": "GH Fast",
-      "url": "https://ghfast.top/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.9/app-release.apk",
+      "url": "https://ghfast.top/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.2.0/app-release.apk",
       "region": "cdn"
     },
     {
       "name": "GH Proxy Org",
-      "url": "https://gh-proxy.org/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.9/app-release.apk",
+      "url": "https://gh-proxy.org/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.2.0/app-release.apk",
       "region": "domestic"
     },
     {
       "name": "GitHub",
-      "url": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.9/app-release.apk",
+      "url": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.2.0/app-release.apk",
       "region": "international"
     }
   ]

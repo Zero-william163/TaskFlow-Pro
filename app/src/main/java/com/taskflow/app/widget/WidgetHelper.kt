@@ -66,7 +66,17 @@ object WidgetHelper {
                 try {
                     val views = buildForIdInternal(context, id, pending)
                     manager.updateAppWidget(id, views)
-                    Log.d(TAG, "refresh: widget $id ✅ 成功")
+                    // ===== 断点 #1 修复：updateAppWidget 后必须 notifyAppWidgetViewDataChanged =====
+                    // Collection Widget 的 ListView 数据由 RemoteViewsFactory 管理，
+                    // updateAppWidget 只刷新 RemoteViews 本体（header/count_text），
+                    // 不会触发 Launcher 重新调用 onDataSetChanged()。
+                    // notifyAppWidgetViewDataChanged 是唯一能强制 Factory 重新读 DB 的 API。
+                    try {
+                        manager.notifyAppWidgetViewDataChanged(id, R.id.task_list)
+                        Log.d(TAG, "refresh: widget $id ✅ OK (已 notify ListView 刷新)")
+                    } catch (e: Throwable) {
+                        Log.e(TAG, "refresh: widget $id ❌ notifyAppWidgetViewDataChanged FAILED", e)
+                    }
                 } catch (e: Throwable) {
                     // 最后保障：连 buildSafeFallback 都抛异常？这种情况极端罕见
                     Log.e(TAG, "refresh: widget $id ❌ buildSafeFallback 也失败", e)

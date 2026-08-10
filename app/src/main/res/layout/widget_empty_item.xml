@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Widget ListView 专用空态 item。
+  必须：layout_height=wrap_content，避免 match_parent 导致的高度异常。
+  不依赖任何自定义 drawable（只用系统背景色+文字），保证 100% RemoteViews 兼容。
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:minHeight="72dp"
+    android:padding="12dp">
+
+    <TextView
+        android:id="@+id/empty_item_text"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textColor="@color/widget_on_surface_variant"
+        android:textSize="13sp" />
+
+</LinearLayout>

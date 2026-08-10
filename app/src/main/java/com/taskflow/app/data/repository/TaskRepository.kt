@@ -84,8 +84,12 @@ class TaskRepository private constructor(
     suspend fun getPending(): List<Task> = taskDao.getPending().map { it.toDomain() }
 
     /** Tasks the widget should render — pinned and incomplete. */
-    suspend fun getPinnedPending(): List<Task> =
-        taskDao.getPinnedPending().map { it.toDomain() }
+    suspend fun getPinnedPending(): List<Task> {
+        val list = taskDao.getPinnedPending().map { it.toDomain() }
+        android.util.Log.d("TaskRepository", "Widget query count=${list.size}, " +
+            "ids=${list.take(5).map { "${it.id}:${it.title.take(10)}" }}")
+        return list
+    }
 
     suspend fun getUpcomingReminders(after: LocalDateTime): List<Task> =
         taskDao.getUpcomingReminders(after).map { it.toDomain() }
@@ -96,6 +100,8 @@ class TaskRepository private constructor(
     suspend fun addTask(task: Task): Long {
         val id = taskDao.insert(task.copy(updatedAt = LocalDateTime.now()).toEntity())
         regenerateInstances(id, task.copy(id = id))
+        android.util.Log.d("TaskRepository", "Task saved id=$id, title=${task.title.take(20)}, " +
+            "isCompleted=${task.isCompleted}, pinnedToWidget=${task.pinnedToWidget}")
         notifyTasksChanged()
         return id
     }
@@ -104,12 +110,15 @@ class TaskRepository private constructor(
         val refreshed = task.copy(updatedAt = LocalDateTime.now())
         taskDao.update(refreshed.toEntity())
         regenerateInstances(task.id, refreshed)
+        android.util.Log.d("TaskRepository", "Task updated id=${task.id}, title=${task.title.take(20)}, " +
+            "isCompleted=${task.isCompleted}, pinnedToWidget=${task.pinnedToWidget}")
         notifyTasksChanged()
     }
 
     suspend fun deleteTask(id: Long) {
         taskDao.deleteById(id)
         taskInstanceDao.deleteByTask(id)
+        android.util.Log.d("TaskRepository", "Task deleted id=$id")
         notifyTasksChanged()
     }
 
@@ -121,6 +130,7 @@ class TaskRepository private constructor(
             completedAt = if (completed) now else null,
             now = now
         )
+        android.util.Log.d("TaskRepository", "Task setCompleted id=${task.id}, isCompleted=$completed")
         notifyTasksChanged()
     }
 
@@ -130,6 +140,7 @@ class TaskRepository private constructor(
      */
     suspend fun setPinnedToWidget(id: Long, pinned: Boolean) {
         taskDao.setPinnedToWidget(id, pinned, LocalDateTime.now())
+        android.util.Log.d("TaskRepository", "Task setPinnedToWidget id=$id, pinned=$pinned")
         notifyTasksChanged()
     }
 
@@ -153,6 +164,7 @@ class TaskRepository private constructor(
     private fun notifyTasksChanged() {
         val intent = Intent(ACTION_TASKS_CHANGED).setPackage(context.packageName)
         context.sendBroadcast(intent)
+        android.util.Log.d("TaskRepository", "sendBroadcast ACTION_TASKS_CHANGED")
     }
 
     companion object {
