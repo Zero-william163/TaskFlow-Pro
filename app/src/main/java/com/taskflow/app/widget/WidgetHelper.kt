@@ -216,8 +216,7 @@ object WidgetHelper {
             Log.e(TAG, "buildViews[$appWidgetId]: ❌ R.id.task_list setRemoteAdapter FAILED", e)
             throw e
         }
-        val template = Intent(context, MainActivity::class.java).apply {
-            action = MainActivity.ACTION_MARK_COMPLETE
+        val template = Intent(context, TaskCompletionDialogActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         }
         val templatePi = try {

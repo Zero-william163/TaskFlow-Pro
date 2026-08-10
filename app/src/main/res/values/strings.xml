@@ -225,6 +225,8 @@
     <string name="widget_mark_complete_message">是否将「%1$s」标记为已完成？</string>
     <string name="widget_mark_complete_yes">标记完成</string>
     <string name="widget_mark_complete_no">取消</string>
+    <string name="widget_mark_already_done">该任务已完成</string>
+    <string name="widget_mark_default_task">该任务</string>
 
     <!-- Categories -->
     <string name="category_default">默认</string>

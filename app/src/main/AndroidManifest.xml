@@ -62,6 +62,14 @@
             android:turnScreenOn="true"
             android:theme="@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen" />
 
+        <!-- Lightweight transparent dialog activity for widget card click confirmation -->
+        <activity
+            android:name=".widget.TaskCompletionDialogActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleInstance"
+            android:theme="@style/Theme.TaskFlow.Dialog" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

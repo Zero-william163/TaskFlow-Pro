@@ -14,4 +14,12 @@
         <item name="postSplashScreenTheme">@style/Theme.TaskFlow</item>
     </style>
 
+    <!-- Transparent dialog activity theme for widget card click confirmation -->
+    <style name="Theme.TaskFlow.Dialog" parent="android:Theme.Material.Light.Dialog.Alert">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowIsFloating">true</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:backgroundDimEnabled">true</item>
+    </style>
+
 </resources>

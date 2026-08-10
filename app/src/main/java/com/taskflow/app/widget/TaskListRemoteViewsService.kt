@@ -5,7 +5,6 @@ import android.content.Intent
 import android.util.Log
 import android.widget.RemoteViews
 import android.widget.RemoteViewsService
-import com.taskflow.app.MainActivity
 import com.taskflow.app.R
 import com.taskflow.app.data.model.Task
 import com.taskflow.app.data.repository.TaskRepository
@@ -135,12 +134,12 @@ class TaskListRemoteViewsService : RemoteViewsService() {
                     Log.e(TAG, "factory[$widgetId].getViewAt($position): toggle PendingIntent FAILED", e)
                 }
 
-                // Per-item click → ask user to mark the task as complete. The ListView
-                // carries the template PendingIntent (set by WidgetHelper) with
-                // action ACTION_MARK_COMPLETE; we only fill in the task id.
+                // Per-item click → launch TaskCompletionDialogActivity with task id.
+                // The ListView carries the template PendingIntent (set by WidgetHelper)
+                // pointing to TaskCompletionDialogActivity; we only fill in the task id.
                 try {
                     val fillIn = Intent().apply {
-                        putExtra(MainActivity.EXTRA_TASK_ID, task.id)
+                        putExtra(TaskCompletionDialogActivity.EXTRA_TASK_ID, task.id)
                     }
                     views.setOnClickFillInIntent(R.id.widget_item_root, fillIn)
                 } catch (e: Throwable) {
