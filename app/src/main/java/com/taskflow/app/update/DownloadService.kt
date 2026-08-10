@@ -63,8 +63,8 @@ class DownloadService : Service() {
         val outputDir = File(getExternalFilesDir(null), "updates").apply { mkdirs() }
         var lastError: String? = null
 
-        for (url in urls) {
-            UpdateLogger.i("Downloading update from $url")
+        for ((i, url) in urls.withIndex()) {
+            UpdateLogger.i("[$i/${urls.size}] Trying: $url")
             updateNotification(buildProgressNotification(0, 0, true))
             val target = File(outputDir, "taskflow-update.apk")
             target.delete()
@@ -73,13 +73,12 @@ class DownloadService : Service() {
                     val percent = if (total > 0) ((read * 100) / total).toInt() else 0
                     updateNotification(buildProgressNotification(percent, total, false))
                 }
-                if (!ok) { lastError = "下载中断"; continue }
+                if (!ok) { lastError = "下载中断"; UpdateLogger.w("[$i] downloadFile returned false for $url"); continue }
 
-                // Verify integrity when a checksum is provided.
                 if (!expectedSha256.isNullOrBlank()) {
                     val actual = sha256(target)
                     if (!actual.equals(expectedSha256, ignoreCase = true)) {
-                        UpdateLogger.w("SHA256 mismatch: expected=$expectedSha256 actual=$actual")
+                        UpdateLogger.w("[$i] SHA256 mismatch: expected=$expectedSha256 actual=$actual")
                         target.delete()
                         lastError = "安装包校验失败"
                         continue
@@ -87,22 +86,27 @@ class DownloadService : Service() {
                 }
 
                 installApk(target)
-                // Keep the service alive until the installer launches; then stop.
                 stopSelf()
                 return
             } catch (t: Throwable) {
-                UpdateLogger.e("Download failed for $url", t)
+                UpdateLogger.e("[$i] Download failed for $url", t)
                 lastError = t.message ?: "下载失败"
             }
         }
 
-        // All sources failed.
         updateNotification(buildErrorNotification(lastError ?: getString(R.string.update_download_failed)))
         stopSelf()
     }
 
     private fun downloadFile(url: String, target: File, onProgress: (Long, Long) -> Unit): Boolean {
-        val client = OkHttpClient.Builder().build()
+        val client = OkHttpClient.Builder()
+            .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+            .writeTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+            .callTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+            .followRedirects(true)
+            .followSslRedirects(true)
+            .build()
         val request = Request.Builder().url(url).header("User-Agent", "TaskFlow-Updater").build()
         client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) return false

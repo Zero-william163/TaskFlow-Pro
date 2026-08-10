@@ -67,8 +67,10 @@ class GitHubApiSource : UpdateSource {
         // always have fallback URLs.
         val sources = mutableListOf<DownloadSource>()
         if (ghUrl != null) {
+            val proxyOrgUrl = ghUrl.replace("gh-proxy.com", "gh-proxy.org")
             sources.add(DownloadSource(name = "GH Proxy", url = "https://gh-proxy.com/$ghUrl", region = "domestic"))
             sources.add(DownloadSource(name = "GH Fast", url = "https://ghfast.top/$ghUrl", region = "cdn"))
+            sources.add(DownloadSource(name = "GH Proxy Org", url = "https://gh-proxy.org/$ghUrl", region = "domestic"))
             sources.add(DownloadSource(name = "GitHub", url = ghUrl, region = "international"))
         }
         // code = 0 forces SemanticVersion comparison in UpdateChecker.compare(),
