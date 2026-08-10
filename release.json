@@ -1,30 +1,25 @@
 {
-  "version": "2.4.0",
-  "code": 41,
-  "versionTag": "v2.4.0",
-  "log": "## v2.4.0 更新内容\n\n### 1. 权限管理精简\n- **删除 4 项冗余权限**：悬浮窗权限、自启动权限、后台运行权限、锁屏清理白名单\n- 页面只保留「必需权限」一组：通知 / 闹钟渠道 / 精确闹钟 / 电池优化\n- 桌面小组件独立管理模块保留\n\n### 2. 桌面小组件编排优化（用户反馈「字换行/方框看不懂」）\n- **删除 Header 里的刷新图标和 + 新建图标**（那个正方形框框和加号已经删掉）\n- 品牌名 \"TaskFlow\"：字号提升到 17sp，加粗，单行 maxLines=1 + ellipsize，永远不会换行\n- Logo 放大到 28dp，Pill Badge 增大 padding\n- 点击整个 Header 依然可以直接打开 App\n\n### 3. 全屏闹钟强化（响+震+全屏幕）\n- **闹钟音量强制拉到最大**（结束闹钟时自动恢复之前音量）\n- **循环播放**：系统闹钟铃声（USAGE_ALARM），最大音量\n- **循环震动**：波形 800ms响 / 250ms停 循环，直到用户操作\n- **锁屏唤醒**：强制点亮屏幕、展示在锁屏之上、全屏沉浸（隐藏导航/状态栏）\n- **屏蔽返回键**：必须点击「关闭闹钟」或「稍后提醒 5 分钟」\n- 10 分钟无操作自动超时关闭\n\n### 构建信息\n- versionCode: 41\n- versionName: 2.4.0\n",
-  "apk": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.4.0/taskflow-v2.4.0.apk",
-  "sha256": "97e128fbd4ea9d8d336fb6aab6f88c80565c9a2b00b12fe977d4dd5071135c61  taskflow-v2.4.0.apk",
-  "size": 46435123,
+  "version": "2.4.1",
+  "code": 42,
+  "versionTag": "v2.4.1",
+  "log": "## v2.4.1 更新内容\n\n### 小组件新增「+ 新建任务」按钮\n- Widget 底部新增醒目「+ 新建任务」按钮\n- 点击按钮打开 App 并自动弹出新建任务界面（AddEditTaskSheet）\n- 用户填写任务后点击保存，任务自动保存到数据库\n- 保存后 Widget 自动刷新显示新任务\n\n### 构建信息\n- versionCode: 42\n- versionName: 2.4.1\n",
+  "apk": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.4.1/taskflow-v2.4.1.apk",
+  "sha256": "fa63f31b606000b52b8134b9b04fbc2b3f1322355149eeb0de12ca5b87880109  taskflow-v2.4.1.apk",
+  "size": 46436275,
   "downloadUrls": [
     {
       "name": "GH Proxy",
-      "url": "https://gh-proxy.com/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.4.0/taskflow-v2.4.0.apk",
+      "url": "https://gh-proxy.com/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.4.1/taskflow-v2.4.1.apk",
       "region": "domestic"
     },
     {
       "name": "GH Fast",
-      "url": "https://ghfast.top/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.4.0/taskflow-v2.4.0.apk",
+      "url": "https://ghfast.top/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.4.1/taskflow-v2.4.1.apk",
       "region": "cdn"
     },
     {
-      "name": "GH Proxy Org",
-      "url": "https://gh-proxy.org/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.4.0/taskflow-v2.4.0.apk",
-      "region": "domestic"
-    },
-    {
       "name": "GitHub",
-      "url": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.4.0/taskflow-v2.4.0.apk",
+      "url": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.4.1/taskflow-v2.4.1.apk",
       "region": "international"
     }
   ]

@@ -129,7 +129,9 @@ fun TaskFlowNavHost(
         ) {
             composable(Destinations.Home.route) {
                 HomeScreen(
-                    onTaskClick = { id -> navController.navigate(Destinations.TaskDetail.create(id)) }
+                    onTaskClick = { id -> navController.navigate(Destinations.TaskDetail.create(id)) },
+                    newTaskRequested = newTaskRequested,
+                    onNewTaskConsumed = onNewTaskConsumed
                 )
             }
             composable(Destinations.Calendar.route) {

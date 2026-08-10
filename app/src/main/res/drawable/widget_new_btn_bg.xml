@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Widget Footer "+ 新建任务" 按钮背景 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <corners android:radius="16dp" />
+    <gradient
+        android:angle="0"
+        android:startColor="#667eea"
+        android:endColor="#764ba2"
+        android:type="linear" />
+    <stroke
+        android:width="0.5dp"
+        android:color="#33FFFFFF" />
+</shape>

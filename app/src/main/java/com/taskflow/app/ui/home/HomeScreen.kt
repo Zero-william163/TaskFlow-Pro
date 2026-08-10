@@ -67,7 +67,9 @@ import java.time.LocalDateTime
 @Composable
 fun HomeScreen(
     onTaskClick: (Long) -> Unit,
-    contentPadding: PaddingValues = PaddingValues(0.dp)
+    contentPadding: PaddingValues = PaddingValues(0.dp),
+    newTaskRequested: Boolean = false,
+    onNewTaskConsumed: () -> Unit = {}
 ) {
     val viewModel: HomeViewModel = viewModel(factory = AppViewModelFactory)
     val state by viewModel.state.collectAsState()
@@ -84,6 +86,14 @@ fun HomeScreen(
     var showFirstGuide by remember { mutableStateOf(false) }
     var showAddToWidgetPrompt by remember { mutableStateOf(false) }
     var showManualWidgetGuide by remember { mutableStateOf(false) }
+
+    // ====== Widget "+ 新建任务" 按钮 → 弹出 AddEditTaskSheet ======
+    LaunchedEffect(newTaskRequested) {
+        if (newTaskRequested) {
+            showAddSheet = true
+            onNewTaskConsumed()
+        }
+    }
 
     // ====== Lifecycle safety: reset all transient UI states when the Activity
     // goes to background. This prevents the "frozen" state where a ModalBottomSheet

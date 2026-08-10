@@ -1,11 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    Widget 主布局（清爽版 v2）
+    Widget 主布局（v3：含加号新建按钮）
     - 容器：24dp 软圆角 + 1dp 极细边框 + Surface 半透明背景
-    - Header 精简：左 TaskFlow 品牌（Logo+文字，单行，不会换行）
-                  右 Pill 胶囊 Badge (还有 X 个任务)
-    - 移除：刷新按钮、+ 新建按钮（这些按钮用户反馈"不知道是干嘛的"+"加号可以删掉"）
-    - 列表：ListView（空态由 Factory 返回内联空项）
+    - Header：左 Logo + Brand / 右 Pill Badge
+    - 列表：ListView
+    - Footer： + 新建任务 按钮（点击打开 App 并弹出新建任务界面）
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_root"
@@ -95,6 +94,37 @@
         android:paddingTop="2dp"
         android:paddingBottom="4dp"
         android:clipToPadding="false" />
+
+    <!-- ===== Footer：+ 新建任务 按钮 ===== -->
+    <LinearLayout
+        android:id="@+id/widget_btn_new"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:background="@drawable/widget_new_btn_bg"
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:paddingVertical="8dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="+"
+            android:textColor="@color/widget_btn_new_text"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:includeFontPadding="false" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:text="@string/widget_new_task"
+            android:textColor="@color/widget_btn_new_text"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:includeFontPadding="false" />
+    </LinearLayout>
 
     <!-- Legacy empty placeholder（GONE always，仅保留给 RemoteViews 稳定性） -->
     <TextView

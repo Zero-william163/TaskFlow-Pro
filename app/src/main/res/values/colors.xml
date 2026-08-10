@@ -61,6 +61,9 @@
     <!-- Widget refresh / plus icon tint (light) -->
     <color name="widget_icon_tint">@color/widget_text_secondary_light</color>
 
+    <!-- Widget "+ 新建任务" 按钮文字颜色 -->
+    <color name="widget_btn_new_text">#FFFFFF</color>
+
     <!-- Adaptive Icon -->
     <color name="ic_launcher_background">#4C6EF5</color>
     <color name="ic_launcher_bg_start">#4A00E0</color>

@@ -36,4 +36,7 @@
 
     <!-- Widget refresh / plus icon tint (dark) -->
     <color name="widget_icon_tint">#74788E</color>
+
+    <!-- Widget "+ 新建任务" 按钮文字颜色 -->
+    <color name="widget_btn_new_text">#FFFFFF</color>
 </resources>
