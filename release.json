@@ -1,30 +1,30 @@
 {
-  "version": "2.0.1",
-  "code": 20001,
-  "versionTag": "v2.0.1",
-  "log": "\"\\n### 修复 — 悬浮窗权限变灰 + Widget 添加无反应\\n\\n1. **悬浮窗权限变灰（Android 13+ Restricted Settings）**\\n   - 根因：单文件侧载安装的应用被系统标记为「受限设置」，`SYSTEM_ALERT_WINDOW` 开关显示为灰色\\n   - 修复：新增 `isOverlayRestricted()` 检测，通过 `AppOpsManager.checkOp()` 判断权限是否被限制\\n   - 修复：新增 `jumpToRestrictedSettings()` 跳转方法，直达「允许受限制的设置」页面\\n   - 修复：`buildJumpChain(OVERLAY)` 优先级 1 新增 `ACTION_MANAGE_APP_ROLE_PERMISSIONS` 跳转让链\\n   - 修复：PermissionScreen 悬浮窗点击时检测受限状态，自动跳转解封页面或显示图文引导\\n\\n2. **Widget 添加无反应（华为等厂商设备）**\\n   - 根因：`WidgetCapability.report()` 中 `canAutoPin = apiSupported && launcherSupported && !vendorRestricted`，\\n     华为在 `restrictedVendors` 列表中导致 `canAutoPin=false`，直接跳过了 `requestPinAppWidget` 尝试\\n   - 修复：`canAutoPin` 不再因厂商限制而跳过，只要 `apiSupported && launcherSupported` 就尝试自动添加\\n   - 修复：`addWidget()` 流程优化——先尝试 `requestPinAppWidget`，成功则等待系统弹窗确认；失败再降级引导\\n   - 修复：即使 `isRequestPinAppWidgetSupported=false`，也会先尝试一次 `requestPinAppWidget` 让系统返回真实结果\"",
-  "apk": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.0.1/app-release.apk",
-  "sha256": "ff40cc05da8c12ef70d5c7663e5fcdaf2150ebd074b689bbfa9271adc276c8e5",
-  "size": 46351079,
+  "version": "2.1.0",
+  "code": 20100,
+  "versionTag": "v2.1.0",
+  "log": "\"\\n### 增强 — 桌面滑动小组件 + 受限设置精准引导\\n\\n1. **桌面滑动小组件（AppWidget）与动态列表**\\n   - 使用 `RemoteViewsService` + `RemoteViewsFactory` + `ListView` 展示未完成任务，支持桌面上滑/下滑\\n   - 卡片项「勾选完成」按钮点击 → 发送广播 → Repository 更新 `isCompleted = true` → `notifyAppWidgetViewDataChanged` 刷新\\n   - 主 App 通过 Room 响应式监听同步任务状态\\n\\n2. **免悬浮窗权限的桌面固定小组件（AppWidget Pinning）**\\n   - 使用 Android 8.0+ 原生 `requestPinAppWidget`，**不需要 SYSTEM_ALERT_WINDOW 权限**，避开悬浮窗变灰问题\\n   - 新建任务保存时智能判断：检测桌面是否已有 Widget（`getAppWidgetIds`），若无则弹窗询问是否创建\\n   - 国产 ROM 兼容兜底：`requestPinAppWidget` 返回 false 或抛异常时，弹出手把手引导 Dialog\\n   - 新增 [WidgetAndPermissionHelper.kt](app/src/main/java/com/taskflow/app/widget/WidgetAndPermissionHelper.kt) 统一工具类\\n\\n3. **精准处理「受限制设置 (Restricted Settings) 变灰」引导**\\n   - **不直接跳转** `ACTION_MANAGE_OVERLAY_PERMISSION`（开关灰色用户无法点击）\\n   - 检测到悬浮窗受限时，先弹步骤引导 Dialog（4 步操作指引）\\n   - 确认后精确跳转应用详情页：`ACTION_APPLICATION_DETAILS_SETTINGS`\\n   - 引导用户：三点菜单 (⋮) → 允许受限制的设置 → 返回开启悬浮窗\\n\\n4. **Manifest 与小组件配置**\\n   - 新增 `SYSTEM_ALERT_WINDOW` 权限声明\\n   - `task_widget_info.xml` 新增 `widgetFeatures=\\\"reconfigurable|configuration_optional\\\"`\"",
+  "apk": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.0/app-release.apk",
+  "sha256": "6bb8432e8602bd8ef1adb60a17cc461c29c54712e485dedd20bcbad328ca273e",
+  "size": 46370779,
   "downloadUrls": [
     {
       "name": "Gitee",
-      "url": "https://gitee.com/Zero-william163/TaskFlow-Pro/releases/download/v2.0.1/app-release.apk",
+      "url": "https://gitee.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.0/app-release.apk",
       "region": "domestic"
     },
     {
       "name": "GH Proxy",
-      "url": "https://gh-proxy.com/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.0.1/app-release.apk",
+      "url": "https://gh-proxy.com/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.0/app-release.apk",
       "region": "domestic"
     },
     {
       "name": "GH Fast",
-      "url": "https://ghfast.top/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.0.1/app-release.apk",
+      "url": "https://ghfast.top/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.0/app-release.apk",
       "region": "cdn"
     },
     {
       "name": "GitHub",
-      "url": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.0.1/app-release.apk",
+      "url": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.0/app-release.apk",
       "region": "international"
     }
   ]
