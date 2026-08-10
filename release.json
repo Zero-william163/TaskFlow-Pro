@@ -8,11 +8,6 @@
   "size": 46371435,
   "downloadUrls": [
     {
-      "name": "Gitee",
-      "url": "https://gitee.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.3/app-release.apk",
-      "region": "domestic"
-    },
-    {
       "name": "GH Proxy",
       "url": "https://gh-proxy.com/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.3/app-release.apk",
       "region": "domestic"

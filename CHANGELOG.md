@@ -8,6 +8,19 @@ The GitHub Actions release workflow extracts the section matching the pushed tag
 (e.g. `## v1.0.0`) and uses it as the GitHub / Gitee release notes, and embeds it
 into `release.json` as the `log` field consumed by the in-app updater.
 
+## v2.1.4
+
+### 修复 — 应用内更新无法下载 APK
+
+#### 真实根因
+**`GitHubApiSource` 只返回 GitHub 直链**（`region: "international"`），不包含国内镜像 URL。当 `GitHubApiSource` 优先于 `release.json` raw 源成功获取到更新信息时，`release.json` 中配置的镜像 URL（GH Proxy / GH Fast）被完全丢弃。国内用户唯一的下载 URL 是 GitHub 直链 → 网络不可达 → 下载失败。
+
+#### 修复项
+1. **`UpdateSource.kt` GitHubApiSource**：返回的 `downloadUrls` 从仅 GitHub 直链改为包含 3 个镜像：GH Proxy（domestic）、GH Fast（cdn）、GitHub（international），确保国内用户有可用的下载源
+2. **`release.json`**：移除无效的 Gitee 下载 URL（Gitee 未配置 release），避免国内用户先尝试 Gitee 下载 → 404 失败
+
+---
+
 ## v2.1.3
 
 ### 修复 — 小组件「Problem loading widget」真正根因

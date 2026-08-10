@@ -60,19 +60,23 @@ class GitHubApiSource : UpdateSource {
         val tag = release.tagName?.removePrefix("v").orEmpty()
         if (tag.isBlank()) return null
         val apk = release.assets.firstOrNull { it.name.endsWith(".apk", ignoreCase = true) }
-        val sources = release.assets
-            .filter { it.name.endsWith(".apk", ignoreCase = true) }
-            .mapNotNull { asset ->
-                asset.browserDownloadUrl?.let {
-                    DownloadSource(name = asset.name, url = it, region = "international")
-                }
-            }
+        val ghUrl = apk?.browserDownloadUrl
+        // Build download URLs: GitHub direct + domestic mirrors.
+        // When GitHubApiSource wins over raw sources, release.json mirrors
+        // would be lost — so we inject them here to ensure domestic users
+        // always have fallback URLs.
+        val sources = mutableListOf<DownloadSource>()
+        if (ghUrl != null) {
+            sources.add(DownloadSource(name = "GH Proxy", url = "https://gh-proxy.com/$ghUrl", region = "domestic"))
+            sources.add(DownloadSource(name = "GH Fast", url = "https://ghfast.top/$ghUrl", region = "cdn"))
+            sources.add(DownloadSource(name = "GitHub", url = ghUrl, region = "international"))
+        }
         // code = 0 forces SemanticVersion comparison in UpdateChecker.compare(),
         // avoiding mismatch between tag-derived codes and build.gradle versionCode.
         return UpdateInfo(
             version = tag,
             code = 0,
-            apk = apk?.browserDownloadUrl,
+            apk = ghUrl,
             log = release.body.orEmpty(),
             size = apk?.size,
             downloadUrls = sources,
