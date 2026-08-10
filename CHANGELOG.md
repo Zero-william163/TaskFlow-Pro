@@ -8,6 +8,39 @@ The GitHub Actions release workflow extracts the section matching the pushed tag
 (e.g. `## v1.0.0`) and uses it as the GitHub / Gitee release notes, and embeds it
 into `release.json` as the `log` field consumed by the in-app updater.
 
+## v2.1.3
+
+### 修复 — 小组件「Problem loading widget」真正根因
+
+#### 真实根因
+**所有 Widget 布局中使用了 `<View>` 元素，而 `<View>` 不在 RemoteViews 支持的 View 列表中。**
+
+Android 官方文档明确列出了 RemoteViews 支持的布局和控件类：
+- 布局：FrameLayout、LinearLayout、RelativeLayout、GridLayout
+- 控件：AnalogClock、Button、Chronometer、ImageButton、ImageView、ProgressBar、TextView、ViewFlipper、ListView、GridView、StackView、AdapterViewFlipper
+
+**`View` 不在其中。** `widget_loading.xml`、`widget_content.xml`、`widget_preview.xml` 三个布局文件都使用了 `<View>` 作为分隔线/装饰点，导致 Launcher 进程 inflate 失败。
+
+#### 为什么 v2.1.2 的 try/catch fallback 无效
+**关键机制：`RemoteViews(packageName, layoutId)` 构造函数不会 inflate 布局** — 它只存储 layout resource ID。真正的 inflate 发生在 **Launcher 进程** 中（当 Launcher 收到 `updateAppWidget` 调用时）。
+
+这意味着：
+1. `RemoteViews(context.packageName, R.layout.widget_loading)` → 成功（只是存储 ID）
+2. `appWidgetManager.updateAppWidget(id, views)` → 成功（只是发送序列化数据到 Launcher）
+3. Launcher 尝试 inflate `widget_loading` → 失败（`<View>` 不被支持）→ 异常在 **Launcher 进程** 中抛出
+4. 我们的 `try/catch` **永远不会捕获这个异常**，因为异常不在我们的进程中
+5. Launcher 显示 "Problem loading widget"，我们的代码继续执行以为一切正常
+
+#### 修复项
+1. **`widget_loading.xml`**：`<View>` → `<ImageView>`（添加 `android:contentDescription="@null"`）
+2. **`widget_content.xml`**：两处 `<View>` → `<ImageView>`（logo dot + 分隔线）
+3. **`widget_preview.xml`**：两处 `<View>` → `<ImageView>`（logo dot + 分隔线）
+4. **`task_widget_info.xml`**：`initialLayout` 从 `widget_loading` 改为 `widget_test`（纯 `LinearLayout + TextView` + 硬编码颜色，零资源引用，绝对安全）
+5. **`TaskWidgetProvider.onUpdate()`**：先推 `widget_test`（最安全），再异步加载实际内容
+6. **`TaskListRemoteViewsService.loadingView()`**：从 `widget_loading` 改为 `widget_test`
+
+---
+
 ## v2.1.2
 
 ### 修复 — 小组件已成功添加到桌面但显示「Problem loading widget」

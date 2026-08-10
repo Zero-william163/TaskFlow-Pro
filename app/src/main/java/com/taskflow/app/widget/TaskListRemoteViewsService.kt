@@ -168,6 +168,6 @@ class TaskListRemoteViewsService : RemoteViewsService() {
         }
 
         private fun loadingView(): RemoteViews =
-            RemoteViews(context.packageName, R.layout.widget_loading)
+            RemoteViews(context.packageName, R.layout.widget_test)
     }
 }
