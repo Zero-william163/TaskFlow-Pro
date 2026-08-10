@@ -1,30 +1,30 @@
 {
-  "version": "2.2.2",
-  "code": 33,
-  "versionTag": "v2.2.2",
-  "log": "【新增】Widget 卡片点击标记完成功能\n\n1. 点击桌面小组件中的任务卡片 → 弹出确认对话框\n   - 对话框显示「是否标记任务为已完成？」\n   - 确认后任务立即标记为已完成，Widget 自动刷新\n   - 取消则不修改任务状态\n\n2. checkbox 仍保留直接切换完成状态的快捷操作\n\n【包含 v2.2.1 修复】\n3. Widget 列表空白修复（6处冲突联合修复）\n4. 版本检查逻辑修复（遍历所有源选最高版本）",
-  "apk": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.2.2/app-release.apk",
-  "sha256": "00aa2c134d576aacc751536a694561d2f542178ffd190110235806409b6f380a",
+  "version": "2.2.3",
+  "code": 34,
+  "versionTag": "v2.2.3",
+  "log": "【修复】检查更新页面刷新图标点击无反应\n\n1. 为「已是最新版本」页面的刷新图标添加点击事件\n   - 点击后触发版本检查逻辑\n   - 刷新图标增加旋转动画效果\n   - 新增「点击重新检查」提示文字\n\n【修复】日期选择器默认高亮异常\n\n2. 修复新建/编辑任务时日期选择器同时显示两个高亮的问题\n   - 开始日期选择器：初始选中日期限制为不早于今天\n   - 截止日期选择器：初始选中日期限制为不早于开始日期\n   - 确保「今天」和「选中日」为同一天时展示正常",
+  "apk": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.2.3/app-release.apk",
+  "sha256": "0b13aac7a9dc3e6cb9cbf585038c692b4f9629995c494e7775fade2c16618bb2  release/TaskFlow-Pro-v2.2.3-release.apk",
   "size": 46406827,
   "downloadUrls": [
     {
       "name": "GH Proxy",
-      "url": "https://gh-proxy.com/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.2.2/app-release.apk",
+      "url": "https://gh-proxy.com/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.2.3/app-release.apk",
       "region": "domestic"
     },
     {
       "name": "GH Fast",
-      "url": "https://ghfast.top/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.2.2/app-release.apk",
+      "url": "https://ghfast.top/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.2.3/app-release.apk",
       "region": "cdn"
     },
     {
       "name": "GH Proxy Org",
-      "url": "https://gh-proxy.org/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.2.2/app-release.apk",
+      "url": "https://gh-proxy.org/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.2.3/app-release.apk",
       "region": "domestic"
     },
     {
       "name": "GitHub",
-      "url": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.2.2/app-release.apk",
+      "url": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.2.3/app-release.apk",
       "region": "international"
     }
   ]

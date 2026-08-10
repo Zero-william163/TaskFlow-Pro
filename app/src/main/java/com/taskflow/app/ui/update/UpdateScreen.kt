@@ -1,6 +1,13 @@
 package com.taskflow.app.ui.update
 
+import android.widget.Toast
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,6 +42,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -57,6 +65,11 @@ fun UpdateScreen(onBack: () -> Unit) {
 
     LaunchedEffect(Unit) {
         if (state is UpdateUiState.Idle) viewModel.check(context)
+    }
+
+    val onRefresh: () -> Unit = {
+        Toast.makeText(context, R.string.update_checking, Toast.LENGTH_SHORT).show()
+        viewModel.check(context)
     }
 
     Scaffold(
@@ -104,8 +117,18 @@ fun UpdateScreen(onBack: () -> Unit) {
                     onUpdate = { viewModel.startDownload(context, s.info) },
                     onIgnore = { viewModel.ignore(s.info); onBack() }
                 )
-                is UpdateUiState.UpToDate -> UpToDateView(s.current, s.latest)
-                is UpdateUiState.Error -> ErrorView(s.message, onRetry = { viewModel.check(context) })
+                is UpdateUiState.UpToDate -> UpToDateView(
+                    current = s.current,
+                    latest = s.latest,
+                    onRefresh = onRefresh
+                )
+                is UpdateUiState.Error -> ErrorView(
+                    message = s.message,
+                    onRetry = {
+                        Toast.makeText(context, R.string.update_checking, Toast.LENGTH_SHORT).show()
+                        viewModel.check(context)
+                    }
+                )
                 UpdateUiState.Downloading -> DownloadingView()
             }
         }
@@ -162,11 +185,37 @@ private fun AvailableView(
 }
 
 @Composable
-private fun UpToDateView(current: String, latest: String) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Icon(Icons.Rounded.Refresh, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(40.dp))
+private fun UpToDateView(current: String, latest: String, onRefresh: () -> Unit) {
+    val transition = rememberInfiniteTransition(label = "refresh")
+    val rotation by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1200),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "refresh_rotation"
+    )
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.clickable { onRefresh() }
+    ) {
+        Icon(
+            Icons.Rounded.Refresh,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier
+                .size(40.dp)
+                .rotate(rotation)
+        )
         Spacer(Modifier.height(12.dp))
         Text(stringResource(R.string.update_latest), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "点击重新检查",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 

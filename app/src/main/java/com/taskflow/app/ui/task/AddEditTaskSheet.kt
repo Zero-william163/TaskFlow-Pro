@@ -477,9 +477,10 @@ fun AddEditTaskSheet(
                         (endMillis == null || utcTimeMillis <= endMillis)
             }
         }
-        val initialStartMillis = startDate?.atStartOfDay(ZoneId.systemDefault())
+        val initialStartMillis = (startDate?.atStartOfDay(ZoneId.systemDefault())
             ?.toInstant()?.toEpochMilli()
-            ?: minToday.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+            ?: minToday.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli())
+            .coerceAtLeast(todayMillis)
         val state = rememberDatePickerState(
             initialSelectedDateMillis = initialStartMillis,
             initialDisplayedMonthMillis = initialStartMillis,
@@ -513,13 +514,13 @@ fun AddEditTaskSheet(
             }
         }
         // 新建任务默认选中今天，确保"今日"和"选中"标记在同一天
-        val initialDueMillis = if (isEdit) {
+        val initialDueMillis = (if (isEdit) {
             dueDate?.atStartOfDay(ZoneId.systemDefault())
                 ?.toInstant()?.toEpochMilli()
                 ?: LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
         } else {
             LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-        }
+        }).coerceAtLeast(minMillis)
         val state = rememberDatePickerState(
             initialSelectedDateMillis = initialDueMillis,
             initialDisplayedMonthMillis = initialDueMillis,
