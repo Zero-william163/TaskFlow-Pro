@@ -37,6 +37,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -65,6 +66,13 @@ fun UpdateScreen(onBack: () -> Unit) {
 
     LaunchedEffect(Unit) {
         if (state is UpdateUiState.Idle) viewModel.check(context)
+    }
+
+    // Register download result receiver so the UI can react when DownloadService
+    // finishes (success → installer launches; failure → show error state).
+    DisposableEffect(Unit) {
+        viewModel.registerDownloadReceiver(context)
+        onDispose { viewModel.unregisterDownloadReceiver(context) }
     }
 
     val onRefresh: () -> Unit = {
@@ -236,6 +244,12 @@ private fun DownloadingView() {
         CircularProgressIndicator()
         Spacer(Modifier.height(12.dp))
         Text(stringResource(R.string.update_downloading), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "正在后台下载，请保持网络畅通",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 

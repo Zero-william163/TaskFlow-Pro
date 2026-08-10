@@ -1,30 +1,30 @@
 {
-  "version": "2.2.4",
-  "code": 35,
-  "versionTag": "v2.2.4",
-  "log": "【重构】Widget 卡片点击交互 — 轻量级透明弹窗\n\n1. 新增 TaskCompletionDialogActivity（透明浮动主题）\n   - 点击 Widget 任务卡片不再打开整个 App\n   - 直接在桌面上弹出确认对话框\n   - 确认后标记任务完成，自动刷新 Widget\n   - 取消或点击空白直接关闭\n\n2. 技术改进\n   - 从 MainActivity + Compose Dialog 迁移到独立 DialogActivity\n   - 减少 Activity 启动开销\n   - 不干扰 App 当前页面状态\n   - Widget 交互不再需要启动整个 Compose 导航栈",
-  "apk": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.2.4/app-release.apk",
-  "sha256": "74a276aef4aed2e034d097ab49703a437acc3b33b180119784bb7d40898f1480  release/TaskFlow-Pro-v2.2.4-release.apk",
-  "size": 46407871,
+  "version": "2.2.5",
+  "code": 36,
+  "versionTag": "v2.2.5",
+  "log": "【修复】更新下载失败\n\n1. 移除 callTimeout 限制\n   - 之前 30s 超时导致 46MB APK 无法下完\n   - 现在仅保留 connectTimeout(15s) 和 readTimeout(30s)\n\n2. 修复下载 URL 排序 bug\n   - 国内用户优先使用 gh-proxy / ghfast 等镜像\n   - 不再先尝试最慢的 GitHub 直链\n\n3. 下载失败后 UI 不再卡死\n   - 新增广播机制通知 UI\n   - 失败时切换到错误状态",
+  "apk": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.2.5/app-release.apk",
+  "sha256": "bff3da341e6f407c75aad915a1975c340a0dda469e29660c40f2cf176d90ed17  release/TaskFlow-Pro-v2.2.5-release.apk",
+  "size": 46407875,
   "downloadUrls": [
     {
       "name": "GH Proxy",
-      "url": "https://gh-proxy.com/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.2.4/app-release.apk",
+      "url": "https://gh-proxy.com/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.2.5/app-release.apk",
       "region": "domestic"
     },
     {
       "name": "GH Fast",
-      "url": "https://ghfast.top/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.2.4/app-release.apk",
+      "url": "https://ghfast.top/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.2.5/app-release.apk",
       "region": "cdn"
     },
     {
       "name": "GH Proxy Org",
-      "url": "https://gh-proxy.org/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.2.4/app-release.apk",
+      "url": "https://gh-proxy.org/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.2.5/app-release.apk",
       "region": "domestic"
     },
     {
       "name": "GitHub",
-      "url": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.2.4/app-release.apk",
+      "url": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.2.5/app-release.apk",
       "region": "international"
     }
   ]

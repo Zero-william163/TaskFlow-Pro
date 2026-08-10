@@ -85,6 +85,8 @@ class DownloadService : Service() {
                     }
                 }
 
+                // Broadcast success so UpdateViewModel can update UI state
+                sendDownloadResult(success = true)
                 installApk(target)
                 stopSelf()
                 return
@@ -94,22 +96,35 @@ class DownloadService : Service() {
             }
         }
 
+        // Broadcast failure so UpdateViewModel can show error state in UI
+        sendDownloadResult(success = false, error = lastError ?: getString(R.string.update_download_failed))
         updateNotification(buildErrorNotification(lastError ?: getString(R.string.update_download_failed)))
         stopSelf()
     }
 
+    private fun sendDownloadResult(success: Boolean, error: String? = null) {
+        val intent = Intent(ACTION_DOWNLOAD_RESULT).apply {
+            setPackage(packageName)
+            putExtra(EXTRA_DOWNLOAD_SUCCESS, success)
+            if (!error.isNullOrBlank()) putExtra(EXTRA_DOWNLOAD_ERROR, error)
+        }
+        sendBroadcast(intent)
+    }
+
     private fun downloadFile(url: String, target: File, onProgress: (Long, Long) -> Unit): Boolean {
         val client = OkHttpClient.Builder()
-            .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
-            .readTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
-            .writeTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
-            .callTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+            .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+            .writeTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
             .followRedirects(true)
             .followSslRedirects(true)
             .build()
         val request = Request.Builder().url(url).header("User-Agent", "TaskFlow-Updater").build()
         client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) return false
+            if (!response.isSuccessful) {
+                UpdateLogger.w("downloadFile: HTTP ${response.code} for $url")
+                return false
+            }
             val body = response.body ?: return false
             val total = body.contentLength()
             var lastReport = 0L
@@ -212,6 +227,9 @@ class DownloadService : Service() {
         private const val CHANNEL_DOWNLOAD = "update_download"
         const val EXTRA_URLS = "extra_urls"
         const val EXTRA_SHA256 = "extra_sha256"
+        const val ACTION_DOWNLOAD_RESULT = "com.taskflow.app.DOWNLOAD_RESULT"
+        const val EXTRA_DOWNLOAD_SUCCESS = "extra_download_success"
+        const val EXTRA_DOWNLOAD_ERROR = "extra_download_error"
 
         fun start(context: Context, urls: List<String>, sha256: String?) {
             val intent = Intent(context, DownloadService::class.java).apply {

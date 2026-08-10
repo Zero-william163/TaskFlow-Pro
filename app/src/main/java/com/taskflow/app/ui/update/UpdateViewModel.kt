@@ -1,6 +1,9 @@
 package com.taskflow.app.ui.update
 
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.taskflow.app.data.preferences.UserPreferences
@@ -36,6 +39,42 @@ class UpdateViewModel(
     val autoUpdateInfo: StateFlow<UpdateInfo?> = _autoUpdateInfo.asStateFlow()
 
     val currentVersion: String get() = updateChecker.installedVersionName
+
+    /**
+     * BroadcastReceiver that listens for download result broadcasts from
+     * [DownloadService]. When the download fails, updates the UI state to Error
+     * so the user isn't stuck on "Downloading…" forever.
+     */
+    private val downloadResultReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action != DownloadService.ACTION_DOWNLOAD_RESULT) return
+            val success = intent.getBooleanExtra(DownloadService.EXTRA_DOWNLOAD_SUCCESS, false)
+            if (!success) {
+                val error = intent.getStringExtra(DownloadService.EXTRA_DOWNLOAD_ERROR)
+                    ?: "下载失败"
+                _state.value = UpdateUiState.Error(error)
+            }
+            // On success, DownloadService launches the system installer Activity
+            // which will be on top of our UI — no state change needed here.
+        }
+    }
+
+    /**
+     * Register the download result receiver. Call from the screen's onResume.
+     * The receiver is scoped to the application package (DownloadService sends
+     * with setPackage), so it won't leak.
+     */
+    fun registerDownloadReceiver(context: Context) {
+        context.registerReceiver(
+            downloadResultReceiver,
+            IntentFilter(DownloadService.ACTION_DOWNLOAD_RESULT),
+            Context.RECEIVER_NOT_EXPORTED
+        )
+    }
+
+    fun unregisterDownloadReceiver(context: Context) {
+        runCatching { context.unregisterReceiver(downloadResultReceiver) }
+    }
 
     /**
      * Silent background check called on app startup. Respects the 24h throttle
@@ -92,5 +131,9 @@ class UpdateViewModel(
 
     fun ignore(info: UpdateInfo) {
         viewModelScope.launch { userPreferences.setIgnoredUpdateVersion(info.version) }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
     }
 }

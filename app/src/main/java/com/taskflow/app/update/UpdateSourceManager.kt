@@ -123,7 +123,10 @@ class UpdateSourceManager {
             return null
         }
         UpdateLogger.i("fetchLatest: selected best version = ${best.version}")
+        // Clear the `apk` field so resolvedUrls only returns the sorted list.
+        // Otherwise apk (GitHub direct, region="auto") would always be first,
+        // defeating the region-based sort for domestic users.
         return sortDownloadUrls(best.resolvedUrls, isDomestic)
-            .let { best.copy(downloadUrls = it) }
+            .let { best.copy(apk = null, downloadUrls = it) }
     }
 }
