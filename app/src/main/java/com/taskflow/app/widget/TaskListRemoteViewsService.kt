@@ -55,15 +55,15 @@ class TaskListRemoteViewsService : RemoteViewsService() {
         }
 
         override fun onDataSetChanged() {
-            // Runs on a background thread; blocking read is safe and standard here.
-            Log.d(TAG, "factory[$widgetId].onDataSetChanged: querying Room...")
-            tasks = try {
-                runBlocking { TaskRepository.get(context).getPinnedPending() }
-            } catch (e: Throwable) {
-                Log.e(TAG, "factory[$widgetId].onDataSetChanged: Room query failed", e)
-                emptyList()
-            }
-            Log.d(TAG, "factory[$widgetId].onDataSetChanged: tasks=${tasks.size}")
+            // ===== 二分排查法 Step 2 =====
+            // 不读 Room，返回固定假数据
+            Log.d(TAG, "factory[$widgetId].onDataSetChanged: 使用假数据 (Step 2)")
+            tasks = listOf(
+                Task(id = 1, title = "测试任务1", isCompleted = false),
+                Task(id = 2, title = "测试任务2", isCompleted = false),
+                Task(id = 3, title = "测试任务3", isCompleted = false)
+            )
+            Log.d(TAG, "factory[$widgetId].onDataSetChanged: tasks=${tasks.size} (假数据)")
         }
 
         override fun getCount(): Int {

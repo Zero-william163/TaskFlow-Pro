@@ -1,25 +1,25 @@
 {
-  "version": "2.1.5",
-  "code": 20105,
-  "versionTag": "v2.1.5",
-  "log": "### 二分排查法 Step 1 — 最小化 Widget 测试\n\n#### 修改内容\n1. **TaskWidgetProvider.onUpdate()**：只推 `widget_test.xml`（纯 LinearLayout+TextView+硬编码颜色），不启动协程、不读 Room、不绑定 RemoteViewsService\n2. **TaskFlowApp.onCreate()**：每个初始化步骤单独 try/catch，确保单点失败不会拖垮整个进程（防止 Application 崩溃导致 Widget 进程死亡）\n\n#### 测试方法\n1. 卸载旧版本\n2. 安装 v2.1.5\n3. 添加 Widget 到桌面\n4. 如果显示 \"TaskFlow Widget Test\" → 问题在异步加载链路（Room/Service/buildViews）\n5. 如果仍然 \"Problem loading widget\" → 问题在 Application 初始化或更底层\n6. 同时查看 Logcat 过滤 `TaskFlowApp|WidgetProvider` 看哪个初始化步骤失败",
-  "apk": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.5/app-release.apk",
-  "sha256": "d469cbd2b23f5ef6f9dc9d89646f3ee01fff462ee6f68032ec49eca4e0b1974b",
+  "version": "2.1.6",
+  "code": 20106,
+  "versionTag": "v2.1.6",
+  "log": "### 二分排查法 Step 2 — widget_content + 假数据（不读 Room）\n\n#### 修改内容\n1. **TaskWidgetProvider.onUpdate()**：推 `widget_content.xml`（含 ListView + ImageView + drawable 背景）+ 绑定 RemoteViewsService\n2. **TaskListRemoteViewsService.Factory.onDataSetChanged()**：返回 3 条固定假数据（\"测试任务1/2/3\"），不读 Room\n\n#### 测试方法\n1. 卸载旧版本，安装 v2.1.6\n2. 添加 Widget 到桌面\n3. 如果显示带 3 条假任务的列表 → widget_content 布局 + Service 都 OK，瓶颈在 Room\n4. 如果仍然 \"Problem loading widget\" → widget_content.xml 布局本身有问题\n5. Logcat 过滤 `WidgetProvider|WidgetListService` 查看日志",
+  "apk": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.6/app-release.apk",
+  "sha256": "f3a0b0d79b4bd936c863de56a6b116f1907b13f2d34007ae16c7cea94c569f6e",
   "size": 46371435,
   "downloadUrls": [
     {
       "name": "GH Proxy",
-      "url": "https://gh-proxy.com/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.5/app-release.apk",
+      "url": "https://gh-proxy.com/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.6/app-release.apk",
       "region": "domestic"
     },
     {
       "name": "GH Fast",
-      "url": "https://ghfast.top/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.5/app-release.apk",
+      "url": "https://ghfast.top/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.6/app-release.apk",
       "region": "cdn"
     },
     {
       "name": "GitHub",
-      "url": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.5/app-release.apk",
+      "url": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.6/app-release.apk",
       "region": "international"
     }
   ]

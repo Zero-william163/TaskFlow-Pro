@@ -22,19 +22,36 @@ class TaskWidgetProvider : AppWidgetProvider() {
         Log.d(TAG, "================ onUpdate ================")
         Log.d(TAG, "onUpdate: ids=${appWidgetIds.toList()}, count=${appWidgetIds.size}")
 
-        // ===== 二分排查法 Step 1 =====
-        // 只推 widget_test.xml，不启动协程、不读 Room、不绑定 RemoteViewsService。
-        // 如果此版本 Widget 能正常显示 "TaskFlow Widget Test" 文字：
-        //   → 问题在异步加载链路 (Room/Service/Repository/buildViews)
-        // 如果仍然显示 "Problem loading widget"：
-        //   → 问题在 Application 初始化崩溃 或 更底层
+        // ===== 二分排查法 Step 2 =====
+        // 推 widget_content.xml（含 ListView + ImageView）+ 绑定 RemoteViewsService
+        // 但 Factory 返回固定假数据，不读 Room。
+        // 如果成功 → widget_content 布局和 Service 都 OK，瓶颈在 Room
+        // 如果失败 → widget_content.xml 布局本身有问题
         appWidgetIds.forEach { id ->
             try {
-                val views = RemoteViews(context.packageName, R.layout.widget_test)
+                val views = RemoteViews(context.packageName, R.layout.widget_content)
+                views.setTextViewText(R.id.count_text, "测试模式")
+                views.setViewVisibility(R.id.task_list, android.view.View.VISIBLE)
+                views.setViewVisibility(R.id.empty_text, android.view.View.GONE)
+
+                // 绑定 RemoteViewsService（Factory 返回假数据）
+                val listIntent = android.content.Intent(context, TaskListRemoteViewsService::class.java).apply {
+                    putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id)
+                    data = android.net.Uri.parse(toUri(android.content.Intent.URI_INTENT_SCHEME))
+                }
+                views.setRemoteAdapter(R.id.task_list, listIntent)
+
                 appWidgetManager.updateAppWidget(id, views)
-                Log.d(TAG, "onUpdate: widget $id → widget_test ONLY (二分法 Step 1)")
+                Log.d(TAG, "onUpdate: widget $id → widget_content + 假数据 Service (二分法 Step 2)")
             } catch (e: Throwable) {
-                Log.e(TAG, "onUpdate: ❌ widget_test FAILED for $id", e)
+                Log.e(TAG, "onUpdate: ❌ widget_content FAILED for $id", e)
+                // fallback to widget_test
+                try {
+                    appWidgetManager.updateAppWidget(id,
+                        RemoteViews(context.packageName, R.layout.widget_test))
+                } catch (e2: Throwable) {
+                    Log.e(TAG, "onUpdate: ❌ widget_test also FAILED", e2)
+                }
             }
         }
     }
