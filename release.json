@@ -1,25 +1,25 @@
 {
-  "version": "2.1.3",
-  "code": 20103,
-  "versionTag": "v2.1.3",
-  "log": "### 修复 — 小组件「Problem loading widget」真正根因\n\n#### 真实根因\n**所有 Widget 布局中使用了 `<View>` 元素，而 `<View>` 不在 RemoteViews 支持的 View 列表中。**\n\nAndroid 官方文档明确列出了 RemoteViews 支持的布局和控件类：\n- 布局：FrameLayout、LinearLayout、RelativeLayout、GridLayout\n- 控件：AnalogClock、Button、Chronometer、ImageButton、ImageView、ProgressBar、TextView、ViewFlipper、ListView、GridView、StackView、AdapterViewFlipper\n\n**`View` 不在其中。** `widget_loading.xml`、`widget_content.xml`、`widget_preview.xml` 三个布局文件都使用了 `<View>` 作为分隔线/装饰点，导致 Launcher 进程 inflate 失败。\n\n#### 为什么 v2.1.2 的 try/catch fallback 无效\n**关键机制：`RemoteViews(packageName, layoutId)` 构造函数不会 inflate 布局** — 它只存储 layout resource ID。真正的 inflate 发生在 **Launcher 进程** 中（当 Launcher 收到 `updateAppWidget` 调用时）。\n\n这意味着：\n1. `RemoteViews(context.packageName, R.layout.widget_loading)` → 成功（只是存储 ID）\n2. `appWidgetManager.updateAppWidget(id, views)` → 成功（只是发送序列化数据到 Launcher）\n3. Launcher 尝试 inflate `widget_loading` → 失败（`<View>` 不被支持）→ 异常在 **Launcher 进程** 中抛出\n4. 我们的 `try/catch` **永远不会捕获这个异常**，因为异常不在我们的进程中\n5. Launcher 显示 \"Problem loading widget\"，我们的代码继续执行以为一切正常\n\n#### 修复项\n1. **`widget_loading.xml`**：`<View>` → `<ImageView>`（添加 `android:contentDescription=\"@null\"`）\n2. **`widget_content.xml`**：两处 `<View>` → `<ImageView>`（logo dot + 分隔线）\n3. **`widget_preview.xml`**：两处 `<View>` → `<ImageView>`（logo dot + 分隔线）\n4. **`task_widget_info.xml`**：`initialLayout` 从 `widget_loading` 改为 `widget_test`（纯 `LinearLayout + TextView` + 硬编码颜色，零资源引用，绝对安全）\n5. **`TaskWidgetProvider.onUpdate()`**：先推 `widget_test`（最安全），再异步加载实际内容\n6. **`TaskListRemoteViewsService.loadingView()`**：从 `widget_loading` 改为 `widget_test`\n\n---",
-  "apk": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.3/app-release.apk",
-  "sha256": "7553e37519fc6de12c7622e652cda7c9a8a3c05e636396912d333f0dea34f718",
+  "version": "2.1.4",
+  "code": 20104,
+  "versionTag": "v2.1.4",
+  "log": "### 修复 — 应用内更新无法下载 APK\n\n#### 真实根因\n**`GitHubApiSource` 只返回 GitHub 直链**（`region: \"international\"`），不包含国内镜像 URL。当 `GitHubApiSource` 优先于 `release.json` raw 源成功获取到更新信息时，`release.json` 中配置的镜像 URL（GH Proxy / GH Fast）被完全丢弃。国内用户唯一的下载 URL 是 GitHub 直链 → 网络不可达 → 下载失败。\n\n#### 修复项\n1. **`UpdateSource.kt` GitHubApiSource**：返回的 `downloadUrls` 从仅 GitHub 直链改为包含 3 个镜像：GH Proxy（domestic）、GH Fast（cdn）、GitHub（international），确保国内用户有可用的下载源\n2. **`release.json`**：移除无效的 Gitee 下载 URL（Gitee 未配置 release），避免国内用户先尝试 Gitee 下载 → 404 失败\n\n---",
+  "apk": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.4/app-release.apk",
+  "sha256": "0c33eeaee2aab9fc78a3ac3f2eb091950ada6fbe1555413201fb03a915782ce7",
   "size": 46371435,
   "downloadUrls": [
     {
       "name": "GH Proxy",
-      "url": "https://gh-proxy.com/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.3/app-release.apk",
+      "url": "https://gh-proxy.com/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.4/app-release.apk",
       "region": "domestic"
     },
     {
       "name": "GH Fast",
-      "url": "https://ghfast.top/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.3/app-release.apk",
+      "url": "https://ghfast.top/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.4/app-release.apk",
       "region": "cdn"
     },
     {
       "name": "GitHub",
-      "url": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.3/app-release.apk",
+      "url": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.4/app-release.apk",
       "region": "international"
     }
   ]
