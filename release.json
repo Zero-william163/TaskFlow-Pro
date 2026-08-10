@@ -1,30 +1,30 @@
 {
-  "version": "2.2.6",
-  "code": 37,
-  "versionTag": "v2.2.6",
-  "log": "【修复】下载完成后不弹出安装界面\n\n1. 安装权限检查\n   - 下载完成后检查 canRequestPackageInstalls()\n   - 无权限时跳转「安装未知应用」设置页\n   - 授权后返回 App 自动弹出安装界面\n\n2. PendingInstall 机制\n   - 保存已下载 APK 路径\n   - MainActivity.onResume 自动重试安装\n\n3. 通知引导\n   - 跳转设置页时显示引导通知\n   - 点击通知返回 App 触发安装重试\n",
-  "apk": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.2.6/app-release.apk",
-  "sha256": "36c83a965d665de9f0312ed3895a60689a4ebdd40056536d9a32ef3c17d9f60b  release/TaskFlow-Pro-v2.2.6-release.apk",
-  "size": 46408859,
+  "version": "2.2.7",
+  "code": 38,
+  "versionTag": "v2.2.7",
+  "log": "【修复】Widget 卡片点击 + DatePicker 双高亮\n\n1. Widget template PendingIntent 改为 FLAG_MUTABLE\n   - 修复 fill-in extras 被静默剥离的问题\n   - 点击卡片现在能正确弹出确认对话框\n\n2. DatePicker millis 改用 ZoneId.of(\"UTC\")\n   - 修复时区偏移导致的日期选错一天\n   - 选中日和\"今天\"标记现在统一为同一天\n",
+  "apk": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.2.7/app-release.apk",
+  "sha256": "b023511f33f5674d63339d7b74a71096ea9d437b0290bac72535601aed33c0bf  release/TaskFlow-Pro-v2.2.7-release.apk",
+  "size": 46408855,
   "downloadUrls": [
     {
       "name": "GH Proxy",
-      "url": "https://gh-proxy.com/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.2.6/app-release.apk",
+      "url": "https://gh-proxy.com/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.2.7/app-release.apk",
       "region": "domestic"
     },
     {
       "name": "GH Fast",
-      "url": "https://ghfast.top/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.2.6/app-release.apk",
+      "url": "https://ghfast.top/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.2.7/app-release.apk",
       "region": "cdn"
     },
     {
       "name": "GH Proxy Org",
-      "url": "https://gh-proxy.org/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.2.6/app-release.apk",
+      "url": "https://gh-proxy.org/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.2.7/app-release.apk",
       "region": "domestic"
     },
     {
       "name": "GitHub",
-      "url": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.2.6/app-release.apk",
+      "url": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.2.7/app-release.apk",
       "region": "international"
     }
   ]

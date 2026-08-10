@@ -464,12 +464,11 @@ fun AddEditTaskSheet(
     if (showStartPicker) {
         val minToday = LocalDate.now()
         val endDay = dueDate
-        // Material3 1.3.0 moved date validation from DatePicker.dateValidator
-        // (removed) into DatePickerState via SelectableDates. We supply a
-        // SelectableDates that disables past days AND days after the due date.
-        // Spec: "今天以前：全部灰色。不可点击。" + "开始日期不能晚于截止日期".
-        val todayMillis = minToday.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-        val endMillis = endDay?.atStartOfDay(ZoneId.systemDefault())?.toInstant()?.toEpochMilli()
+        // Material3 DatePicker interprets millis as UTC. Using ZoneId.systemDefault()
+        // (e.g. UTC+8) shifts the date backward by ~8 hours → previous day.
+        // Fix: use UTC so the day boundary aligns with the calendar day shown.
+        val todayMillis = minToday.atStartOfDay(ZoneId.of("UTC")).toInstant().toEpochMilli()
+        val endMillis = endDay?.atStartOfDay(ZoneId.of("UTC"))?.toInstant()?.toEpochMilli()
         val startSelectableDates = remember(endMillis) {
             object : androidx.compose.material3.SelectableDates {
                 override fun isSelectableDate(utcTimeMillis: Long): Boolean =
@@ -477,9 +476,9 @@ fun AddEditTaskSheet(
                         (endMillis == null || utcTimeMillis <= endMillis)
             }
         }
-        val initialStartMillis = (startDate?.atStartOfDay(ZoneId.systemDefault())
+        val initialStartMillis = (startDate?.atStartOfDay(ZoneId.of("UTC"))
             ?.toInstant()?.toEpochMilli()
-            ?: minToday.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli())
+            ?: minToday.atStartOfDay(ZoneId.of("UTC")).toInstant().toEpochMilli())
             .coerceAtLeast(todayMillis)
         val state = rememberDatePickerState(
             initialSelectedDateMillis = initialStartMillis,
@@ -506,7 +505,7 @@ fun AddEditTaskSheet(
     }
     if (showEndPicker) {
         val minDay = (startDate ?: LocalDate.now()).coerceAtLeast(LocalDate.now())
-        val minMillis = minDay.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val minMillis = minDay.atStartOfDay(ZoneId.of("UTC")).toInstant().toEpochMilli()
         val endSelectableDates = remember(minMillis) {
             object : androidx.compose.material3.SelectableDates {
                 override fun isSelectableDate(utcTimeMillis: Long): Boolean =
@@ -515,11 +514,11 @@ fun AddEditTaskSheet(
         }
         // 新建任务默认选中今天，确保"今日"和"选中"标记在同一天
         val initialDueMillis = (if (isEdit) {
-            dueDate?.atStartOfDay(ZoneId.systemDefault())
+            dueDate?.atStartOfDay(ZoneId.of("UTC"))
                 ?.toInstant()?.toEpochMilli()
-                ?: LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                ?: LocalDate.now().atStartOfDay(ZoneId.of("UTC")).toInstant().toEpochMilli()
         } else {
-            LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+            LocalDate.now().atStartOfDay(ZoneId.of("UTC")).toInstant().toEpochMilli()
         }).coerceAtLeast(minMillis)
         val state = rememberDatePickerState(
             initialSelectedDateMillis = initialDueMillis,

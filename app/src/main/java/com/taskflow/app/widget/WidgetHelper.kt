@@ -222,7 +222,7 @@ object WidgetHelper {
         val templatePi = try {
             PendingIntent.getActivity(
                 context, appWidgetId, template,
-                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+                PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
             )
         } catch (e: Throwable) {
             Log.e(TAG, "buildViews[$appWidgetId]: ❌ template PendingIntent FAILED", e)
