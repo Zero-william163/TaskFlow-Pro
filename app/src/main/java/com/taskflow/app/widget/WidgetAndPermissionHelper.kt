@@ -2,8 +2,8 @@ package com.taskflow.app.widget
 
 import android.app.Activity
 import android.app.AlertDialog
-import android.app.AppWidgetManager
 import android.app.PendingIntent
+import android.appwidget.AppWidgetManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
