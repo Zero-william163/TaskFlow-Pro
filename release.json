@@ -1,30 +1,30 @@
 {
-  "version": "2.1.6",
-  "code": 20106,
-  "versionTag": "v2.1.6",
-  "log": "\"Release v2.1.6\"",
-  "apk": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.6/app-release.apk",
-  "sha256": "2fb0463cd2e64b1314a2f9c360e70fc3fbb63d915794fdd916ce9c489a6c22df",
+  "version": "2.1.7",
+  "code": 20107,
+  "versionTag": "v2.1.7",
+  "log": "\"Release v2.1.7\"",
+  "apk": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.7/app-release.apk",
+  "sha256": "c99f96edf62852e231935e4be1bb2d414213139bfc3c554699647b4d0af8bba4",
   "size": 46371435,
   "downloadUrls": [
     {
       "name": "Gitee",
-      "url": "https://gitee.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.6/app-release.apk",
+      "url": "https://gitee.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.7/app-release.apk",
       "region": "domestic"
     },
     {
       "name": "GH Proxy",
-      "url": "https://gh-proxy.com/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.6/app-release.apk",
+      "url": "https://gh-proxy.com/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.7/app-release.apk",
       "region": "domestic"
     },
     {
       "name": "GH Fast",
-      "url": "https://ghfast.top/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.6/app-release.apk",
+      "url": "https://ghfast.top/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.7/app-release.apk",
       "region": "cdn"
     },
     {
       "name": "GitHub",
-      "url": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.6/app-release.apk",
+      "url": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.7/app-release.apk",
       "region": "international"
     }
   ]
