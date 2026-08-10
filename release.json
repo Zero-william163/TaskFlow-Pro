@@ -1,25 +1,25 @@
 {
-  "version": "2.1.4",
-  "code": 20104,
-  "versionTag": "v2.1.4",
-  "log": "### 修复 — 应用内更新无法下载 APK\n\n#### 真实根因\n**`GitHubApiSource` 只返回 GitHub 直链**（`region: \"international\"`），不包含国内镜像 URL。当 `GitHubApiSource` 优先于 `release.json` raw 源成功获取到更新信息时，`release.json` 中配置的镜像 URL（GH Proxy / GH Fast）被完全丢弃。国内用户唯一的下载 URL 是 GitHub 直链 → 网络不可达 → 下载失败。\n\n#### 修复项\n1. **`UpdateSource.kt` GitHubApiSource**：返回的 `downloadUrls` 从仅 GitHub 直链改为包含 3 个镜像：GH Proxy（domestic）、GH Fast（cdn）、GitHub（international），确保国内用户有可用的下载源\n2. **`release.json`**：移除无效的 Gitee 下载 URL（Gitee 未配置 release），避免国内用户先尝试 Gitee 下载 → 404 失败\n\n---",
-  "apk": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.4/app-release.apk",
-  "sha256": "0c33eeaee2aab9fc78a3ac3f2eb091950ada6fbe1555413201fb03a915782ce7",
+  "version": "2.1.5",
+  "code": 20105,
+  "versionTag": "v2.1.5",
+  "log": "### 二分排查法 Step 1 — 最小化 Widget 测试\n\n#### 修改内容\n1. **TaskWidgetProvider.onUpdate()**：只推 `widget_test.xml`（纯 LinearLayout+TextView+硬编码颜色），不启动协程、不读 Room、不绑定 RemoteViewsService\n2. **TaskFlowApp.onCreate()**：每个初始化步骤单独 try/catch，确保单点失败不会拖垮整个进程（防止 Application 崩溃导致 Widget 进程死亡）\n\n#### 测试方法\n1. 卸载旧版本\n2. 安装 v2.1.5\n3. 添加 Widget 到桌面\n4. 如果显示 \"TaskFlow Widget Test\" → 问题在异步加载链路（Room/Service/buildViews）\n5. 如果仍然 \"Problem loading widget\" → 问题在 Application 初始化或更底层\n6. 同时查看 Logcat 过滤 `TaskFlowApp|WidgetProvider` 看哪个初始化步骤失败",
+  "apk": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.5/app-release.apk",
+  "sha256": "d469cbd2b23f5ef6f9dc9d89646f3ee01fff462ee6f68032ec49eca4e0b1974b",
   "size": 46371435,
   "downloadUrls": [
     {
       "name": "GH Proxy",
-      "url": "https://gh-proxy.com/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.4/app-release.apk",
+      "url": "https://gh-proxy.com/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.5/app-release.apk",
       "region": "domestic"
     },
     {
       "name": "GH Fast",
-      "url": "https://ghfast.top/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.4/app-release.apk",
+      "url": "https://ghfast.top/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.5/app-release.apk",
       "region": "cdn"
     },
     {
       "name": "GitHub",
-      "url": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.4/app-release.apk",
+      "url": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.5/app-release.apk",
       "region": "international"
     }
   ]

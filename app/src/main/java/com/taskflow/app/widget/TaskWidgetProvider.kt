@@ -22,38 +22,19 @@ class TaskWidgetProvider : AppWidgetProvider() {
         Log.d(TAG, "================ onUpdate ================")
         Log.d(TAG, "onUpdate: ids=${appWidgetIds.toList()}, count=${appWidgetIds.size}")
 
-        // 先立即更新一次：使用 widget_test（绝对安全的布局，纯 LinearLayout+TextView+硬编码颜色）
-        // 注意：RemoteViews 构造函数不会 inflate，真正的 inflate 在 Launcher 进程中发生。
-        // 所以不能用 try/catch 来判断布局是否有效——必须确保布局本身就是合法的。
-        // widget_test.xml 不含 <View>、不引用 drawable/color 资源，100% RemoteViews 兼容。
+        // ===== 二分排查法 Step 1 =====
+        // 只推 widget_test.xml，不启动协程、不读 Room、不绑定 RemoteViewsService。
+        // 如果此版本 Widget 能正常显示 "TaskFlow Widget Test" 文字：
+        //   → 问题在异步加载链路 (Room/Service/Repository/buildViews)
+        // 如果仍然显示 "Problem loading widget"：
+        //   → 问题在 Application 初始化崩溃 或 更底层
         appWidgetIds.forEach { id ->
             try {
-                val immediate = RemoteViews(context.packageName, R.layout.widget_test)
-                appWidgetManager.updateAppWidget(id, immediate)
-                Log.d(TAG, "onUpdate: widget $id 立即推送 widget_test (最安全布局)")
+                val views = RemoteViews(context.packageName, R.layout.widget_test)
+                appWidgetManager.updateAppWidget(id, views)
+                Log.d(TAG, "onUpdate: widget $id → widget_test ONLY (二分法 Step 1)")
             } catch (e: Throwable) {
-                Log.e(TAG, "onUpdate: ❌ widget_test push FAILED for $id (极端罕见)", e)
-            }
-        }
-
-        appWidgetIds.forEach { id ->
-            scope.launch {
-                try {
-                    Log.d(TAG, "onUpdate: building views for widget $id...")
-                    val views = WidgetHelper.buildForId(context, id)
-                    appWidgetManager.updateAppWidget(id, views)
-                    Log.d(TAG, "onUpdate: ✅ widget $id updated successfully")
-                } catch (e: Throwable) {
-                    // buildForId 理论上不会抛异常（4 层 fallback），但这里兜底以防万一
-                    Log.e(TAG, "onUpdate: ❌ widget $id failed even after fallbacks", e)
-                    try {
-                        appWidgetManager.updateAppWidget(id,
-                            RemoteViews(context.packageName, R.layout.widget_test))
-                        Log.d(TAG, "onUpdate: widget $id → widget_test fallback")
-                    } catch (e2: Throwable) {
-                        Log.e(TAG, "onUpdate: ❌ widget_test also FAILED", e2)
-                    }
-                }
+                Log.e(TAG, "onUpdate: ❌ widget_test FAILED for $id", e)
             }
         }
     }
