@@ -1,30 +1,30 @@
 {
-  "version": "2.2.1",
-  "code": 32,
-  "versionTag": "v2.2.1",
-  "log": "【修复】Widget 任务列表不显示问题（6 处冲突联合修复）\n\n1. 首页 / Widget 数据源不一致：新任务默认 pinnedToWidget=true\n   - 修改 Task.kt / TaskEntity.kt 默认值\n   - 老用户数据保持不变，新任务自动出现在 Widget\n\n2. Widget 空白兜底策略：getPinnedPending 增加 FALLBACK\n   - tier=1：pinnedToWidget=1 的未完成任务\n   - tier=2：完全没有 pinned 时降级显示全部未完成任务\n\n3. pinToWidget 异步竞态修复：新增 suspending pinToWidgetAndThen\n   - HomeScreen Dialog 改用串行：DB 写完成 → WidgetHelper.refresh\n   - 修复\"Pin 了但刷新时还是旧值\"的时序问题\n\n4. RemoteViewsService 声明系统权限 BIND_REMOTEVIEWS\n   - 解决部分 ROM（MIUI/EMUI/ColorOS）上 Factory.onDataSetChanged 不触发\n   - 表现为：count 对得上，但列表永远显示\"暂无任务\"\n\n【优化】更新版本检查逻辑（上一轮修复内容）\n5. fetchLatest()：遍历全部更新源，选最高版本（非首个成功）\n6. 版本比较：统一用语义版本号比较，避免 code 编号不一致导致误判\n7. release.json 格式修复：log 字段中文引号转义",
-  "apk": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.2.1/app-release.apk",
-  "sha256": "0bf17d3bd35503fa649621762626be5c0a405a23b0639b0c3f61e74de35ee497",
-  "size": 46388767,
+  "version": "2.2.2",
+  "code": 33,
+  "versionTag": "v2.2.2",
+  "log": "【新增】Widget 卡片点击标记完成功能\n\n1. 点击桌面小组件中的任务卡片 → 弹出确认对话框\n   - 对话框显示「是否标记任务为已完成？」\n   - 确认后任务立即标记为已完成，Widget 自动刷新\n   - 取消则不修改任务状态\n\n2. checkbox 仍保留直接切换完成状态的快捷操作\n\n【包含 v2.2.1 修复】\n3. Widget 列表空白修复（6处冲突联合修复）\n4. 版本检查逻辑修复（遍历所有源选最高版本）",
+  "apk": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.2.2/app-release.apk",
+  "sha256": "00aa2c134d576aacc751536a694561d2f542178ffd190110235806409b6f380a",
+  "size": 46406827,
   "downloadUrls": [
     {
       "name": "GH Proxy",
-      "url": "https://gh-proxy.com/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.2.1/app-release.apk",
+      "url": "https://gh-proxy.com/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.2.2/app-release.apk",
       "region": "domestic"
     },
     {
       "name": "GH Fast",
-      "url": "https://ghfast.top/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.2.1/app-release.apk",
+      "url": "https://ghfast.top/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.2.2/app-release.apk",
       "region": "cdn"
     },
     {
       "name": "GH Proxy Org",
-      "url": "https://gh-proxy.org/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.2.1/app-release.apk",
+      "url": "https://gh-proxy.org/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.2.2/app-release.apk",
       "region": "domestic"
     },
     {
       "name": "GitHub",
-      "url": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.2.1/app-release.apk",
+      "url": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.2.2/app-release.apk",
       "region": "international"
     }
   ]
