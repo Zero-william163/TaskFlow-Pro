@@ -19,6 +19,7 @@ import com.taskflow.app.data.preferences.ThemeMode
 import com.taskflow.app.ui.navigation.TaskFlowNavHost
 import com.taskflow.app.ui.onboarding.OnboardingScreen
 import com.taskflow.app.ui.theme.TaskFlowTheme
+import com.taskflow.app.update.DownloadService
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -53,6 +54,9 @@ class MainActivity : ComponentActivity() {
                     if (lastBackgroundTime > 0L && elapsed > 5000) {
                         Log.d(TAG, "ON_RESUME: Deep background detected, forcing state refresh")
                     }
+                    // Retry pending APK install after user returns from
+                    // "Install unknown apps" permission settings.
+                    DownloadService.retryPendingInstall(this@MainActivity)
                 }
                 else -> {}
             }

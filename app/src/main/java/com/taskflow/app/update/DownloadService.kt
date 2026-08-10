@@ -11,6 +11,8 @@ import android.content.pm.ServiceInfo
 import android.net.Uri
 import android.os.Build
 import android.os.IBinder
+import android.provider.Settings
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.FileProvider
 import com.taskflow.app.MainActivity
@@ -161,6 +163,32 @@ class DownloadService : Service() {
     }
 
     private fun installApk(file: File) {
+        // Android 8.0+ requires explicit user grant to install packages from
+        // "unknown sources". Without this check, startActivity(intent) silently
+        // fails and the installer never appears.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            !packageManager.canRequestPackageInstalls()
+        ) {
+            Log.w(TAG, "installApk: canRequestPackageInstalls=false, requesting permission")
+            // Save the pending APK path so the Activity can retry after the user
+            // grants permission in Settings.
+            pendingApkPath = file.absolutePath
+            // Launch the "Install unknown apps" settings page for this package.
+            val settingsIntent = Intent(
+                Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                Uri.parse("package:$packageName")
+            ).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(settingsIntent)
+            // Show a notification guiding the user back after granting permission.
+            updateNotification(buildPermissionNotification())
+            return
+        }
+
+        // Permission granted (or pre-O) → launch the system installer.
+        Log.i(TAG, "installApk: launching installer for ${file.absolutePath}")
+        pendingApkPath = null
         val authority = "${packageName}.fileprovider"
         val uri = FileProvider.getUriForFile(this, authority, file)
         val intent = Intent(Intent.ACTION_VIEW).apply {
@@ -213,6 +241,24 @@ class DownloadService : Service() {
             .build()
     }
 
+    private fun buildPermissionNotification(): Notification {
+        // Tap → opens the app; MainActivity.onResume will detect pendingApkPath
+        // and retry the install if permission has been granted.
+        val tapIntent = PendingIntent.getActivity(
+            this, 0, Intent(this, MainActivity::class.java),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        return NotificationCompat.Builder(this, CHANNEL_DOWNLOAD)
+            .setSmallIcon(android.R.drawable.stat_sys_download_done)
+            .setContentTitle(getString(R.string.app_name))
+            .setContentText(getString(R.string.update_grant_install_permission))
+            .setStyle(NotificationCompat.BigTextStyle()
+                .bigText(getString(R.string.update_grant_install_permission_detail)))
+            .setAutoCancel(true)
+            .setContentIntent(tapIntent)
+            .build()
+    }
+
     private fun updateNotification(notification: Notification) {
         notificationManager.notify(NOTIF_ID, notification)
     }
@@ -223,6 +269,7 @@ class DownloadService : Service() {
     }
 
     companion object {
+        private const val TAG = "DownloadService"
         private const val NOTIF_ID = 4201
         private const val CHANNEL_DOWNLOAD = "update_download"
         const val EXTRA_URLS = "extra_urls"
@@ -230,6 +277,50 @@ class DownloadService : Service() {
         const val ACTION_DOWNLOAD_RESULT = "com.taskflow.app.DOWNLOAD_RESULT"
         const val EXTRA_DOWNLOAD_SUCCESS = "extra_download_success"
         const val EXTRA_DOWNLOAD_ERROR = "extra_download_error"
+
+        /**
+         * Path to a downloaded APK that is waiting for the user to grant
+         * "install unknown apps" permission. Set by [installApk] when permission
+         * is missing; read by [retryPendingInstall] after the user returns from
+         * Settings.
+         */
+        @Volatile
+        var pendingApkPath: String? = null
+
+        /**
+         * Called from the Activity (onResume) to check if there is a pending APK
+         * install that was blocked by missing permission. If permission has been
+         * granted, launches the system installer.
+         *
+         * @return true if a pending install was retried (permission was granted),
+         *         false if there is no pending install or permission is still missing.
+         */
+        fun retryPendingInstall(context: Context): Boolean {
+            val path = pendingApkPath ?: return false
+            val file = File(path)
+            if (!file.exists()) {
+                pendingApkPath = null
+                return false
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+                !context.packageManager.canRequestPackageInstalls()
+            ) {
+                Log.w(TAG, "retryPendingInstall: permission still not granted")
+                return false
+            }
+            // Permission granted → launch installer
+            Log.i(TAG, "retryPendingInstall: launching installer for $path")
+            pendingApkPath = null
+            val authority = "${context.packageName}.fileprovider"
+            val uri = FileProvider.getUriForFile(context, authority, file)
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+            return true
+        }
 
         fun start(context: Context, urls: List<String>, sha256: String?) {
             val intent = Intent(context, DownloadService::class.java).apply {

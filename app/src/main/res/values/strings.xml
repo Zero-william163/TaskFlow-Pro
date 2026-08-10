@@ -166,6 +166,8 @@
     <string name="update_later">以后再说</string>
     <string name="update_downloading">正在下载…</string>
     <string name="update_download_failed">下载失败，请检查网络</string>
+    <string name="update_grant_install_permission">下载完成，请允许安装未知应用</string>
+    <string name="update_grant_install_permission_detail">APK 已下载完成。请在系统设置中允许「安装未知应用」后返回应用，安装界面将自动弹出。</string>
     <string name="update_install">安装</string>
     <string name="update_version">版本 %1$s</string>
     <string name="update_size">大小 %1$s</string>
