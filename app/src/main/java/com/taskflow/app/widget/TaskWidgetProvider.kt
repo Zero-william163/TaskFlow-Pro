@@ -22,38 +22,11 @@ class TaskWidgetProvider : AppWidgetProvider() {
         Log.d(TAG, "================ onUpdate ================")
         Log.d(TAG, "onUpdate: ids=${appWidgetIds.toList()}, count=${appWidgetIds.size}")
 
-        // ===== 二分排查法 Step 2 =====
-        // 推 widget_content.xml（含 ListView + ImageView）+ 绑定 RemoteViewsService
-        // 但 Factory 返回固定假数据，不读 Room。
-        // 如果成功 → widget_content 布局和 Service 都 OK，瓶颈在 Room
-        // 如果失败 → widget_content.xml 布局本身有问题
-        appWidgetIds.forEach { id ->
-            try {
-                val views = RemoteViews(context.packageName, R.layout.widget_content)
-                views.setTextViewText(R.id.count_text, "测试模式")
-                views.setViewVisibility(R.id.task_list, android.view.View.VISIBLE)
-                views.setViewVisibility(R.id.empty_text, android.view.View.GONE)
-
-                // 绑定 RemoteViewsService（Factory 返回假数据）
-                val listIntent = android.content.Intent(context, TaskListRemoteViewsService::class.java).apply {
-                    putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id)
-                    data = android.net.Uri.parse(toUri(android.content.Intent.URI_INTENT_SCHEME))
-                }
-                views.setRemoteAdapter(R.id.task_list, listIntent)
-
-                appWidgetManager.updateAppWidget(id, views)
-                Log.d(TAG, "onUpdate: widget $id → widget_content + 假数据 Service (二分法 Step 2)")
-            } catch (e: Throwable) {
-                Log.e(TAG, "onUpdate: ❌ widget_content FAILED for $id", e)
-                // fallback to widget_test
-                try {
-                    appWidgetManager.updateAppWidget(id,
-                        RemoteViews(context.packageName, R.layout.widget_test))
-                } catch (e2: Throwable) {
-                    Log.e(TAG, "onUpdate: ❌ widget_test also FAILED", e2)
-                }
-            }
-        }
+        // ===== 二分排查法 Step 3 =====
+        // 恢复真实 Room 读取。所有入口（onUpdate / onAppWidgetOptionsChanged / refresh）
+        // 统一异步调用 WidgetHelper.buildForId，它内部有 4 层 fallback，保证不崩溃。
+        // 每个 widgetId 独立更新，互不影响。
+        appWidgetIds.forEach { id -> buildWidgetAsync(context, appWidgetManager, id) }
     }
 
     override fun onAppWidgetOptionsChanged(
@@ -63,13 +36,31 @@ class TaskWidgetProvider : AppWidgetProvider() {
         newOptions: android.os.Bundle
     ) {
         Log.d(TAG, "onAppWidgetOptionsChanged: id=$appWidgetId, options=$newOptions")
+        buildWidgetAsync(context, appWidgetManager, appWidgetId)
+    }
+
+    /** 所有 Widget 刷新入口统一走这里：异步读 Room + WidgetHelper 渲染 + widget_test 兜底。 */
+    private fun buildWidgetAsync(
+        context: Context,
+        appWidgetManager: AppWidgetManager,
+        appWidgetId: Int
+    ) {
         scope.launch {
             try {
+                Log.d(TAG, "buildWidgetAsync[$appWidgetId]: start")
                 val views = WidgetHelper.buildForId(context, appWidgetId)
                 appWidgetManager.updateAppWidget(appWidgetId, views)
-                Log.d(TAG, "onAppWidgetOptionsChanged: widget $appWidgetId rebuilt")
+                Log.d(TAG, "buildWidgetAsync[$appWidgetId]: ✅ OK")
             } catch (e: Throwable) {
-                Log.e(TAG, "onAppWidgetOptionsChanged: failed", e)
+                // WidgetHelper.buildForId 内部已经 4 层 fallback，理论上不会抛；
+                // 这里兜底防止极端情况。
+                Log.e(TAG, "buildWidgetAsync[$appWidgetId]: ❌ FAILED → widget_test", e)
+                try {
+                    appWidgetManager.updateAppWidget(appWidgetId,
+                        RemoteViews(context.packageName, R.layout.widget_test))
+                } catch (e2: Throwable) {
+                    Log.e(TAG, "buildWidgetAsync[$appWidgetId]: ❌ widget_test also FAILED", e2)
+                }
             }
         }
     }

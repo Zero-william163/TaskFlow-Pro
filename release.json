@@ -1,25 +1,25 @@
 {
-  "version": "2.1.6",
-  "code": 20106,
-  "versionTag": "v2.1.6",
-  "log": "### 二分排查法 Step 2 — widget_content + 假数据（不读 Room）\n\n#### 修改内容\n1. **TaskWidgetProvider.onUpdate()**：推 `widget_content.xml`（含 ListView + ImageView + drawable 背景）+ 绑定 RemoteViewsService\n2. **TaskListRemoteViewsService.Factory.onDataSetChanged()**：返回 3 条固定假数据（\"测试任务1/2/3\"），不读 Room\n\n#### 测试方法\n1. 卸载旧版本，安装 v2.1.6\n2. 添加 Widget 到桌面\n3. 如果显示带 3 条假任务的列表 → widget_content 布局 + Service 都 OK，瓶颈在 Room\n4. 如果仍然 \"Problem loading widget\" → widget_content.xml 布局本身有问题\n5. Logcat 过滤 `WidgetProvider|WidgetListService` 查看日志",
-  "apk": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.6/app-release.apk",
-  "sha256": "f3a0b0d79b4bd936c863de56a6b116f1907b13f2d34007ae16c7cea94c569f6e",
+  "version": "2.1.7",
+  "code": 20107,
+  "versionTag": "v2.1.7",
+  "log": "### 修复 Widget Problem loading widget — 最终版 (v2.1.7)\n\n#### 真实根因 (经过 3 步二分排查确认)\n1. **`<View>` 元素不在 RemoteViews 支持列表中**：widget_loading/widget_content/widget_preview 三个布局文件中使用了 `<View>` 作为装饰点和分隔线，导致 Launcher 进程 inflate 时抛 InflateException → 显示 \"Problem loading widget\"\n2. **`onAppWidgetOptionsChanged()` 覆盖了 onUpdate 的结果**：Widget 刚添加到桌面，系统先调 onUpdate 推了内容，紧接着调 onAppWidgetOptionsChanged()，后者用了完全不同的渲染路径（WidgetHelper + Room 空数据），覆盖了 onUpdate 的状态\n\n#### 修复项\n1. **`<View>` → `<ImageView>`**：所有 Widget 布局中的 `<View>` 元素替换为 `<ImageView>`\n2. **`initialLayout` 改为 `widget_test.xml`**：Launcher 初始 inflate 一个零资源引用的纯 LinearLayout+TextView\n3. **统一 Widget 刷新入口**：`onUpdate / onAppWidgetOptionsChanged / refresh` 全部走同一个 `buildWidgetAsync()` → 异步读 Room → `WidgetHelper.buildForId()`（4 层 fallback） → `widget_test` 兜底\n4. **`TaskFlowApp.onCreate()` 异常保护**：每个初始化步骤单独 try/catch，单点失败不拖垮 Widget 进程\n\n#### 验证方法\n1. 卸载旧版本 → 安装 v2.1.7 → 添加 Widget 到桌面\n2. **情况 A（无任务）**：显示 TaskFlow 卡片 + \"全部完成\" + \"暂无任务\" = 正常（Room 没数据，empty 状态正确显示）\n3. **情况 B（有任务）**：在 APP 中创建 1-2 条 \"置顶+未完成\" 任务 → Widget 应显示任务列表 → 滑动 → 点击完成按钮 → 任务自动消失\n4. Logcat 过滤 `WidgetProvider|WidgetHelper|WidgetListService|TaskFlowApp` 查看完整链路日志",
+  "apk": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.7/app-release.apk",
+  "sha256": "0a4d561cae8299489c71c68707dcfbd8b0a3555f50549ca7f9a6022fd34c4a5b",
   "size": 46371435,
   "downloadUrls": [
     {
       "name": "GH Proxy",
-      "url": "https://gh-proxy.com/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.6/app-release.apk",
+      "url": "https://gh-proxy.com/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.7/app-release.apk",
       "region": "domestic"
     },
     {
       "name": "GH Fast",
-      "url": "https://ghfast.top/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.6/app-release.apk",
+      "url": "https://ghfast.top/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.7/app-release.apk",
       "region": "cdn"
     },
     {
       "name": "GitHub",
-      "url": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.6/app-release.apk",
+      "url": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.7/app-release.apk",
       "region": "international"
     }
   ]
