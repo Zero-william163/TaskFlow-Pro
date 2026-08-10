@@ -24,12 +24,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Apps
 import androidx.compose.material.icons.outlined.BatteryFull
-import androidx.compose.material.icons.outlined.Layers
-import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.Schedule
-import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -95,7 +92,6 @@ fun PermissionScreen(onBack: () -> Unit) {
 
     var showGuideDialog by remember { mutableStateOf(false) }
     var guideDialogMessage by remember { mutableStateOf("") }
-    var guideDialogPermissionType by remember { mutableStateOf<PermissionType?>(null) }
 
     // Android 13+ 请求 POST_NOTIFICATIONS 运行时权限
     val notificationLauncher = rememberLauncherForActivityResult(
@@ -150,37 +146,10 @@ fun PermissionScreen(onBack: () -> Unit) {
                     Toast.makeText(context, "无法跳转电池优化设置页", Toast.LENGTH_SHORT).show()
                 }
             }
-
-            PermissionType.OVERLAY -> {
-                // 检测是否被 Restricted Settings 机制限制（Android 13+ 侧载应用开关变灰）
-                if (pm.isOverlayRestricted()) {
-                    // 先弹步骤引导 Dialog，确认后再跳应用详情页
-                    guideDialogMessage = context.getString(R.string.permission_overlay_restricted_guide)
-                    guideDialogPermissionType = PermissionType.OVERLAY
-                    showGuideDialog = true
-                } else {
-                    // 未受限：正常跳转悬浮窗权限页（带 pkgUri）
-                    if (!pm.startIntent(PermissionType.OVERLAY)) {
-                        Toast.makeText(context, "无法跳转悬浮窗设置页", Toast.LENGTH_SHORT).show()
-                    }
-                }
-            }
-
-            PermissionType.AUTO_START,
-            PermissionType.BACKGROUND_RUN,
-            PermissionType.LOCK_SCREEN -> {
-                // 国产 ROM：尝试直达厂商特定页面
-                // 如果 startIntent 返回 false（全部厂商 Intent 无法 resolveActivity），
-                // 则显示详细文字引导，绝不回退到"看起来像主设置"的应用详情页
-                if (!pm.startIntent(item.type)) {
-                    val guide = pm.vendorGuideFor(item.type)
-                    if (guide != null) {
-                        guideDialogMessage = guide
-                        guideDialogPermissionType = item.type
-                        showGuideDialog = true
-                    }
-                }
-            }
+            // —— 已删除：OVERLAY / AUTO_START / BACKGROUND_RUN / LOCK_SCREEN
+            //    这些厂商专项/B级权限令人困惑，用户反馈"不必要的没用权限"。
+            // ——
+            else -> Unit
         }
     }
 
@@ -198,19 +167,18 @@ fun PermissionScreen(onBack: () -> Unit) {
             return
         }
         val report = WidgetCapability.report(context)
-        android.util.Log.d("PermissionScreen",
+        android.util.Log.d(
+            "PermissionScreen",
             "addWidget: canAutoPin=${report.canAutoPin}, " +
-            "launcherSupported=${report.launcherSupported}, " +
-            "vendor=${report.vendorName}, vendorRestricted=${report.vendorRestricted}")
+                "launcherSupported=${report.launcherSupported}, " +
+                "vendor=${report.vendorName}, vendorRestricted=${report.vendorRestricted}"
+        )
 
         // 先尝试自动添加（即使是厂商设备也尝试，让系统决定是否支持）
         if (report.canAutoPin) {
             val pinned = WidgetHelper.requestPinWidget(context)
             android.util.Log.d("PermissionScreen", "addWidget: requestPinWidget returned $pinned")
             if (pinned) {
-                // 系统接受了请求，但**不代表 Widget 真正创建**。
-                // 关键修复：不再只弹 Toast 就 return，而是同时显示引导 Dialog，
-                // 告知用户"如果系统没弹确认窗请用手动添加"，避免用户感知为"没反应"。
                 val err = WidgetHelper.lastPinError
                 guideDialogMessage = if (err != null) {
                     "系统接受了添加请求，但发生异常：${err.javaClass.simpleName}: ${err.message}\n\n" +
@@ -222,16 +190,15 @@ fun PermissionScreen(onBack: () -> Unit) {
                         "如果未弹出确认框（部分华为/小米 ROM 会拦截自动添加），" +
                         "请手动添加：\n长按桌面 → 小组件 → TaskFlow → 拖到桌面"
                 }
-                guideDialogPermissionType = null
                 showGuideDialog = true
                 return
             }
-            // requestPinAppWidget 返回 false：系统不支持或请求失败
-            // 降级到引导，并显示诊断信息
             val err = WidgetHelper.lastPinError
             val diag = WidgetHelper.lastPinDiagnostic
-            android.util.Log.w("PermissionScreen",
-                "addWidget: requestPinWidget failed, error=$err, diagnostic=$diag")
+            android.util.Log.w(
+                "PermissionScreen",
+                "addWidget: requestPinWidget failed, error=$err, diagnostic=$diag"
+            )
             guideDialogMessage = if (err != null) {
                 "添加失败：${err.javaClass.simpleName}\n原因：${err.message}\n\n" +
                     "诊断：$diag\n\n" +
@@ -243,20 +210,17 @@ fun PermissionScreen(onBack: () -> Unit) {
             } else {
                 report.blockingReason(context) + "\n\n诊断：$diag"
             }
-            guideDialogPermissionType = null
             showGuideDialog = true
             return
         }
 
         // 降级：显示引导文案
         guideDialogMessage = report.blockingReason(context)
-        guideDialogPermissionType = null
         showGuideDialog = true
     }
 
+    // —— 精简后：只保留「必需权限」一组，不再分 A/B/厂商 三级 ——
     val requiredItems = items.filter { it.level == PermissionLevel.REQUIRED }
-    val recommendedItems = items.filter { it.level == PermissionLevel.RECOMMENDED }
-    val vendorItems = items.filter { it.level == PermissionLevel.VENDOR }
 
     Scaffold(
         topBar = {
@@ -280,43 +244,15 @@ fun PermissionScreen(onBack: () -> Unit) {
             contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // —— A 级：必需权限 ——
-            if (requiredItems.isNotEmpty()) {
-                item("req_header") {
-                    SectionHeader(
-                        title = stringResource(R.string.permission_section_required),
-                        desc = stringResource(R.string.permission_section_required_desc)
-                    )
-                }
-                items(requiredItems, key = { "req_${it.type}" }) { item ->
-                    PermissionRow(item, onAction = { handleItemClick(item) })
-                }
+            // —— 必需权限 ——
+            item("req_header") {
+                SectionHeader(
+                    title = stringResource(R.string.permission_section_required),
+                    desc = stringResource(R.string.permission_section_required_desc)
+                )
             }
-
-            // —— B 级：推荐权限 ——
-            if (recommendedItems.isNotEmpty()) {
-                item("rec_header") {
-                    SectionHeader(
-                        title = stringResource(R.string.permission_section_recommended),
-                        desc = stringResource(R.string.permission_section_recommended_desc)
-                    )
-                }
-                items(recommendedItems, key = { "rec_${it.type}" }) { item ->
-                    PermissionRow(item, onAction = { handleItemClick(item) })
-                }
-            }
-
-            // —— 厂商专项权限 ——
-            if (vendorItems.isNotEmpty()) {
-                item("vendor_header") {
-                    SectionHeader(
-                        title = stringResource(R.string.permission_section_vendor),
-                        desc = stringResource(R.string.permission_section_vendor_desc)
-                    )
-                }
-                items(vendorItems, key = { "vendor_${it.type}" }) { item ->
-                    PermissionRow(item, onAction = { handleItemClick(item) })
-                }
+            items(requiredItems, key = { "req_${it.type}" }) { item ->
+                PermissionRow(item, onAction = { handleItemClick(item) })
             }
 
             // —— 桌面小组件（独立管理） ——
@@ -342,11 +278,6 @@ fun PermissionScreen(onBack: () -> Unit) {
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        stringResource(R.string.permission_cannot_jump),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Text(
                         guideDialogMessage,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -354,26 +285,8 @@ fun PermissionScreen(onBack: () -> Unit) {
                 }
             },
             confirmButton = {
-                val t = guideDialogPermissionType
-                if (t == PermissionType.OVERLAY) {
-                    // 悬浮窗受限：点击「前往应用信息」跳转应用详情页
-                    TextButton(onClick = {
-                        showGuideDialog = false
-                        if (!pm.jumpToRestrictedSettings()) {
-                            Toast.makeText(context, "无法跳转应用信息页", Toast.LENGTH_SHORT).show()
-                        }
-                    }) { Text("前往应用信息") }
-                } else if (t != null) {
-                    // 厂商专项权限：标记为已确认
-                    TextButton(onClick = {
-                        pm.setVendorConfirmed(t, true)
-                        showGuideDialog = false
-                        viewModel.refresh()
-                    }) { Text(stringResource(R.string.permission_confirm_done)) }
-                } else {
-                    TextButton(onClick = { showGuideDialog = false }) {
-                        Text("知道了")
-                    }
+                TextButton(onClick = { showGuideDialog = false }) {
+                    Text("知道了")
                 }
             },
             dismissButton = {
@@ -450,7 +363,7 @@ private fun PermissionRow(item: PermissionItem, onAction: () -> Unit) {
                 else -> {
                     Button(
                         onClick = onAction,
-                        shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)
                     ) {
                         Text(stringResource(R.string.permission_open_settings))
                     }
@@ -522,7 +435,7 @@ private fun WidgetRow(placed: Boolean, onAction: () -> Unit) {
             } else {
                 Button(
                     onClick = onAction,
-                    shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)
                 ) {
                     Text(stringResource(R.string.permission_widget_add))
                 }
@@ -568,8 +481,6 @@ private fun iconFor(type: PermissionType): ImageVector = when (type) {
     PermissionType.CHANNEL_ALARM -> Icons.Outlined.NotificationsActive
     PermissionType.BATTERY -> Icons.Outlined.BatteryFull
     PermissionType.EXACT_ALARM -> Icons.Outlined.Schedule
-    PermissionType.OVERLAY -> Icons.Outlined.Layers
-    PermissionType.AUTO_START -> Icons.Outlined.Security
-    PermissionType.BACKGROUND_RUN -> Icons.Outlined.BatteryFull
-    PermissionType.LOCK_SCREEN -> Icons.Outlined.Lock
+    // —— 已删除：OVERLAY / AUTO_START / BACKGROUND_RUN / LOCK_SCREEN
+    else -> Icons.Outlined.Notifications
 }

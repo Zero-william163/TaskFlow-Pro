@@ -194,36 +194,8 @@ object WidgetHelper {
             Log.e(TAG, "buildViews[$appWidgetId]: ❌ R.id.widget_header 失败", e)
             throw e
         }
-        // ===== Header 快捷按钮：刷新 & + 新建 =====
-        try {
-            // 刷新按钮：发送 WIDGET_REFRESH 广播强制刷新
-            val refreshIntent = Intent(TaskWidgetProvider.ACTION_REFRESH).apply {
-                setPackage(context.packageName)
-            }
-            val refreshPi = PendingIntent.getBroadcast(
-                context, (appWidgetId * 10 + 1), refreshIntent,
-                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-            )
-            views.setOnClickPendingIntent(R.id.widget_btn_refresh, refreshPi)
-            Log.d(TAG, "buildViews[$appWidgetId]: ✅ widget_btn_refresh PendingIntent OK")
-        } catch (e: Throwable) {
-            Log.e(TAG, "buildViews[$appWidgetId]: ❌ widget_btn_refresh 失败（继续）", e)
-        }
-        try {
-            // + 新建按钮：打开 MainActivity 并携带 ACTION_NEW_TASK，让主界面弹出新建任务对话框
-            val newTaskIntent = Intent(context, MainActivity::class.java).apply {
-                action = MainActivity.ACTION_NEW_TASK
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-            }
-            val newTaskPi = PendingIntent.getActivity(
-                context, (appWidgetId * 10 + 2), newTaskIntent,
-                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-            )
-            views.setOnClickPendingIntent(R.id.widget_btn_new, newTaskPi)
-            Log.d(TAG, "buildViews[$appWidgetId]: ✅ widget_btn_new PendingIntent OK")
-        } catch (e: Throwable) {
-            Log.e(TAG, "buildViews[$appWidgetId]: ❌ widget_btn_new 失败（继续）", e)
-        }
+        // —— 2026-08-10: 用户反馈"不知道刷新/加号框框是干嘛的"，直接移除 Header 快捷按钮
+        //    只保留：品牌名 + Pill Badge。点击 Header 仍然打开 App（widget_header 的 headerPi）。
         try {
             views.setTextViewText(
                 R.id.count_text,

@@ -20,6 +20,8 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import android.util.Log
+import android.view.Gravity
+import android.view.View
 import android.view.WindowManager
 import android.widget.Button
 import android.widget.LinearLayout
@@ -30,20 +32,16 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.time.LocalTime
 
 /**
- * Full-screen alarm activity — shows on top of everything (including keyguard)
- * when a reminder fires. Plays the alarm sound on loop and vibrates continuously
- * until the user taps "关闭" or "稍后提醒".
+ * 全屏闹钟页面 v3
+ * - 锁屏上面显示 + 强制点亮屏幕
+ * - 最大音量播放系统闹钟铃声（循环，永不停止直到用户操作）
+ * - 震动：波形节奏（响-停-响-停 …），直到用户操作
+ * - 超时：10 分钟后自动关闭，避免用户不在场无限响
  *
- * Design reference: system clock alarm UI. This activity is launched:
- *  1. Directly from [ReminderReceiver] via startActivity (primary path).
- *  2. As the FullScreenIntent of the notification (fallback when screen is off).
- *
- * Lifecycle:
- *  - onCreate: acquire WakeLock + show over keyguard + start sound + start vibration
- *  - "关闭": stop sound/vibration → mark task complete → finish
- *  - "稍后提醒": stop sound/vibration → schedule snooze → finish
+ * 用户明确要求：到了提醒时间，要"全屏闹钟、有声音、有震动"。
  */
 class AlarmActivity : Activity() {
 
@@ -52,8 +50,11 @@ class AlarmActivity : Activity() {
     private var wakeLock: PowerManager.WakeLock? = null
     private var taskId: Long = -1L
     private val handler = Handler(Looper.getMainLooper())
+    private var audioManager: AudioManager? = null
+    private var previousVolume: Int = -1
+    private var audioFocusAbandoned = false
 
-    // Timeout: auto-dismiss sound after 5 minutes to avoid infinite alarm.
+    // 10 分钟超时自动关闭，避免用户远离手机时无限响
     private val autoDismissRunnable = Runnable { finishAlarm(snooze = false) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -62,33 +63,50 @@ class AlarmActivity : Activity() {
         taskId = intent.getLongExtra(EXTRA_TASK_ID, -1L)
         if (taskId == -1L) { finish(); return }
 
-        // ====== WakeLock: keep CPU awake and screen on ======
+        // ====== 1. WakeLock：保持 CPU 唤醒 + 屏幕点亮 ======
         val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
         wakeLock = pm.newWakeLock(
             PowerManager.SCREEN_BRIGHT_WAKE_LOCK or
             PowerManager.ACQUIRE_CAUSES_WAKEUP or
             PowerManager.ON_AFTER_RELEASE,
-            "TaskFlow:AlarmWakeLock"
-        )
-        wakeLock?.acquire(5 * 60 * 1000L) // 5 minutes max
+            "TaskFlow:AlarmWakeLock-v3"
+        ).apply {
+            setReferenceCounted(false)
+            acquire(10 * 60 * 1000L) // 10 分钟
+        }
 
-        // ====== Show over keyguard (lock screen) ======
+        // ====== 2. 锁屏上显示 + 打开屏幕 ======
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
             setShowWhenLocked(true)
             setTurnScreenOn(true)
-            val km = getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
-            km.requestDismissKeyguard(this, null)
+            runCatching {
+                val km = getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
+                km.requestDismissKeyguard(this, null)
+            }
         } else {
             @Suppress("DEPRECATION")
             window.addFlags(
                 WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
                 WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
                 WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
-                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
+                WindowManager.LayoutParams.FLAG_ALLOW_LOCK_WHILE_SCREEN_ON
             )
         }
 
-        // ====== Load task data and build UI ======
+        // 额外确保全屏遮挡
+        window.addFlags(
+            WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
+            WindowManager.LayoutParams.FLAG_ALLOW_LOCK_WHILE_SCREEN_ON or
+            WindowManager.LayoutParams.FLAG_FULLSCREEN
+        )
+        window.decorView.systemUiVisibility = (
+            View.SYSTEM_UI_FLAG_FULLSCREEN
+            or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+            or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+        )
+
+        // ====== 3. 拉取任务 → 构建 UI → 播放响铃震动 ======
         CoroutineScope(Dispatchers.Main).launch {
             val task = withContext(Dispatchers.IO) {
                 TaskRepository.get(this@AlarmActivity).getTask(taskId)
@@ -97,119 +115,138 @@ class AlarmActivity : Activity() {
 
             buildAlarmUI(task.title, task.description)
 
-            // Start sound and vibration
+            // 先抢音频焦点 + 把闹钟音量拉到最大，再启动播放 + 震动
+            boostAlarmVolume()
             startAlarmSound(task.alarmSoundUri)
             startVibration()
 
-            // Auto-dismiss after 5 minutes
-            handler.postDelayed(autoDismissRunnable, 5 * 60 * 1000L)
+            handler.postDelayed(autoDismissRunnable, 10 * 60 * 1000L)
         }
     }
 
-    /**
-     * Builds the alarm UI programmatically (no XML needed — keeps it simple and
-     * avoids resource resolution issues across different themes).
-     */
+    // ====================== 全屏 UI 构建 ======================
+
     private fun buildAlarmUI(title: String, description: String) {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(0xFF1A1A2E.toInt())
-            setPadding(48, 120, 48, 80)
-            gravity = android.view.Gravity.CENTER_HORIZONTAL
+            setBackgroundColor(0xFF0F0C29.toInt()) // 午夜深蓝紫背景
+            setPadding(48, 80, 48, 64)
+            gravity = Gravity.CENTER_HORIZONTAL
         }
 
-        // Alarm icon text
         val iconText = TextView(this).apply {
             text = "⏰"
             textSize = 72f
-            gravity = android.view.Gravity.CENTER
-            setPadding(0, 0, 0, 24)
+            gravity = Gravity.CENTER
+            setPadding(0, 20, 0, 16)
         }
 
-        // Task title
-        val titleText = TextView(this).apply {
-            text = title
-            textSize = 28f
-            setTextColor(0xFFFFFFFF.toInt())
-            gravity = android.view.Gravity.CENTER
-            setPadding(0, 0, 0, 8)
-        }
-
-        // Description
-        val descText = TextView(this).apply {
-            text = if (description.isBlank()) "任务提醒" else description
-            textSize = 16f
-            setTextColor(0xFFCCCCCC.toInt())
-            gravity = android.view.Gravity.CENTER
-            setPadding(0, 0, 0, 48)
-        }
-
-        // Time display
         val timeText = TextView(this).apply {
-            val now = java.time.LocalTime.now()
+            val now = LocalTime.now()
             text = String.format("%02d:%02d", now.hour, now.minute)
-            textSize = 64f
-            setTextColor(0xFF6C63FF.toInt())
-            gravity = android.view.Gravity.CENTER
-            setPadding(0, 0, 0, 64)
+            textSize = 72f
+            setTextColor(0xFF8E2DE2.toInt())
+            gravity = Gravity.CENTER
+            setPadding(0, 0, 0, 32)
             typeface = android.graphics.Typeface.DEFAULT_BOLD
         }
 
-        // Snooze button
+        val titleText = TextView(this).apply {
+            text = title.ifBlank { "任务提醒" }
+            textSize = 30f
+            setTextColor(0xFFFFFFFF.toInt())
+            gravity = Gravity.CENTER
+            setPadding(0, 0, 0, 10)
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+        }
+
+        val descText = TextView(this).apply {
+            text = if (description.isBlank()) "任务即将到期" else description
+            textSize = 17f
+            setTextColor(0xFFBBBBCC.toInt())
+            gravity = Gravity.CENTER
+            setPadding(0, 0, 0, 40)
+        }
+
         val snoozeBtn = Button(this).apply {
-            text = "稍后提醒 (5分钟)"
-            setBackgroundColor(0xFF2D2D44.toInt())
+            text = "稍后提醒（5分钟）"
+            textSize = 17f
+            setBackgroundColor(0xFF2D2B4A.toInt())
             setTextColor(0xFFFFFFFF.toInt())
             setOnClickListener { finishAlarm(snooze = true) }
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { bottomMargin = 16 }
+                130
+            ).apply { bottomMargin = 14 }
         }
 
-        // Dismiss button
         val dismissBtn = Button(this).apply {
-            text = "关闭"
-            setBackgroundColor(0xFF6C63FF.toInt())
+            text = "关闭闹钟"
+            textSize = 18f
             setTextColor(0xFFFFFFFF.toInt())
+            setBackgroundColor(0xFF8E2DE2.toInt())
             setOnClickListener { finishAlarm(snooze = false) }
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
+                150
             )
         }
 
         root.apply {
             addView(iconText)
+            addView(timeText)
             addView(titleText)
             addView(descText)
-            addView(timeText)
             addView(snoozeBtn)
             addView(dismissBtn)
         }
-
         setContentView(root)
     }
 
+    // ====================== 音量 + 响铃 ======================
+
     /**
-     * Plays the alarm sound on loop using MediaPlayer with USAGE_ALARM.
-     * Falls back to the default alarm sound if the custom URI is invalid.
+     * 把 STREAM_ALARM 音量拉到最大，让用户一定能听见。
+     * finishAlarm 时再恢复到之前的音量。
      */
-    private fun startAlarmSound(customUri: String?) {
+    private fun boostAlarmVolume() {
         try {
-            // Request audio focus for alarm
-            val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
-            audioManager.requestAudioFocus(
-                null,
-                AudioManager.STREAM_ALARM,
-                AudioManager.AUDIOFOCUS_GAIN_TRANSIENT
+            audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            audioManager?.let { am ->
+                val maxVolume = am.getStreamMaxVolume(AudioManager.STREAM_ALARM)
+                previousVolume = am.getStreamVolume(AudioManager.STREAM_ALARM)
+                if (previousVolume < maxVolume) {
+                    am.setStreamVolume(AudioManager.STREAM_ALARM, maxVolume, 0)
+                }
+            }
+        } catch (e: Throwable) {
+            Log.e(TAG, "boostAlarmVolume 失败（继续执行）", e)
+        }
+    }
+
+    private fun restoreAlarmVolume() {
+        try {
+            if (previousVolume >= 0) {
+                audioManager?.setStreamVolume(AudioManager.STREAM_ALARM, previousVolume, 0)
+            }
+        } catch (_: Throwable) {}
+    }
+
+    private fun startAlarmSound(customUri: String?) {
+        audioFocusAbandoned = false
+        try {
+            // 请求音频焦点（AUDIOFOCUS_GAIN_TRANSMITTER 抢占式 — 用户一定会听到）
+            val am: AudioManager = audioManager
+                ?: (getSystemService(Context.AUDIO_SERVICE) as AudioManager).also { audioManager = it }
+            @Suppress("DEPRECATION")
+            am.requestAudioFocus(
+                null, AudioManager.STREAM_ALARM,
+                AudioManager.AUDIOFOCUS_GAIN
             )
 
             val uri = customUri?.takeIf { it.isNotBlank() }
                 ?.let { runCatching { Uri.parse(it) }.getOrNull() }
-                ?: RingtoneManager.getActualDefaultRingtoneUri(
-                    this, RingtoneManager.TYPE_ALARM
-                )
+                ?: RingtoneManager.getActualDefaultRingtoneUri(this, RingtoneManager.TYPE_ALARM)
                 ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
 
             mediaPlayer = MediaPlayer().apply {
@@ -220,31 +257,41 @@ class AlarmActivity : Activity() {
                         .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                         .build()
                 )
-                isLooping = true // Loop until user dismisses
+                isLooping = true
+                setVolume(1.0f, 1.0f) // 最高音量
                 prepare()
                 start()
             }
-            Log.d(TAG, "Alarm sound started: $uri")
+            Log.d(TAG, "startAlarmSound: uri=$uri")
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to play alarm sound", e)
-            // Fallback: use RingtoneManager directly
+            Log.e(TAG, "startAlarmSound 主路径失败，尝试 fallback", e)
             try {
-                val fallback = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+                val fallback = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+                    ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
                 mediaPlayer = MediaPlayer().apply {
                     setDataSource(this@AlarmActivity, fallback)
+                    setAudioAttributes(
+                        AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_ALARM)
+                            .build()
+                    )
                     isLooping = true
+                    setVolume(1.0f, 1.0f)
                     prepare()
                     start()
                 }
-            } catch (_: Exception) { /* give up silently */ }
+            } catch (e2: Throwable) {
+                Log.e(TAG, "startAlarmSound fallback 也失败了", e2)
+                // 最后一招：震动继续响就好，MediaPlayer 已失败则不强求
+            }
         }
     }
 
-    /**
-     * Continuous vibration in a waveform pattern until dismissed.
-     */
+    // ====================== 震动（波形循环） ======================
+
     private fun startVibration() {
-        val pattern = longArrayOf(0, 1000, 500, 1000, 500, 1000)
+        // 响 1s 停 0.4s 响 1s 停 0.4s —— 形成规律的"滴-滴-滴…"节奏
+        val pattern = longArrayOf(0, 800, 250, 800, 250, 800, 600)
         vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             (getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager)?.defaultVibrator
         } else {
@@ -253,45 +300,59 @@ class AlarmActivity : Activity() {
         }
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                vibrator?.vibrate(VibrationEffect.createWaveform(pattern, 0))
+                vibrator?.vibrate(
+                    VibrationEffect.createWaveform(pattern, 0) // index=0：循环
+                )
             } else {
                 @Suppress("DEPRECATION")
                 vibrator?.vibrate(pattern, 0)
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to start vibration", e)
+        } catch (e: Throwable) {
+            Log.e(TAG, "startVibration 失败", e)
         }
     }
 
-    /**
-     * Stops sound + vibration, releases WakeLock, and optionally schedules a snooze.
-     */
+    // ====================== 结束闹钟（用户点按钮 / 自动超时） ======================
+
     private fun finishAlarm(snooze: Boolean) {
         handler.removeCallbacks(autoDismissRunnable)
 
-        // Stop sound
+        // 1. 停声音
         mediaPlayer?.let {
-            try { it.stop() } catch (_: Exception) {}
-            try { it.release() } catch (_: Exception) {}
+            runCatching { if (it.isPlaying) it.stop() }
+            runCatching { it.reset() }
+            runCatching { it.release() }
         }
         mediaPlayer = null
 
-        // Stop vibration
-        vibrator?.cancel()
+        // 2. 恢复之前的闹钟音量
+        restoreAlarmVolume()
 
-        // Release WakeLock
-        wakeLock?.let { if (it.isHeld) it.release() }
-
-        // Cancel the notification
-        androidx.core.app.NotificationManagerCompat.from(this).cancel(taskId.toInt())
-        // Also stop the notification-based vibration
-        cancelVibrate(this)
-
-        if (snooze) {
-            scheduleSnooze(taskId)
+        // 3. 释放音频焦点
+        if (!audioFocusAbandoned) {
+            audioFocusAbandoned = true
+            runCatching {
+                val am: AudioManager = audioManager
+                    ?: (getSystemService(Context.AUDIO_SERVICE) as AudioManager).also { audioManager = it }
+                @Suppress("DEPRECATION")
+                am.abandonAudioFocus(null)
+            }
         }
 
-        // Update widget
+        // 4. 停震动
+        vibrator?.cancel()
+
+        // 5. 释放 WakeLock
+        wakeLock?.let { if (it.isHeld) it.release() }
+        wakeLock = null
+
+        // 6. 取消通知与震动
+        runCatching {
+            androidx.core.app.NotificationManagerCompat.from(this).cancel(taskId.toInt())
+        }
+        cancelVibrate(this)
+
+        if (snooze) { scheduleSnooze(taskId) }
         WidgetHelper.refresh(this)
 
         finish()
@@ -319,33 +380,30 @@ class AlarmActivity : Activity() {
         super.onDestroy()
         handler.removeCallbacks(autoDismissRunnable)
         mediaPlayer?.let {
-            try { it.stop() } catch (_: Exception) {}
-            try { it.release() } catch (_: Exception) {}
+            runCatching { if (it.isPlaying) it.stop() }
+            runCatching { it.release() }
         }
         mediaPlayer = null
         vibrator?.cancel()
+        restoreAlarmVolume()
         wakeLock?.let { if (it.isHeld) it.release() }
     }
 
-    /** Prevent back button from dismissing without stopping the alarm. */
+    /** 屏蔽返回键，不允许退出而不停止闹钟 */
     @Deprecated("Deprecated in Java")
-    override fun onBackPressed() {
-        // Do nothing — force user to tap "关闭" or "稍后提醒"
-    }
+    override fun onBackPressed() { /* do nothing */ }
 
     companion object {
-        private const val TAG = "AlarmActivity"
+        private const val TAG = "AlarmActivity-v3"
         const val EXTRA_TASK_ID = "extra_task_id"
 
-        /**
-         * Convenience: create the launch intent for this activity.
-         */
         fun createIntent(context: Context, taskId: Long): Intent =
             Intent(context, AlarmActivity::class.java).apply {
                 addFlags(
                     Intent.FLAG_ACTIVITY_NEW_TASK or
                     Intent.FLAG_ACTIVITY_CLEAR_TOP or
-                    Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
+                    Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS or
+                    Intent.FLAG_ACTIVITY_NO_USER_ACTION
                 )
                 putExtra(EXTRA_TASK_ID, taskId)
             }

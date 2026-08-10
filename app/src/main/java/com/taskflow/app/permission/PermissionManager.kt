@@ -103,11 +103,10 @@ class PermissionManager(private val context: Context) {
         notification(),
         channelAlarm(),
         exactAlarm(),
-        battery(),
-        overlay(),
-        autoStart(),
-        backgroundRun(),
-        lockScreen()
+        battery()
+        // 移除冗余的 B 级(悬浮窗)/厂商专项(自启动/后台运行/锁屏白名单)权限。
+        // 用户反馈：这些条目令人困惑且"不必要的没用权限"。
+        // TaskFlow 的核心提醒能力由 A 级 4 项保证：通知/闹钟渠道/精确闹钟/电池优化。
     )
 
     /** A 级（必需）权限：核心提醒功能依赖 */
