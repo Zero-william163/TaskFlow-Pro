@@ -2,11 +2,16 @@
   "version": "2.1.5",
   "code": 20105,
   "versionTag": "v2.1.5",
-  "log": "### 二分排查法 Step 1 — 最小化 Widget 测试\n\n#### 修改内容\n1. **TaskWidgetProvider.onUpdate()**：只推 `widget_test.xml`（纯 LinearLayout+TextView+硬编码颜色），不启动协程、不读 Room、不绑定 RemoteViewsService\n2. **TaskFlowApp.onCreate()**：每个初始化步骤单独 try/catch，确保单点失败不会拖垮整个进程（防止 Application 崩溃导致 Widget 进程死亡）\n\n#### 测试方法\n1. 卸载旧版本\n2. 安装 v2.1.5\n3. 添加 Widget 到桌面\n4. 如果显示 \"TaskFlow Widget Test\" → 问题在异步加载链路（Room/Service/buildViews）\n5. 如果仍然 \"Problem loading widget\" → 问题在 Application 初始化或更底层\n6. 同时查看 Logcat 过滤 `TaskFlowApp|WidgetProvider` 看哪个初始化步骤失败",
+  "log": "\"Release v2.1.5\"",
   "apk": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.5/app-release.apk",
-  "sha256": "d469cbd2b23f5ef6f9dc9d89646f3ee01fff462ee6f68032ec49eca4e0b1974b",
+  "sha256": "44e8970d9254f9b4598b4007336564196253b1804875ba42c5d4b408e00b0bae",
   "size": 46371435,
   "downloadUrls": [
+    {
+      "name": "Gitee",
+      "url": "https://gitee.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.5/app-release.apk",
+      "region": "domestic"
+    },
     {
       "name": "GH Proxy",
       "url": "https://gh-proxy.com/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.5/app-release.apk",
