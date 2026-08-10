@@ -28,6 +28,10 @@ import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.SystemUpdate
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -75,8 +79,33 @@ fun UpdateScreen(onBack: () -> Unit) {
         onDispose { viewModel.unregisterDownloadReceiver(context) }
     }
 
+    // 状态变化时弹 Toast：Idle→Checking不弹；Checking→UpToDate/Error 弹对应 Toast
+    LaunchedEffect(state) {
+        when (val s = state) {
+            is UpdateUiState.UpToDate -> {
+                android.widget.Toast.makeText(
+                    context,
+                    context.getString(R.string.update_latest) + " (v${s.latest})",
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
+            }
+            is UpdateUiState.Error -> {
+                android.widget.Toast.makeText(
+                    context,
+                    s.message,
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
+            }
+            else -> {}
+        }
+    }
+
     val onRefresh: () -> Unit = {
-        Toast.makeText(context, R.string.update_checking, Toast.LENGTH_SHORT).show()
+        android.widget.Toast.makeText(
+            context,
+            R.string.update_checking,
+            android.widget.Toast.LENGTH_SHORT
+        ).show()
         viewModel.check(context)
     }
 
@@ -194,19 +223,21 @@ private fun AvailableView(
 
 @Composable
 private fun UpToDateView(current: String, latest: String, onRefresh: () -> Unit) {
-    val transition = rememberInfiniteTransition(label = "refresh")
-    val rotation by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1200),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "refresh_rotation"
+    // 修复：UpToDate 状态下图标保持静止，点击时才触发一次旋转反馈
+    // 旋转动画只在 Checking 状态下（由 CheckingView 的 CircularProgressIndicator 展示）
+    var rotationTarget by remember { mutableStateOf(0f) }
+    val rotation by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = rotationTarget,
+        animationSpec = androidx.compose.animation.core.tween(durationMillis = 600),
+        label = "refresh_click"
     )
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.clickable { onRefresh() }
+        modifier = Modifier.clickable {
+            // 点击时触发一次 360° 旋转反馈，并触发 onRefresh
+            rotationTarget += 360f
+            onRefresh()
+        }
     ) {
         Icon(
             Icons.Rounded.Refresh,

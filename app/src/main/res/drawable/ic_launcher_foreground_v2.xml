@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Adaptive Icon Foreground v2：极简现代的 TaskFlow 勾选框 + Flow 组合矢量
+    - 主体：圆角矩形外框 (TaskBox) + 内部对勾 (Check)
+    - 装饰：右下角 2 个 Flow 小圆点，呼应"流程/流转"语义
+    - 颜色：纯白 (#FFFFFF)，背景是紫蓝渐变
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <group
+        android:scaleX="0.66"
+        android:scaleY="0.66"
+        android:translateX="18.36"
+        android:translateY="18.36">
+
+        <!-- ===== 主体：圆角矩形外框（厚边框） ===== -->
+        <path
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="5.5"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:fillColor="#00000000"
+            android:pathData="M18,12 H54 C60.627,12 66,17.373 66,24 V60 C66,66.627 60.627,72 54,72 H18 C11.373,72 6,66.627 6,60 V24 C6,17.373 11.373,12 18,12 Z" />
+
+        <!-- ===== 内部对勾（粗体 Stoke） ===== -->
+        <path
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="6.5"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:fillColor="#00000000"
+            android:pathData="M16,42 L30,56 L60,26" />
+    </group>
+
+    <!-- ===== Flow 装饰圆点（右上角 2 个小圆圈，品牌点缀） ===== -->
+    <!-- 圆点 1（大） -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.95"
+        android:pathData="M78,26 m-6,0 a6,6 0,1 1,12 0a6,6 0,1 1,-12 0" />
+    <!-- 圆点 2（小） -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.75"
+        android:pathData="M88,38 m-4,0 a4,4 0,1 1,8 0a4,4 0,1 1,-8 0" />
+</vector>

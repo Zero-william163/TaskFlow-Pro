@@ -1,6 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    Adaptive Icon：
+    - Foreground：TaskFlow 勾选框 + Flow 圆点 极简矢量图 (白色)
+    - Background：紫蓝渐变 (#4A00E0 → #8E2DE2) 矢量近似
+-->
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-    <background android:drawable="@color/ic_launcher_background" />
-    <foreground android:drawable="@drawable/ic_launcher_foreground" />
+    <background android:drawable="@drawable/ic_launcher_gradient_bg" />
+    <foreground android:drawable="@drawable/ic_launcher_foreground_v2" />
     <monochrome android:drawable="@drawable/ic_launcher_monochrome" />
 </adaptive-icon>

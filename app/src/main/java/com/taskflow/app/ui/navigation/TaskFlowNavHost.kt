@@ -54,7 +54,11 @@ private const val TAG = "TaskFlowNavHost"
 @Composable
 fun TaskFlowNavHost(
     openTaskId: Long? = null,
-    onTaskConsumed: () -> Unit = {}
+    onTaskConsumed: () -> Unit = {},
+    markCompleteTaskId: Long? = null,
+    onMarkCompleteConsumed: () -> Unit = {},
+    newTaskRequested: Boolean = false,
+    onNewTaskConsumed: () -> Unit = {}
 ) {
     val navController = rememberNavController()
     val backStack by navController.currentBackStackEntryAsState()

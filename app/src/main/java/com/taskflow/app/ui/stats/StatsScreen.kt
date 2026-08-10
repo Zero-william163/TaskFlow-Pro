@@ -1,5 +1,7 @@
 package com.taskflow.app.ui.stats
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -20,6 +22,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ChevronLeft
 import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.rounded.Bolt
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.ListAlt
+import androidx.compose.material.icons.rounded.Today
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -32,9 +38,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.res.stringResource
@@ -75,57 +84,48 @@ fun StatsScreen() {
         )
         Spacer(Modifier.height(16.dp))
 
-        // Hero completion card
-        SoftCard(Modifier.fillMaxWidth()) {
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .background(Brush.verticalGradient(listOf(GradientStart, GradientEnd)))
-                    .padding(20.dp)
-            ) {
-                Column {
-                    Text(
-                        stringResource(R.string.stats_completion_rate),
-                        color = Color.White,
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        "${state.completionRate}%",
-                        color = Color.White,
-                        style = MaterialTheme.typography.displayMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(Modifier.height(10.dp))
-                    Box(
-                        Modifier
-                            .fillMaxWidth()
-                            .height(10.dp)
-                            .clip(RoundedCornerShape(50))
-                            .background(Color.White.copy(alpha = 0.25f))
-                    ) {
-                        Box(
-                            Modifier
-                                .fillMaxWidth(state.completionRate / 100f)
-                                .height(10.dp)
-                                .clip(RoundedCornerShape(50))
-                                .background(Color.White)
-                        )
-                    }
-                }
-            }
-        }
+        // ====== Hero: circular ring progress + gradient card ======
+        HeroCompletionCard(
+            completionRate = state.completionRate,
+            completed = state.completed,
+            total = state.total
+        )
 
         Spacer(Modifier.height(16.dp))
 
+        // ====== Mini stat cards with icons + gradient accent ======
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            StatMini(stringResource(R.string.stats_total), state.total, Modifier.weight(1f))
-            StatMini(stringResource(R.string.stats_completed), state.completed, Modifier.weight(1f))
+            StatMini(
+                label = stringResource(R.string.stats_total),
+                value = state.total,
+                icon = Icons.Rounded.ListAlt,
+                accentColor = GradientStart,
+                modifier = Modifier.weight(1f)
+            )
+            StatMini(
+                label = stringResource(R.string.stats_completed),
+                value = state.completed,
+                icon = Icons.Rounded.CheckCircle,
+                accentColor = PriorityLow,
+                modifier = Modifier.weight(1f)
+            )
         }
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            StatMini(stringResource(R.string.stats_pending), state.pending, Modifier.weight(1f))
-            StatMini(stringResource(R.string.stats_today), state.completedToday, Modifier.weight(1f))
+            StatMini(
+                label = stringResource(R.string.stats_pending),
+                value = state.pending,
+                icon = Icons.Rounded.Bolt,
+                accentColor = PriorityMedium,
+                modifier = Modifier.weight(1f)
+            )
+            StatMini(
+                label = stringResource(R.string.stats_today),
+                value = state.completedToday,
+                icon = Icons.Rounded.Today,
+                accentColor = GradientEnd,
+                modifier = Modifier.weight(1f)
+            )
         }
 
         Spacer(Modifier.height(20.dp))
@@ -170,20 +170,167 @@ fun StatsScreen() {
     }
 }
 
+// ====== Hero: Circular Ring Progress Card ======
+
 @Composable
-private fun StatMini(label: String, value: Int, modifier: Modifier = Modifier) {
-    SoftCard(modifier) {
-        Column(Modifier.padding(16.dp)) {
-            Text(value.toString(), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(2.dp))
-            Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+private fun HeroCompletionCard(
+    completionRate: Int,
+    completed: Int,
+    total: Int
+) {
+    val animatedRate by animateFloatAsState(
+        targetValue = completionRate / 100f,
+        animationSpec = tween(1000),
+        label = "ringProgress"
+    )
+
+    SoftCard(Modifier.fillMaxWidth()) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .background(Brush.linearGradient(listOf(GradientStart, GradientEnd)))
+                .padding(24.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                // Left: text
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        stringResource(R.string.stats_completion_rate),
+                        color = Color.White.copy(alpha = 0.9f),
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "${completed} / ${total}",
+                        color = Color.White.copy(alpha = 0.75f),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        "$completionRate%",
+                        color = Color.White,
+                        style = MaterialTheme.typography.displaySmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                // Right: circular ring
+                Box(contentAlignment = Alignment.Center) {
+                    Canvas(modifier = Modifier.size(100.dp)) {
+                        val strokeW = 10.dp.toPx()
+                        val diameter = size.minDimension - strokeW
+                        val topLeft = Offset(
+                            (size.width - diameter) / 2f,
+                            (size.height - diameter) / 2f
+                        )
+                        val arcSize = Size(diameter, diameter)
+                        // Background ring
+                        drawArc(
+                            color = Color.White.copy(alpha = 0.2f),
+                            startAngle = -90f,
+                            sweepAngle = 360f,
+                            useCenter = false,
+                            topLeft = topLeft,
+                            size = arcSize,
+                            style = Stroke(width = strokeW, cap = StrokeCap.Round)
+                        )
+                        // Progress ring
+                        drawArc(
+                            color = Color.White,
+                            startAngle = -90f,
+                            sweepAngle = 360f * animatedRate,
+                            useCenter = false,
+                            topLeft = topLeft,
+                            size = arcSize,
+                            style = Stroke(width = strokeW, cap = StrokeCap.Round)
+                        )
+                    }
+                    Text(
+                        "${(animatedRate * 100).toInt()}%",
+                        color = Color.White,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
         }
     }
 }
 
+// ====== Mini Stat Card with Icon + Gradient Accent Bar ======
+
+@Composable
+private fun StatMini(
+    label: String,
+    value: Int,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    accentColor: Color,
+    modifier: Modifier = Modifier
+) {
+    SoftCard(modifier) {
+        Column(Modifier.fillMaxWidth()) {
+            // Top gradient accent bar
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(4.dp)
+                    .background(
+                        Brush.horizontalGradient(
+                            listOf(accentColor, accentColor.copy(alpha = 0.4f))
+                        )
+                    )
+            )
+            Row(
+                modifier = Modifier.padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(accentColor.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        icon,
+                        contentDescription = null,
+                        tint = accentColor,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                Spacer(Modifier.width(10.dp))
+                Column {
+                    Text(
+                        value.toString(),
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        label,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    }
+}
+
+// ====== Animated Horizontal Bar Row ======
+
 @Composable
 private fun BarRow(label: String, value: Int, max: Int, color: Color) {
     val ratio = (value.toFloat() / max).coerceIn(0f, 1f)
+    val animatedRatio by animateFloatAsState(
+        targetValue = ratio,
+        animationSpec = tween(800),
+        label = "barAnim"
+    )
+    val percent = (ratio * 100).toInt()
+
     Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -193,34 +340,48 @@ private fun BarRow(label: String, value: Int, max: Int, color: Color) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 PriorityDot(color = color, size = 8)
                 Spacer(Modifier.width(8.dp))
-                Text(label, style = MaterialTheme.typography.bodyMedium)
+                Text(label, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
             }
-            Text("$value", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "$percent%",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    "$value",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = color
+                )
+            }
         }
         Spacer(Modifier.height(6.dp))
         Box(
             Modifier
                 .fillMaxWidth()
-                .height(8.dp)
+                .height(10.dp)
                 .clip(RoundedCornerShape(50))
                 .background(MaterialTheme.colorScheme.surfaceVariant)
         ) {
             Box(
                 Modifier
-                    .fillMaxWidth(ratio)
-                    .height(8.dp)
+                    .fillMaxWidth(animatedRatio)
+                    .height(10.dp)
                     .clip(RoundedCornerShape(50))
-                    .background(color)
+                    .background(
+                        Brush.horizontalGradient(
+                            listOf(color.copy(alpha = 0.7f), color)
+                        )
+                    )
             )
         }
     }
 }
 
-/**
- * Card containing the monthly trend line chart with prev/next month buttons.
- * Spec §2: title auto-generated "YYYY年MM月任务完成趋势", data from Room,
- * real-time via Flow, vertical axis = count, horizontal axis = date.
- */
+// ====== Trend Card ======
+
 @Composable
 private fun TrendCard(
     title: String,
@@ -241,11 +402,13 @@ private fun TrendCard(
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f)
                 )
-                IconButton(onClick = onPrevWindow) {
-                    Icon(Icons.Outlined.ChevronLeft, contentDescription = "上一周")
-                }
-                IconButton(onClick = onNextWindow) {
-                    Icon(Icons.Outlined.ChevronRight, contentDescription = "下一周")
+                Row {
+                    IconButton(onClick = onPrevWindow) {
+                        Icon(Icons.Outlined.ChevronLeft, contentDescription = "上一周")
+                    }
+                    IconButton(onClick = onNextWindow) {
+                        Icon(Icons.Outlined.ChevronRight, contentDescription = "下一周")
+                    }
                 }
             }
             Spacer(Modifier.height(8.dp))
@@ -254,27 +417,16 @@ private fun TrendCard(
     }
 }
 
-/**
- * Self-drawn line chart. No external chart library — uses Canvas so the APK
- * stays small and the chart style matches Material Design 3.
- *
- * Layout: Y-axis labels on the left, X-axis labels (dates) on the bottom,
- * the polyline + filled gradient area in the plot region. Empty data shows
- * a friendly placeholder instead of a broken/empty axis.
- */
+// ====== Smooth Bezier Line Chart ======
+
 @Composable
 private fun CompletionLineChart(points: List<DailyPoint>) {
     val lineColor = MaterialTheme.colorScheme.primary
-    val fillColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
-    val axisColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+    val gridColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.12f)
     val labelColor = MaterialTheme.colorScheme.onSurfaceVariant
     val todayColor = MaterialTheme.colorScheme.tertiary
-
     val today = remember { LocalDate.now() }
-    // Dynamic Y-axis: compute a "nice" max based on the highest daily count.
-    // Spec: maxCount <= 5 → 0..5; maxCount 12 → 0..15; maxCount 50 → 0..60.
-    // We add ~20% headroom and snap to a clean tick boundary so the line never
-    // gets clipped and the grid stays readable.
+
     val dataMax = remember(points) { points.maxOfOrNull { it.count } ?: 0 }
     val (maxCount, yStep) = remember(dataMax) { computeYAxisMax(dataMax) }
     val yTicks = remember(maxCount, yStep) {
@@ -285,7 +437,7 @@ private fun CompletionLineChart(points: List<DailyPoint>) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(180.dp),
+                .height(200.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(
@@ -300,12 +452,12 @@ private fun CompletionLineChart(points: List<DailyPoint>) {
     Canvas(
         modifier = Modifier
             .fillMaxWidth()
-            .height(200.dp)
+            .height(220.dp)
     ) {
-        val leftPad = 36f
-        val rightPad = 12f
-        val topPad = 12f
-        val bottomPad = 28f
+        val leftPad = 38f
+        val rightPad = 14f
+        val topPad = 16f
+        val bottomPad = 32f
         val plotLeft = leftPad
         val plotRight = size.width - rightPad
         val plotTop = topPad
@@ -313,49 +465,66 @@ private fun CompletionLineChart(points: List<DailyPoint>) {
         val plotW = plotRight - plotLeft
         val plotH = plotBottom - plotTop
 
-        // ====== Y-axis grid lines + labels ======
+        // ====== Y-axis grid lines (dashed) + labels ======
         val yLabelPaint = android.graphics.Paint().apply {
             color = labelColor.toArgb()
             textSize = 9f.sp.toPx()
             textAlign = android.graphics.Paint.Align.RIGHT
+            isAntiAlias = true
         }
         yTicks.forEach { tick ->
             val y = if (maxCount == 0) plotBottom
             else plotBottom - (plotH * tick / maxCount)
+            // Dashed grid
             drawLine(
-                color = axisColor,
+                color = gridColor,
                 start = Offset(plotLeft, y),
                 end = Offset(plotRight, y),
-                strokeWidth = 1f
+                strokeWidth = 1f,
+                pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 4f))
             )
             drawContext.canvas.nativeCanvas.drawText(
                 tick.toString(),
-                plotLeft - 6f,
+                plotLeft - 8f,
                 y + 3f,
                 yLabelPaint
             )
         }
 
-        // ====== X-axis labels — show all 7 days with Chinese date format ======
+        // ====== X-axis labels ======
         val xLabelPaint = android.graphics.Paint().apply {
             color = labelColor.toArgb()
             textSize = 9f.sp.toPx()
             textAlign = android.graphics.Paint.Align.CENTER
+            isAntiAlias = true
         }
         val n = points.size
         points.forEachIndexed { i, pt ->
             val x = if (n == 1) plotLeft + plotW / 2
             else plotLeft + plotW * i / (n - 1)
-            val label = "${pt.date.monthValue}月${pt.date.dayOfMonth}日"
+            val label = "${pt.date.monthValue}/${pt.date.dayOfMonth}"
             drawContext.canvas.nativeCanvas.drawText(
                 label,
                 x,
-                plotBottom + 14f,
+                plotBottom + 16f,
                 xLabelPaint
             )
         }
 
-        // ====== Polyline + filled area ======
+        // ====== Today vertical guide line ======
+        val todayIndex = points.indexOfFirst { it.date == today }
+        if (todayIndex >= 0 && n >= 2) {
+            val todayX = plotLeft + plotW * todayIndex / (n - 1)
+            drawLine(
+                color = todayColor.copy(alpha = 0.3f),
+                start = Offset(todayX, plotTop),
+                end = Offset(todayX, plotBottom),
+                strokeWidth = 1.5f,
+                pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 4f))
+            )
+        }
+
+        // ====== Smooth Bezier curve + gradient fill ======
         if (n >= 2) {
             val coords = points.mapIndexed { i, pt ->
                 val x = plotLeft + plotW * i / (n - 1)
@@ -363,39 +532,82 @@ private fun CompletionLineChart(points: List<DailyPoint>) {
                 else plotBottom - (plotH * pt.count / maxCount)
                 Offset(x, y)
             }
-            // Filled area under the line.
+
+            // Build smooth Bezier path
+            val linePath = Path().apply {
+                moveTo(coords.first().x, coords.first().y)
+                for (i in 0 until coords.size - 1) {
+                    val curr = coords[i]
+                    val next = coords[i + 1]
+                    val midX = (curr.x + next.x) / 2f
+                    cubicTo(
+                        midX, curr.y,
+                        midX, next.y,
+                        next.x, next.y
+                    )
+                }
+            }
+
+            // Filled gradient area under the curve
             val areaPath = Path().apply {
                 moveTo(coords.first().x, plotBottom)
-                coords.forEach { lineTo(it.x, it.y) }
+                lineTo(coords.first().x, coords.first().y)
+                for (i in 0 until coords.size - 1) {
+                    val curr = coords[i]
+                    val next = coords[i + 1]
+                    val midX = (curr.x + next.x) / 2f
+                    cubicTo(
+                        midX, curr.y,
+                        midX, next.y,
+                        next.x, next.y
+                    )
+                }
                 lineTo(coords.last().x, plotBottom)
                 close()
             }
-            drawPath(path = areaPath, color = fillColor)
-            // The line itself.
-            val linePath = Path().apply {
-                moveTo(coords.first().x, coords.first().y)
-                coords.forEach { lineTo(it.x, it.y) }
-            }
+            drawPath(
+                path = areaPath,
+                brush = Brush.verticalGradient(
+                    listOf(lineColor.copy(alpha = 0.3f), lineColor.copy(alpha = 0.02f))
+                )
+            )
+
+            // Glow shadow under line
+            drawPath(
+                path = linePath,
+                color = lineColor.copy(alpha = 0.15f),
+                style = Stroke(width = 8f, cap = StrokeCap.Round)
+            )
+            // Main line
             drawPath(
                 path = linePath,
                 color = lineColor,
-                style = Stroke(width = 3f)
+                style = Stroke(width = 3f, cap = StrokeCap.Round)
             )
-            // Dots on each data point.
-            coords.forEach { c ->
-                drawCircle(color = lineColor, radius = 3f, center = c)
-            }
-            // Highlight today.
-            val todayIndex = points.indexOfFirst { it.date == today }
-            if (todayIndex >= 0) {
-                val c = coords[todayIndex]
-                drawCircle(color = todayColor, radius = 5f, center = c)
-                drawCircle(color = lineColor, radius = 2f, center = c)
+
+            // Data point dots — outer ring + inner fill
+            coords.forEachIndexed { i, c ->
+                val isToday = i == todayIndex
+                val r = if (isToday) 6f else 4f
+                drawCircle(
+                    color = if (isToday) todayColor else lineColor,
+                    radius = r + 2f,
+                    center = c,
+                    style = Stroke(width = 2f)
+                )
+                drawCircle(
+                    color = if (isToday) todayColor else lineColor,
+                    radius = r,
+                    center = c
+                )
+                if (isToday) {
+                    drawCircle(color = Color.White, radius = 2.5f, center = c)
+                }
             }
         } else if (n == 1) {
-            // Single day — just draw a dot.
             val c = Offset(plotLeft + plotW / 2, plotBottom - plotH * points[0].count / maxCount.coerceAtLeast(1))
-            drawCircle(color = lineColor, radius = 5f, center = c)
+            drawCircle(color = lineColor, radius = 6f, center = c, style = Stroke(width = 2f))
+            drawCircle(color = lineColor, radius = 4f, center = c)
         }
     }
 }
@@ -410,15 +622,6 @@ private fun Color.toArgb(): Int = android.graphics.Color.argb(
 
 /**
  * Compute a "nice" Y-axis ceiling and step size from the observed max daily count.
- *
- * Rules (per spec §3):
- *   max ≤ 5  → ceiling = 5,     step = 1   (shows 0,1,2,3,4,5)
- *   max ≤ 10 → ceiling = 10,    step = 2   (even ticks)
- *   max ≤ 20 → ceiling = 20,    step = 5
- *   else     → ceiling with +20% headroom rounded up to a multiple of 10,
- *              step = 10
- *
- * Always returns at least (0, 1) so an empty chart still draws a flat axis.
  */
 private fun computeYAxisMax(dataMax: Int): Pair<Int, Int> {
     require(dataMax >= 0) { "dataMax must be non-negative, got $dataMax" }

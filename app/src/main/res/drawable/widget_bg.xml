@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Widget 容器背景：24dp 软圆角 + 半透明 Surface + 1dp 极细边框 -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 边框层 -->
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/widget_border" />
+            <corners android:radius="24dp" />
+        </shape>
+    </item>
+    <!-- 主体层（向内 inset 1dp 以露出边框） -->
+    <item
+        android:left="1dp"
+        android:top="1dp"
+        android:right="1dp"
+        android:bottom="1dp">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/widget_surface" />
+            <corners android:radius="23dp" />
+        </shape>
+    </item>
+</layer-list>

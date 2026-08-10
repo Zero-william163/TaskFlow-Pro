@@ -1,8 +1,39 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="widget_surface">#22242F</color>
-    <color name="widget_surface_variant">#15161F</color>
-    <color name="widget_on_surface">#F2F3F7</color>
-    <color name="widget_on_surface_variant">#9AA0B4</color>
+    <!-- Night-aware widget tokens (dark overrides) -->
+    <color name="widget_surface">@color/widget_card_dark</color>
+    <color name="widget_surface_variant">@color/widget_bg_dark</color>
+    <color name="widget_on_surface">@color/widget_text_primary_dark</color>
+    <color name="widget_on_surface_variant">@color/widget_text_secondary_dark</color>
     <color name="widget_divider">#33F2F3F7</color>
+
+    <!-- Canonical widget text color aliases (dark mode) — EXPLICIT, no @color references to avoid RemoteViews issues -->
+    <color name="widget_text_primary">#F2F3F7</color>
+    <color name="widget_text_secondary">#9AA0B4</color>
+
+    <!-- Widget container & card (dark) -->
+    <color name="widget_border">#10FFFFFF</color>
+    <color name="widget_card_bg">#2A2C3A</color>
+
+    <!-- Widget capsule/badge colors (dark) - gradient pill -->
+    <color name="widget_badge_bg_start">#312E81</color>
+    <color name="widget_badge_bg_end">#4C1D95</color>
+    <color name="widget_badge_text">#A5B4FC</color>
+
+    <!-- Widget category tag capsule colors (dark) -->
+    <color name="widget_tag_work_bg">#1E3A5F</color>
+    <color name="widget_tag_work_text">#90CAF9</color>
+    <color name="widget_tag_study_bg">#3D2A5C</color>
+    <color name="widget_tag_study_text">#CE93D8</color>
+    <color name="widget_tag_life_bg">#1E4A30</color>
+    <color name="widget_tag_life_text">#A5D6A7</color>
+    <color name="widget_tag_default_bg">#2D2F3E</color>
+    <color name="widget_tag_default_text">#B0BEC5</color>
+
+    <!-- Widget check box colors (dark) -->
+    <color name="widget_check_ring">#54576A</color>
+    <color name="widget_check_bg">#22242F</color>
+
+    <!-- Widget refresh / plus icon tint (dark) -->
+    <color name="widget_icon_tint">#74788E</color>
 </resources>

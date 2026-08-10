@@ -117,6 +117,8 @@ class TaskWidgetProvider : AppWidgetProvider() {
 
     companion object {
         const val ACTION_WIDGET_REFRESH = "com.taskflow.app.WIDGET_REFRESH"
+        // 别名：便于 WidgetHelper 中使用 TaskWidgetProvider.ACTION_REFRESH
+        const val ACTION_REFRESH = ACTION_WIDGET_REFRESH
         const val ACTION_TASKS_CHANGED = "com.taskflow.app.TASKS_CHANGED"
         const val ACTION_TOGGLE_TASK = "com.taskflow.app.TOGGLE_TASK"
         const val EXTRA_TASK_ID = "extra_task_id"

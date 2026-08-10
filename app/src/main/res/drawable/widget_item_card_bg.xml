@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Widget 任务卡片背景：柔和 Surface 色 + 12dp 圆角 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@color/widget_card_bg" />
+    <corners android:radius="12dp" />
+</shape>

@@ -1,22 +1,50 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Widget ListView 专用空态 item。
-  必须：layout_height=wrap_content，避免 match_parent 导致的高度异常。
-  不依赖任何自定义 drawable（只用系统背景色+文字），保证 100% RemoteViews 兼容。
+    Widget ListView 空态 Item：🎉 精致打卡完成插图 + 引导文案
+    - 居中显示，minHeight 保证视觉呼吸感
+    - 严禁留白！必须有 emoji + 主文案 + 副文案
+    - 所有 TextView 显式绑定 widget_text_primary/secondary
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
     android:gravity="center"
-    android:minHeight="72dp"
-    android:padding="12dp">
+    android:minHeight="140dp"
+    android:paddingVertical="16dp"
+    android:paddingHorizontal="20dp">
 
+    <!-- Celebration Emoji / Image -->
+    <TextView
+        android:id="@+id/empty_item_emoji"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="🎉"
+        android:textSize="42sp"
+        android:includeFontPadding="false" />
+
+    <!-- Primary Message: Bold + widget_text_primary -->
     <TextView
         android:id="@+id/empty_item_text"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:textColor="@color/widget_on_surface_variant"
-        android:textSize="13sp" />
+        android:layout_marginTop="8dp"
+        android:text="@string/widget_empty_main"
+        android:textColor="@color/widget_text_primary"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:gravity="center"
+        android:includeFontPadding="false" />
 
+    <!-- Secondary Hint: Muted + widget_text_secondary -->
+    <TextView
+        android:id="@+id/empty_item_hint"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:text="@string/widget_empty_hint"
+        android:textColor="@color/widget_text_secondary"
+        android:textSize="12sp"
+        android:gravity="center"
+        android:includeFontPadding="false" />
 </LinearLayout>

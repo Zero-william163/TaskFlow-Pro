@@ -25,11 +25,44 @@
     <color name="widget_text_secondary_dark">#9AA0B4</color>
 
     <!-- Night-aware widget tokens (overridden in values-night) -->
-    <color name="widget_surface">#FFFFFF</color>
-    <color name="widget_surface_variant">#F3F4FB</color>
-    <color name="widget_on_surface">#1A1C2E</color>
-    <color name="widget_on_surface_variant">#6B7280</color>
+    <color name="widget_surface">@color/widget_card_light</color>
+    <color name="widget_surface_variant">@color/widget_bg_light</color>
+    <color name="widget_on_surface">@color/widget_text_primary_light</color>
+    <color name="widget_on_surface_variant">@color/widget_text_secondary_light</color>
     <color name="widget_divider">#141A2E1F</color>
 
+    <!-- Canonical widget text color aliases (must be used by EVERY TextView in widget layouts) -->
+    <color name="widget_text_primary">@color/widget_text_primary_light</color>
+    <color name="widget_text_secondary">@color/widget_text_secondary_light</color>
+
+    <!-- Widget container & card (light) -->
+    <color name="widget_border">#1AFFFFFF</color>
+    <color name="widget_card_bg">@color/widget_surface_variant</color>
+
+    <!-- Widget capsule/badge colors (light) - gradient pill -->
+    <color name="widget_badge_bg_start">#E0E7FF</color>
+    <color name="widget_badge_bg_end">#EDE9FE</color>
+    <color name="widget_badge_text">#4C6EF5</color>
+
+    <!-- Widget category tag capsule colors -->
+    <color name="widget_tag_work_bg">#E3F2FD</color>
+    <color name="widget_tag_work_text">#1976D2</color>
+    <color name="widget_tag_study_bg">#EDE7F6</color>
+    <color name="widget_tag_study_text">#5E35B1</color>
+    <color name="widget_tag_life_bg">#E8F5E9</color>
+    <color name="widget_tag_life_text">#388E3C</color>
+    <color name="widget_tag_default_bg">#F3F4FB</color>
+    <color name="widget_tag_default_text">#546E7A</color>
+
+    <!-- Widget check box colors (light) -->
+    <color name="widget_check_ring">@color/widget_text_secondary_light</color>
+    <color name="widget_check_bg">@color/widget_card_light</color>
+
+    <!-- Widget refresh / plus icon tint (light) -->
+    <color name="widget_icon_tint">@color/widget_text_secondary_light</color>
+
+    <!-- Adaptive Icon -->
     <color name="ic_launcher_background">#4C6EF5</color>
+    <color name="ic_launcher_bg_start">#4A00E0</color>
+    <color name="ic_launcher_bg_end">#8E2DE2</color>
 </resources>

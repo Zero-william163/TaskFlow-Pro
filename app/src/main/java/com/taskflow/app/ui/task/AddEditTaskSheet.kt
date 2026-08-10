@@ -1,12 +1,16 @@
 package com.taskflow.app.ui.task
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.media.RingtoneManager
 import android.net.Uri
+import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -180,6 +184,22 @@ fun AddEditTaskSheet(
     ) { ar ->
         val uri = ar.data?.getParcelableExtra<Uri>(RingtoneManager.EXTRA_RINGTONE_PICKED_URI)
         alarmSoundUri = uri?.toString()
+    }
+    // ====== 通知权限 (POST_NOTIFICATIONS)：按需触发 (Just-In-Time) ======
+    // 仅当用户主动打开"提醒"开关时，才请求通知权限。移除首次启动强制弹窗。
+    val notifPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            reminderEnabled = true
+            Toast.makeText(context, "通知权限已开启", Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(
+                context,
+                "未开启通知权限，任务到期将无法通过系统通知提醒，请在设置中手动开启。",
+                Toast.LENGTH_LONG
+            ).show()
+        }
     }
     val openRingtonePicker: () -> Unit = {
         val intent = Intent(RingtoneManager.ACTION_RINGTONE_PICKER).apply {
@@ -415,7 +435,29 @@ fun AddEditTaskSheet(
             Icon(Icons.Outlined.AccessTime, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
             Spacer(Modifier.width(12.dp))
             Text(stringResource(R.string.task_reminder), modifier = Modifier.weight(1f))
-            Switch(checked = reminderEnabled, onCheckedChange = { reminderEnabled = it })
+            // 通知权限按需触发（Just-In-Time）：仅在用户尝试打开提醒时才申请 POST_NOTIFICATIONS
+            Switch(checked = reminderEnabled, onCheckedChange = { wantOn ->
+                if (!wantOn) {
+                    // 用户主动关闭：直接关
+                    reminderEnabled = false
+                } else {
+                    // 用户尝试开启：先检查通知权限（Android 13+ 动态权限）
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        val has = ContextCompat.checkSelfPermission(
+                            context, Manifest.permission.POST_NOTIFICATIONS
+                        ) == PackageManager.PERMISSION_GRANTED
+                        if (has) {
+                            reminderEnabled = true
+                        } else {
+                            // 首次且未授权：发起运行时权限请求，回调后再置 true
+                            notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        }
+                    } else {
+                        // Android 12 及以下：无需运行时申请，直接打开
+                        reminderEnabled = true
+                    }
+                }
+            })
         }
         if (reminderEnabled) {
             SelectorRow(

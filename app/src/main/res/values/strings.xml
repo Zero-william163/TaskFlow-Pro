@@ -72,6 +72,11 @@
     <string name="widget_remaining">还有 %1$d 个任务</string>
     <string name="widget_all_done">全部完成</string>
     <string name="widget_add_hint">打开 TaskFlow 添加任务</string>
+    <!-- Widget 精致空状态 (Empty State) -->
+    <string name="widget_empty_main">太棒了，今日任务已全部完成！</string>
+    <string name="widget_empty_hint">点击 + 新建，开启高效的一天</string>
+    <string name="widget_empty_loading_main">正在加载任务…</string>
+    <string name="widget_empty_loading_hint">请稍候</string>
 
     <!-- Widget guide -->
     <string name="widget_guide_title">添加任务桌面组件</string>

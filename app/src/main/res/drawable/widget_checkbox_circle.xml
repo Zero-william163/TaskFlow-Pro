@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Widget 任务 Checkbox 圆圈：描边 + 内部留白 -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 外圈 -->
+    <item>
+        <shape android:shape="oval">
+            <solid android:color="@color/widget_check_ring" />
+            <size
+                android:width="20dp"
+                android:height="20dp" />
+        </shape>
+    </item>
+    <!-- 内圈留白 -->
+    <item
+        android:left="2dp"
+        android:top="2dp"
+        android:right="2dp"
+        android:bottom="2dp">
+        <shape android:shape="oval">
+            <solid android:color="@color/widget_check_bg" />
+        </shape>
+    </item>
+</layer-list>
