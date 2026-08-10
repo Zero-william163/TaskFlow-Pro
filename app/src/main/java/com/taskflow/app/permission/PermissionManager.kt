@@ -284,38 +284,28 @@ class PermissionManager(private val context: Context) {
     }
 
     /**
-     * 跳转到「允许受限制的设置」页面。
-     * 这是解决 Android 13+ 侧载应用权限变灰的核心入口。
+     * 跳转到应用详情页，用于解决 Android 13+ Restricted Settings（权限变灰）。
      *
-     * 由于 ACTION_MANAGE_APP_ROLE_PERMISSIONS 不是公开 API，
-     * 我们采用两步策略：
-     * 1. 先跳转悬浮窗权限页（触发系统受限对话框）
-     * 2. 再跳转应用详情页（用户需手动点击三点菜单 → 允许受限制的设置）
+     * 关键设计：**不直接跳转 ACTION_MANAGE_OVERLAY_PERMISSION**。
+     * 因为侧载应用的悬浮窗开关在那一页是灰色的，用户无法点击，跳过去毫无意义。
      *
-     * 注意：Android 13+ 的 Restricted Settings 机制要求用户
-     * 先在权限页尝试开启开关（触发受限提示），然后才能在应用详情页看到
-     * 「允许受限制的设置」菜单项。
+     * 正确做法：跳转到【应用信息】页，引导用户：
+     * 1. 点击右上角三点菜单 (⋮)
+     * 2. 选择「允许受限制的设置」
+     * 3. 返回后再开启悬浮窗开关
+     *
+     * UI 层应在调用此方法前先弹出 [showRestrictedSettingsGuide] 步骤引导 Dialog。
      */
     fun jumpToRestrictedSettings(): Boolean {
-        // 步骤 1：先跳悬浮窗权限页（带包名），触发系统受限对话框
-        try {
-            val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, pkgUri).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            context.startActivity(intent)
-            PermissionLogger.logJumpSuccess(PermissionType.OVERLAY, intent)
-            return true
-        } catch (e: Throwable) {
-            PermissionLogger.logJumpFail(PermissionType.OVERLAY, Intent(), e)
-        }
-        // 步骤 2：降级跳应用详情页
         return try {
             val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkgUri).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             context.startActivity(intent)
+            PermissionLogger.logJumpSuccess(PermissionType.OVERLAY, intent)
             true
-        } catch (_: Throwable) {
+        } catch (e: Throwable) {
+            PermissionLogger.logJumpFail(PermissionType.OVERLAY, Intent(), e)
             false
         }
     }

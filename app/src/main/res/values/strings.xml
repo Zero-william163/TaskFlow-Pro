@@ -133,7 +133,14 @@
     <string name="permission_widget_status_not_placed">未添加</string>
     <string name="permission_widget_add">添加小组件</string>
     <string name="permission_widget_already_placed">桌面已存在小组件，无需重复添加</string>
-    <string name="permission_overlay_restricted_guide">检测到悬浮窗权限被系统限制（开关为灰色）。\n\n解决方法：\n1. 点击下方「前往设置」进入应用详情页\n2. 点击右上角三点菜单 ⋮\n3. 点击「允许受限制的设置」\n4. 验证身份后即可开启悬浮窗权限\n\n这是 Android 13+ 对侧载应用的安全限制，通过官方应用商店安装可避免此问题。</string>
+    <string name="permission_overlay_restricted_guide">检测到「显示在其他应用上层」开关被系统限制为灰色，无法直接开启。\n\n这是 Android 13+ 对侧载（非应用商店）安装应用的安全限制。请按以下步骤解除限制：\n\n步骤 1：点击下方「前往应用信息」按钮\n步骤 2：进入页面后，点击右上角三个点 (⋮) 菜单\n步骤 3：点击「允许受限制的设置」\n步骤 4：返回后即可正常开启悬浮窗开关</string>
+    <string name="widget_pin_guide_title">手动添加小组件</string>
+    <string name="widget_pin_guide_msg">您的设备拦截了自动创建小组件请求（华为/小米等国产 ROM 常见限制）。\n\n请手动添加：\n1. 长按桌面空白处\n2. 选择「窗口小工具」/「小组件」\n3. 找到 TaskFlow\n4. 长按拖拽到桌面</string>
+    <string name="widget_pin_prompt_title">创建桌面小组件</string>
+    <string name="widget_pin_prompt_msg">是否在桌面创建 TaskFlow 快捷小组件，随时查看未完成任务？</string>
+    <string name="widget_pin_prompt_yes">是，创建小组件</string>
+    <string name="widget_pin_prompt_no">暂不</string>
+    <string name="permission_go_app_info">前往应用信息</string>
 
     <!-- Settings -->
     <string name="settings_about">关于</string>

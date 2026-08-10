@@ -154,15 +154,12 @@ fun PermissionScreen(onBack: () -> Unit) {
             PermissionType.OVERLAY -> {
                 // 检测是否被 Restricted Settings 机制限制（Android 13+ 侧载应用开关变灰）
                 if (pm.isOverlayRestricted()) {
-                    // 先尝试直达「允许受限制的设置」页面
-                    if (!pm.jumpToRestrictedSettings()) {
-                        // 降级：显示图文引导
-                        guideDialogMessage = context.getString(R.string.permission_overlay_restricted_guide)
-                        guideDialogPermissionType = null
-                        showGuideDialog = true
-                    }
+                    // 先弹步骤引导 Dialog，确认后再跳应用详情页
+                    guideDialogMessage = context.getString(R.string.permission_overlay_restricted_guide)
+                    guideDialogPermissionType = PermissionType.OVERLAY
+                    showGuideDialog = true
                 } else {
-                    // 正常跳转悬浮窗权限页
+                    // 未受限：正常跳转悬浮窗权限页（带 pkgUri）
                     if (!pm.startIntent(PermissionType.OVERLAY)) {
                         Toast.makeText(context, "无法跳转悬浮窗设置页", Toast.LENGTH_SHORT).show()
                     }
@@ -323,7 +320,16 @@ fun PermissionScreen(onBack: () -> Unit) {
             },
             confirmButton = {
                 val t = guideDialogPermissionType
-                if (t != null) {
+                if (t == PermissionType.OVERLAY) {
+                    // 悬浮窗受限：点击「前往应用信息」跳转应用详情页
+                    TextButton(onClick = {
+                        showGuideDialog = false
+                        if (!pm.jumpToRestrictedSettings()) {
+                            Toast.makeText(context, "无法跳转应用信息页", Toast.LENGTH_SHORT).show()
+                        }
+                    }) { Text("前往应用信息") }
+                } else if (t != null) {
+                    // 厂商专项权限：标记为已确认
                     TextButton(onClick = {
                         pm.setVendorConfirmed(t, true)
                         showGuideDialog = false

@@ -237,7 +237,15 @@ fun AddEditTaskSheet(
             weeklyWeekdays = weeklyWeekdays,
             alarmSoundUri = alarmSoundUri
         )
-        viewModel.saveTask(built) { id, isNew -> onSaved(id, isNew) }
+        viewModel.saveTask(built) { id, isNew ->
+            onSaved(id, isNew)
+            // 新建任务后，若桌面还没有 Widget，提示用户创建快捷小组件
+            if (isNew) {
+                (context as? android.app.Activity)?.let { activity ->
+                    com.taskflow.app.widget.WidgetAndPermissionHelper.maybePromptPinWidget(activity)
+                }
+            }
+        }
     }
     LaunchedEffect(externalSaveTrigger) {
         if (externalSaveTrigger) {

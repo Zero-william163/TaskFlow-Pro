@@ -8,6 +8,31 @@ The GitHub Actions release workflow extracts the section matching the pushed tag
 (e.g. `## v1.0.0`) and uses it as the GitHub / Gitee release notes, and embeds it
 into `release.json` as the `log` field consumed by the in-app updater.
 
+## v2.1.0
+
+### 增强 — 桌面滑动小组件 + 受限设置精准引导
+
+1. **桌面滑动小组件（AppWidget）与动态列表**
+   - 使用 `RemoteViewsService` + `RemoteViewsFactory` + `ListView` 展示未完成任务，支持桌面上滑/下滑
+   - 卡片项「勾选完成」按钮点击 → 发送广播 → Repository 更新 `isCompleted = true` → `notifyAppWidgetViewDataChanged` 刷新
+   - 主 App 通过 Room 响应式监听同步任务状态
+
+2. **免悬浮窗权限的桌面固定小组件（AppWidget Pinning）**
+   - 使用 Android 8.0+ 原生 `requestPinAppWidget`，**不需要 SYSTEM_ALERT_WINDOW 权限**，避开悬浮窗变灰问题
+   - 新建任务保存时智能判断：检测桌面是否已有 Widget（`getAppWidgetIds`），若无则弹窗询问是否创建
+   - 国产 ROM 兼容兜底：`requestPinAppWidget` 返回 false 或抛异常时，弹出手把手引导 Dialog
+   - 新增 [WidgetAndPermissionHelper.kt](app/src/main/java/com/taskflow/app/widget/WidgetAndPermissionHelper.kt) 统一工具类
+
+3. **精准处理「受限制设置 (Restricted Settings) 变灰」引导**
+   - **不直接跳转** `ACTION_MANAGE_OVERLAY_PERMISSION`（开关灰色用户无法点击）
+   - 检测到悬浮窗受限时，先弹步骤引导 Dialog（4 步操作指引）
+   - 确认后精确跳转应用详情页：`ACTION_APPLICATION_DETAILS_SETTINGS`
+   - 引导用户：三点菜单 (⋮) → 允许受限制的设置 → 返回开启悬浮窗
+
+4. **Manifest 与小组件配置**
+   - 新增 `SYSTEM_ALERT_WINDOW` 权限声明
+   - `task_widget_info.xml` 新增 `widgetFeatures="reconfigurable|configuration_optional"`
+
 ## v2.0.1
 
 ### 修复 — 悬浮窗权限变灰 + Widget 添加无反应
