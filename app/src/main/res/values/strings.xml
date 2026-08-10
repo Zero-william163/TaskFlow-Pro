@@ -68,6 +68,7 @@
 
     <!-- Widget -->
     <string name="widget_no_tasks">暂无任务</string>
+    <string name="widget_loading">加载中…</string>
     <string name="widget_remaining">还有 %1$d 个任务</string>
     <string name="widget_all_done">全部完成</string>
     <string name="widget_add_hint">打开 TaskFlow 添加任务</string>

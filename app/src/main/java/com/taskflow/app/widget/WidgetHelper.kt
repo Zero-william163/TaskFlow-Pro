@@ -196,7 +196,9 @@ object WidgetHelper {
         }
         val listIntent = Intent(context, TaskListRemoteViewsService::class.java).apply {
             putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
-            data = Uri.parse(toUri(Intent.URI_INTENT_SCHEME))
+            // Unique data URI per widget id — ensures Launcher creates separate
+            // RemoteViewsService connections for each widget instance.
+            data = Uri.parse("taskflow://widget/$appWidgetId")
         }
         try {
             views.setRemoteAdapter(R.id.task_list, listIntent)
@@ -223,26 +225,16 @@ object WidgetHelper {
             Log.e(TAG, "buildViews[$appWidgetId]: ❌ setPendingIntentTemplate FAILED", e)
             throw e
         }
-        if (remaining == 0) {
-            try {
-                views.setViewVisibility(R.id.task_list, View.GONE)
-                views.setViewVisibility(R.id.empty_text, View.VISIBLE)
-                views.setTextViewText(R.id.empty_text, context.getString(R.string.widget_no_tasks))
-                views.setOnClickPendingIntent(R.id.empty_text, headerPi)
-                Log.d(TAG, "buildViews[$appWidgetId]: empty_state OK")
-            } catch (e: Throwable) {
-                Log.e(TAG, "buildViews[$appWidgetId]: ❌ R.id.empty_text FAILED", e)
-                throw e
-            }
-        } else {
-            try {
-                views.setViewVisibility(R.id.task_list, View.VISIBLE)
-                views.setViewVisibility(R.id.empty_text, View.GONE)
-                Log.d(TAG, "buildViews[$appWidgetId]: with_list_state OK")
-            } catch (e: Throwable) {
-                Log.e(TAG, "buildViews[$appWidgetId]: ❌ list visibility FAILED", e)
-                throw e
-            }
+        // 关键修复：ListView 永远保持 VISIBLE。当没有任务时，RemoteViewsFactory.getCount()
+        // 会返回 1 且 getViewAt(0) 返回内联空态视图，因此 ListView 永远有内容可渲染，
+        // Launcher 不会因为 count=0 或 Service 绑定失败把 ListView 折叠为空白。
+        try {
+            views.setViewVisibility(R.id.task_list, View.VISIBLE)
+            views.setViewVisibility(R.id.empty_text, View.GONE)
+            Log.d(TAG, "buildViews[$appWidgetId]: list_always_visible OK (remaining=$remaining)")
+        } catch (e: Throwable) {
+            Log.e(TAG, "buildViews[$appWidgetId]: ❌ list visibility FAILED", e)
+            throw e
         }
         Log.d(TAG, "buildViews[$appWidgetId]: ✅ 完整版本构建成功")
         return views

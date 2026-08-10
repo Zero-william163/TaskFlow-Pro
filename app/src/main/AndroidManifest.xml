@@ -117,10 +117,11 @@
             android:name=".widget.WidgetPinResultReceiver"
             android:exported="false" />
 
-        <!-- Backs the widget's scrollable ListView (collection widget). -->
+        <!-- Backs the widget's scrollable ListView (collection widget).
+             不声明 permission：RemoteViewsService 由系统 AppWidgetService 绑定，
+             自定义 permission 会在部分 ROM 上阻止 Launcher 绑定。 -->
         <service
             android:name=".widget.TaskListRemoteViewsService"
-            android:permission="android.permission.BIND_REMOTEVIEWS"
             android:exported="false" />
 
         <provider

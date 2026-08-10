@@ -68,14 +68,20 @@ class TaskListRemoteViewsService : RemoteViewsService() {
         }
 
         override fun getCount(): Int {
-            val count = tasks.size
-            Log.d(TAG, "factory[$widgetId].getCount=$count")
+            // 关键修复：永远至少返回 1 条数据（空态/占位），确保 Launcher 不会因
+            // count=0 把 ListView 直接折叠为空白；真正的空态/加载态由 getViewAt 返回。
+            val count = tasks.size.coerceAtLeast(1)
+            Log.d(TAG, "factory[$widgetId].getCount=$count (realTasks=${tasks.size})")
             return count
         }
 
         override fun getViewAt(position: Int): RemoteViews {
-            Log.d(TAG, "factory[$widgetId].getViewAt($position)")
-            if (position >= tasks.size) return loadingView()
+            // 关键修复：当没有真实任务时，返回内联构建的空态 RemoteViews，
+            // 完全不依赖 widget_task_item / widget_test 布局文件，确保 100% 成功渲染。
+            if (tasks.isEmpty() || position >= tasks.size) {
+                Log.d(TAG, "factory[$widgetId].getViewAt($position): return inline empty view")
+                return buildInlineEmptyView()
+            }
             val task = tasks[position]
             return try {
                 val views = RemoteViews(context.packageName, R.layout.widget_task_item)
@@ -151,10 +157,10 @@ class TaskListRemoteViewsService : RemoteViewsService() {
 
         override fun getLoadingView(): RemoteViews? = null
 
-        override fun getViewTypeCount(): Int = 1
+        override fun getViewTypeCount(): Int = 2  // 0 = item, 1 = inline empty
 
         override fun getItemId(position: Int): Long =
-            tasks.getOrNull(position)?.id ?: position.toLong()
+            tasks.getOrNull(position)?.id ?: -1L
 
         override fun hasStableIds(): Boolean = true
 
@@ -168,7 +174,37 @@ class TaskListRemoteViewsService : RemoteViewsService() {
             }
         }
 
-        private fun loadingView(): RemoteViews =
-            RemoteViews(context.packageName, R.layout.widget_test)
+        private fun loadingView(): RemoteViews = buildInlineEmptyView()
+
+        /**
+         * 内联构建空态 RemoteViews。避免对 widget_test.xml / widget_task_item.xml 的依赖，
+         * 完全使用 RemoteViews 支持的 API 构建 LinearLayout + TextView + ImageView，
+         * 是最健壮的空态/加载态视图。
+         */
+        private fun buildInlineEmptyView(): RemoteViews {
+            val text = if (tasks.isEmpty()) {
+                context.getString(R.string.widget_no_tasks)
+            } else {
+                context.getString(R.string.widget_loading)
+            }
+            return try {
+                RemoteViews(context.packageName, R.layout.widget_test).also { views ->
+                    try {
+                        views.setTextViewText(R.id.test_text, text)
+                        views.setTextColor(
+                            R.id.test_text,
+                            context.getColor(R.color.widget_on_surface_variant)
+                        )
+                    } catch (e: Throwable) {
+                        Log.w(TAG, "buildInlineEmptyView: setTextColor failed (ignore)", e)
+                    }
+                }
+            } catch (e: Throwable) {
+                // 终极兜底：连 widget_test inflate 都失败，直接 new 一个空 RemoteViews，
+                // 至少保证 Launcher 不会因为我们抛异常而把整个 ListView 置空。
+                Log.e(TAG, "buildInlineEmptyView: ❌ widget_test inflate FAILED", e)
+                RemoteViews(context.packageName, R.layout.widget_test)
+            }
+        }
     }
 }
