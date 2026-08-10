@@ -1,30 +1,30 @@
 {
-  "version": "2.1.0",
-  "code": 20100,
-  "versionTag": "v2.1.0",
-  "log": "\"\\n### 增强 — 桌面滑动小组件 + 受限设置精准引导\\n\\n1. **桌面滑动小组件（AppWidget）与动态列表**\\n   - 使用 `RemoteViewsService` + `RemoteViewsFactory` + `ListView` 展示未完成任务，支持桌面上滑/下滑\\n   - 卡片项「勾选完成」按钮点击 → 发送广播 → Repository 更新 `isCompleted = true` → `notifyAppWidgetViewDataChanged` 刷新\\n   - 主 App 通过 Room 响应式监听同步任务状态\\n\\n2. **免悬浮窗权限的桌面固定小组件（AppWidget Pinning）**\\n   - 使用 Android 8.0+ 原生 `requestPinAppWidget`，**不需要 SYSTEM_ALERT_WINDOW 权限**，避开悬浮窗变灰问题\\n   - 新建任务保存时智能判断：检测桌面是否已有 Widget（`getAppWidgetIds`），若无则弹窗询问是否创建\\n   - 国产 ROM 兼容兜底：`requestPinAppWidget` 返回 false 或抛异常时，弹出手把手引导 Dialog\\n   - 新增 [WidgetAndPermissionHelper.kt](app/src/main/java/com/taskflow/app/widget/WidgetAndPermissionHelper.kt) 统一工具类\\n\\n3. **精准处理「受限制设置 (Restricted Settings) 变灰」引导**\\n   - **不直接跳转** `ACTION_MANAGE_OVERLAY_PERMISSION`（开关灰色用户无法点击）\\n   - 检测到悬浮窗受限时，先弹步骤引导 Dialog（4 步操作指引）\\n   - 确认后精确跳转应用详情页：`ACTION_APPLICATION_DETAILS_SETTINGS`\\n   - 引导用户：三点菜单 (⋮) → 允许受限制的设置 → 返回开启悬浮窗\\n\\n4. **Manifest 与小组件配置**\\n   - 新增 `SYSTEM_ALERT_WINDOW` 权限声明\\n   - `task_widget_info.xml` 新增 `widgetFeatures=\\\"reconfigurable|configuration_optional\\\"`\"",
-  "apk": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.0/app-release.apk",
-  "sha256": "6bb8432e8602bd8ef1adb60a17cc461c29c54712e485dedd20bcbad328ca273e",
-  "size": 46370779,
+  "version": "2.1.1",
+  "code": 20101,
+  "versionTag": "v2.1.1",
+  "log": "\"\\n### 修复 — Widget「点击添加无反应」+ 静默吞异常 + 元数据矛盾\\n\\n#### 真实根因\\n1. **`WidgetHelper.requestPinWidget()` 静默吞掉所有异常**：`catch (_: Throwable) { false }` 用 `_` 丢弃异常对象，Logcat 完全看不到 `SecurityException` / `IllegalArgumentException`，叠加 `pinned==true` 时只弹 Toast 直接 return，用户感知为\\\"点击没反应\\\"\\n2. **`task_widget_info.xml` 元数据自相矛盾**：`android:configure=\\\"\\\"`（空字符串非合法值）+ `widgetFeatures=\\\"reconfigurable\\\"`（声明可重配置但 configure 指向空），部分国产 Launcher 行为异常\\n3. **`addWidget()` 全链路无日志**：无法从 Logcat 还原 `isRequestPinAppWidgetSupported` / `requestPinAppWidget` 返回值 / 当前 Launcher 包名等关键诊断信息\\n4. **`UserPreferences.widgetAdded` 死代码残留**：Widget 状态本应由 `AppWidgetManager.getAppWidgetIds()` 实时查询，但 `widgetAdded` Key/Flow/setter 未清理彻底\\n\\n#### 修复项\\n1. **暴露异常 + 诊断字段**：`WidgetHelper.requestPinWidget()` 改为打印完整 stacktrace 到 Logcat，同时暴露 `lastPinError` / `lastPinDiagnostic` 两个 @Volatile 字段供 UI 读取\\n2. **新增 `getLauncherPackage()`**：诊断日志记录当前默认 Launcher 包名，便于区分「Launcher 不支持」还是「异常失败」\\n3. **`PermissionScreen.addWidget()` 优化**：`pinned==true` 不再只弹 Toast 直接 return，改为同时显示引导 Dialog；`pinned==false` 显示异常类型 + 诊断信息\\n4. **`task_widget_info.xml` 修复**：删除 `android:configure=\\\"\\\"` 和 `widgetFeatures=\\\"reconfigurable|configuration_optional\\\"`，元数据与代码（无配置 Activity）一致\\n5. **移除 `UserPreferences.widgetAdded` 死代码**：删除 Key / Flow / setWidgetAdded()，彻底消除双源不一致风险\\n6. **修正 Onboarding 误导文案**：不再提示\\\"开启允许创建小组件权限\\\"，改为说明 Android 无小组件权限，给出手动添加步骤\\n7. **全链路调试日志**：`TaskWidgetProvider` / `WidgetPinResultReceiver` / `TaskListRemoteViewsService` / `WidgetHelper.buildViews` / `refresh` 全部添加分隔线 + ✅/❌ 标记日志，Logcat 过滤 `WidgetHelper|WidgetProvider|WidgetPinCallback|WidgetListService|PermissionScreen` 即可还原完整链路\\n8. **国内镜像仓库前置**：`settings.gradle.kts` 把阿里云 / 腾讯云镜像放在 `google()` / `mavenCentral()` 之前，国内构建更稳定\"",
+  "apk": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.1/app-release.apk",
+  "sha256": "97a002fa4781b9850c2988661e86a8f43451c873f69ab6b5af9d5e57600c9793",
+  "size": 46370743,
   "downloadUrls": [
     {
       "name": "Gitee",
-      "url": "https://gitee.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.0/app-release.apk",
+      "url": "https://gitee.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.1/app-release.apk",
       "region": "domestic"
     },
     {
       "name": "GH Proxy",
-      "url": "https://gh-proxy.com/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.0/app-release.apk",
+      "url": "https://gh-proxy.com/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.1/app-release.apk",
       "region": "domestic"
     },
     {
       "name": "GH Fast",
-      "url": "https://ghfast.top/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.0/app-release.apk",
+      "url": "https://ghfast.top/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.1/app-release.apk",
       "region": "cdn"
     },
     {
       "name": "GitHub",
-      "url": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.0/app-release.apk",
+      "url": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.1.1/app-release.apk",
       "region": "international"
     }
   ]
