@@ -22,23 +22,17 @@ class TaskWidgetProvider : AppWidgetProvider() {
         Log.d(TAG, "================ onUpdate ================")
         Log.d(TAG, "onUpdate: ids=${appWidgetIds.toList()}, count=${appWidgetIds.size}")
 
-        // 先立即更新一次：使用绝对安全的 fallback，确保 Launcher 不会显示 Problem loading
-        // 等协程内部读取完 Room 再做第二次更新（实际内容）。
+        // 先立即更新一次：使用 widget_test（绝对安全的布局，纯 LinearLayout+TextView+硬编码颜色）
+        // 注意：RemoteViews 构造函数不会 inflate，真正的 inflate 在 Launcher 进程中发生。
+        // 所以不能用 try/catch 来判断布局是否有效——必须确保布局本身就是合法的。
+        // widget_test.xml 不含 <View>、不引用 drawable/color 资源，100% RemoteViews 兼容。
         appWidgetIds.forEach { id ->
             try {
-                val immediate = RemoteViews(context.packageName, R.layout.widget_loading)
+                val immediate = RemoteViews(context.packageName, R.layout.widget_test)
                 appWidgetManager.updateAppWidget(id, immediate)
-                Log.d(TAG, "onUpdate: widget $id 立即显示 loading layout")
+                Log.d(TAG, "onUpdate: widget $id 立即推送 widget_test (最安全布局)")
             } catch (e: Throwable) {
-                Log.e(TAG, "onUpdate: ❌ widget_loading inflate FAILED for $id", e)
-                // widget_loading 也失败 → 使用 widget_test.xml (最朴素)
-                try {
-                    val safe = RemoteViews(context.packageName, R.layout.widget_test)
-                    appWidgetManager.updateAppWidget(id, safe)
-                    Log.d(TAG, "onUpdate: widget $id 使用 widget_test.xml 作为立即可视")
-                } catch (e2: Throwable) {
-                    Log.e(TAG, "onUpdate: ❌ even widget_test.xml FAILED for $id", e2)
-                }
+                Log.e(TAG, "onUpdate: ❌ widget_test push FAILED for $id (极端罕见)", e)
             }
         }
 
@@ -54,10 +48,10 @@ class TaskWidgetProvider : AppWidgetProvider() {
                     Log.e(TAG, "onUpdate: ❌ widget $id failed even after fallbacks", e)
                     try {
                         appWidgetManager.updateAppWidget(id,
-                            RemoteViews(context.packageName, R.layout.widget_loading))
-                        Log.d(TAG, "onUpdate: widget $id → widget_loading fallback")
+                            RemoteViews(context.packageName, R.layout.widget_test))
+                        Log.d(TAG, "onUpdate: widget $id → widget_test fallback")
                     } catch (e2: Throwable) {
-                        Log.e(TAG, "onUpdate: ❌ widget_loading also FAILED", e2)
+                        Log.e(TAG, "onUpdate: ❌ widget_test also FAILED", e2)
                     }
                 }
             }

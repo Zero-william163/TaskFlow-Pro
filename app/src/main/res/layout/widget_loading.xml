@@ -12,10 +12,11 @@
         android:gravity="center"
         android:orientation="horizontal">
 
-        <View
+        <ImageView
             android:layout_width="12dp"
             android:layout_height="12dp"
-            android:background="@drawable/widget_logo_dot" />
+            android:background="@drawable/widget_logo_dot"
+            android:contentDescription="@null" />
 
         <TextView
             android:layout_width="wrap_content"

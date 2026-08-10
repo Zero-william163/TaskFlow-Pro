@@ -15,10 +15,11 @@
         android:gravity="center_vertical"
         android:orientation="horizontal">
 
-        <View
+        <ImageView
             android:layout_width="10dp"
             android:layout_height="10dp"
-            android:background="@drawable/widget_logo_dot" />
+            android:background="@drawable/widget_logo_dot"
+            android:contentDescription="@null" />
 
         <TextView
             android:layout_width="0dp"
@@ -39,12 +40,13 @@
             android:textSize="12sp" />
     </LinearLayout>
 
-    <View
+    <ImageView
         android:layout_width="match_parent"
         android:layout_height="0.5dp"
         android:layout_marginTop="10dp"
         android:layout_marginBottom="4dp"
-        android:background="@color/widget_divider" />
+        android:background="@color/widget_divider"
+        android:contentDescription="@null" />
 
     <!--
         Scrollable task list backed by RemoteViewsService. When empty, the
