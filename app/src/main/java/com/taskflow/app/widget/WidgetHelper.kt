@@ -47,12 +47,21 @@ object WidgetHelper {
             TaskWidgetProvider.WIDGET_MODE_ALL
         else
             TaskWidgetProvider.WIDGET_MODE_TODAY
+        setMode(context, widgetId, newMode)
+    }
+
+    /**
+     * Directly set the widget display mode (today / all) and refresh.
+     * Used by the large-widget segmented tabs which send an explicit target
+     * mode rather than a toggle.
+     */
+    fun setMode(context: Context, widgetId: Int, mode: String) {
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit()
-            .putString(MODE_KEY_PREFIX + widgetId, newMode)
+            .putString(MODE_KEY_PREFIX + widgetId, mode)
             .apply()
-        Log.d(TAG, "toggleMode: widgetId=$widgetId, $current → $newMode")
-        // 立即重建 Widget（更新模式按钮文字）+ 通知 ListView 重新筛选
+        Log.d(TAG, "setMode: widgetId=$widgetId, mode=$mode")
+        // 立即重建 Widget（更新模式 Badge 文字/背景）+ 通知 ListView 重新筛选
         CoroutineScope(Dispatchers.Default).launch {
             val manager = AppWidgetManager.getInstance(context)
             val views = buildForId(context, widgetId)
@@ -83,18 +92,24 @@ object WidgetHelper {
             val ids = manager.getAppWidgetIds(providerComponent(context))
             Log.d(TAG, "refresh: appWidgetIds=${ids.toList()}")
             if (ids.isEmpty()) return@launch
-            val pending = try {
+            // Compute mode-aware counts (all vs today) for the toggle badge.
+            val (allCount, todayCount) = try {
                 withContext(Dispatchers.IO) {
-                    TaskRepository.get(context).getPinnedPending().size
+                    val tasks = TaskRepository.get(context).getPinnedPending()
+                    val todayStr = java.time.LocalDate.now().toString()
+                    val today = tasks.count { t ->
+                        t.isDueToday && t.lastCompletedDate != todayStr
+                    }
+                    tasks.size to today
                 }
             } catch (e: Throwable) {
                 Log.e(TAG, "refresh: TaskRepository.getPinnedPending FAILED", e)
-                -1  // 标记为 Room 失败，后续 buildForId 会走 fallback
+                (-1 to -1)  // 标记为 Room 失败，后续 buildForId 会走 fallback
             }
-            Log.d(TAG, "refresh: pinnedPending count=$pending")
+            Log.d(TAG, "refresh: allCount=$allCount, todayCount=$todayCount")
             ids.forEach { id ->
                 try {
-                    val views = buildForIdInternal(context, id, pending)
+                    val views = buildForIdInternal(context, id, allCount, todayCount)
                     manager.updateAppWidget(id, views)
                     // ===== 断点 #1 修复：updateAppWidget 后必须 notifyAppWidgetViewDataChanged =====
                     // Collection Widget 的 ListView 数据由 RemoteViewsFactory 管理，
@@ -125,21 +140,28 @@ object WidgetHelper {
      * Provider 调用入口（suspend）。内部同样走分层 fallback。
      */
     suspend fun buildForId(context: Context, appWidgetId: Int): RemoteViews {
-        val pending = try {
+        // Fetch the full pinned-pending list so we can compute mode-aware counts
+        // (today count vs all count) for the toggle badge text.
+        val (allCount, todayCount) = try {
             withContext(Dispatchers.IO) {
-                TaskRepository.get(context).getPinnedPending().size
+                val tasks = TaskRepository.get(context).getPinnedPending()
+                val todayStr = java.time.LocalDate.now().toString()
+                val today = tasks.count { t ->
+                    t.isDueToday && t.lastCompletedDate != todayStr
+                }
+                tasks.size to today
             }
         } catch (e: Throwable) {
             Log.e(TAG, "buildForId[$appWidgetId]: TaskRepository FAILED → 使用 fallback", e)
-            -1
+            (-1 to -1)
         }
-        return buildForIdInternal(context, appWidgetId, pending)
+        return buildForIdInternal(context, appWidgetId, allCount, todayCount)
     }
 
     /**
      * 分层 fallback 构建逻辑：
      *   Level 1) buildViews: Room + ListView + RemoteViewsService + PendingIntent (完整版本)
-     *   Level 2) buildViews 传 remaining=0: 不依赖 Room 实际数量 (仅当 Level1=Room异常以外的情况失败时)
+     *   Level 2) buildViews 传 allCount=0: 不依赖 Room 实际数量 (仅当 Level1=Room异常以外的情况失败时)
      *   Level 3) buildNoListView: 去掉 ListView/RemoteViewsService，只渲染 widget_content 的 header + 空状态
      *   Level 4) buildSafeFallback: widget_test.xml 最小化布局 (纯白+TextView) —— 最后保障
      *
@@ -149,14 +171,15 @@ object WidgetHelper {
     private fun buildForIdInternal(
         context: Context,
         appWidgetId: Int,
-        rawRemaining: Int
+        allCount: Int,
+        todayCount: Int
     ): RemoteViews {
         val tagId = appWidgetId
         // ---------- Level 1: 完整版本 ----------
-        if (rawRemaining >= 0) {
+        if (allCount >= 0) {
             return try {
-                Log.d(TAG, "buildForId[$tagId]: === Level 1 buildViews (Room=$rawRemaining, ListView) ===")
-                val result = buildViews(context, tagId, rawRemaining)
+                Log.d(TAG, "buildForId[$tagId]: === Level 1 buildViews (all=$allCount, today=$todayCount, ListView) ===")
+                val result = buildViews(context, tagId, allCount, todayCount)
                 Log.d(TAG, "buildForId[$tagId]: ✅ Level 1 成功")
                 result
             } catch (e: Throwable) {
@@ -166,17 +189,17 @@ object WidgetHelper {
                 level234Fallback(context, tagId, e)
             }
         } else {
-            // rawRemaining < 0 表示上游明确知道 Room 已经失败，直接跳到 Level 2
-            Log.w(TAG, "buildForId[$tagId]: Room 失败 (rawRemaining=$rawRemaining), 跳过 Level 1")
+            // allCount < 0 表示上游明确知道 Room 已经失败，直接跳到 Level 2
+            Log.w(TAG, "buildForId[$tagId]: Room 失败 (allCount=$allCount), 跳过 Level 1")
             return level234Fallback(context, tagId, RuntimeException("Room 查询失败"))
         }
     }
 
     private fun level234Fallback(context: Context, appWidgetId: Int, rootCause: Throwable): RemoteViews {
-        // ---------- Level 2: buildViews(remaining=0) ----------
+        // ---------- Level 2: buildViews(allCount=0, todayCount=0) ----------
         return try {
-            Log.d(TAG, "buildForId[$appWidgetId]: === Level 2 buildViews remaining=0 ===")
-            val result = buildViews(context, appWidgetId, 0)
+            Log.d(TAG, "buildForId[$appWidgetId]: === Level 2 buildViews allCount=0 ===")
+            val result = buildViews(context, appWidgetId, 0, 0)
             Log.d(TAG, "buildForId[$appWidgetId]: ✅ Level 2 成功")
             result
         } catch (e2: Throwable) {
@@ -196,8 +219,8 @@ object WidgetHelper {
         }
     }
 
-    private fun buildViews(context: Context, appWidgetId: Int, remaining: Int): RemoteViews {
-        Log.d(TAG, "buildViews[$appWidgetId]: remaining=$remaining")
+    private fun buildViews(context: Context, appWidgetId: Int, allCount: Int, todayCount: Int): RemoteViews {
+        Log.d(TAG, "buildViews[$appWidgetId]: allCount=$allCount, todayCount=$todayCount")
         val views = try {
             RemoteViews(context.packageName, R.layout.widget_content).also {
                 Log.d(TAG, "buildViews[$appWidgetId]: widget_content inflate OK")
@@ -224,11 +247,21 @@ object WidgetHelper {
             Log.e(TAG, "buildViews[$appWidgetId]: ❌ R.id.widget_header 失败", e)
             throw e
         }
-        // ===== 模式切换按钮（今日 / 全部） =====
+
+        // ===== Mode toggle badge (count_text doubles as the Today/All switch) =====
+        // The badge text shows "今日 · N" or "全部 · N" and its background colour
+        // highlights the active mode. Tapping it flips the mode and refreshes.
+        val mode = getMode(context, appWidgetId)
+        val isTodayMode = mode == TaskWidgetProvider.WIDGET_MODE_TODAY
+        val displayCount = if (isTodayMode) todayCount else allCount
+        val modeLabel = if (isTodayMode) "今日" else "全部"
         try {
-            val mode = getMode(context, appWidgetId)
-            val modeLabel = if (mode == TaskWidgetProvider.WIDGET_MODE_TODAY) "今日" else "全部"
-            views.setTextViewText(R.id.widget_btn_mode, modeLabel)
+            views.setTextViewText(R.id.count_text, "$modeLabel · $displayCount")
+            // Swap background drawable to highlight the active mode.
+            val bgRes = if (isTodayMode) R.drawable.widget_badge_mode_today
+                else R.drawable.widget_badge_mode_all
+            views.setInt(R.id.count_text, "setBackgroundResource", bgRes)
+            // Tap the badge → broadcast ACTION_TOGGLE_MODE to flip the list.
             val modeIntent = Intent(context, TaskWidgetProvider::class.java).apply {
                 action = TaskWidgetProvider.ACTION_TOGGLE_MODE
                 putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
@@ -237,11 +270,64 @@ object WidgetHelper {
                 context, (appWidgetId * 10 + 5), modeIntent,
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
             )
-            views.setOnClickPendingIntent(R.id.widget_btn_mode, modePi)
-            Log.d(TAG, "buildViews[$appWidgetId]: ✅ widget_btn_mode → mode=$modeLabel")
+            views.setOnClickPendingIntent(R.id.count_text, modePi)
+            Log.d(TAG, "buildViews[$appWidgetId]: ✅ count_text badge → $modeLabel · $displayCount")
         } catch (e: Throwable) {
-            Log.e(TAG, "buildViews[$appWidgetId]: ❌ widget_btn_mode 失败（继续）", e)
+            Log.e(TAG, "buildViews[$appWidgetId]: ❌ count_text badge 失败（继续）", e)
         }
+
+        // ===== Responsive full segmented tabs (large widgets only) =====
+        // On wide widgets (min width >= 200dp) show the standard [ 今日 | 全部 ]
+        // tab pair below the header; on narrow widgets keep it hidden and rely on
+        // the mini badge above. We read the current widget size from AppWidgetOptions.
+        try {
+            val options = AppWidgetManager.getInstance(context)
+                .getAppWidgetOptions(appWidgetId)
+            val minWidthDp = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 0)
+            } else {
+                options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 0)
+            }
+            val showTabs = minWidthDp >= 200
+            views.setViewVisibility(
+                R.id.widget_mode_tabs,
+                if (showTabs) View.VISIBLE else View.GONE
+            )
+            if (showTabs) {
+                // Highlight the active tab and bind both tabs to the toggle action.
+                val activeBg = if (isTodayMode) R.drawable.widget_badge_mode_today
+                    else R.drawable.widget_badge_mode_all
+                val inactiveBg = R.drawable.widget_badge_pill
+                views.setInt(R.id.widget_tab_today, "setBackgroundResource",
+                    if (isTodayMode) activeBg else inactiveBg)
+                views.setInt(R.id.widget_tab_all, "setBackgroundResource",
+                    if (!isTodayMode) activeBg else inactiveBg)
+                // Both tabs send the same toggle action; the receiver decides
+                // which mode to switch to based on the current state.
+                val tabTodayIntent = Intent(context, TaskWidgetProvider::class.java).apply {
+                    action = TaskWidgetProvider.ACTION_SET_MODE
+                    putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+                    putExtra(TaskWidgetProvider.EXTRA_MODE, TaskWidgetProvider.WIDGET_MODE_TODAY)
+                }
+                val tabAllIntent = Intent(context, TaskWidgetProvider::class.java).apply {
+                    action = TaskWidgetProvider.ACTION_SET_MODE
+                    putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+                    putExtra(TaskWidgetProvider.EXTRA_MODE, TaskWidgetProvider.WIDGET_MODE_ALL)
+                }
+                views.setOnClickPendingIntent(R.id.widget_tab_today,
+                    PendingIntent.getBroadcast(context, (appWidgetId * 10 + 6), tabTodayIntent,
+                        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
+                views.setOnClickPendingIntent(R.id.widget_tab_all,
+                    PendingIntent.getBroadcast(context, (appWidgetId * 10 + 7), tabAllIntent,
+                        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
+            }
+            Log.d(TAG, "buildViews[$appWidgetId]: mode_tabs showTabs=$showTabs (minWidthDp=$minWidthDp)")
+        } catch (e: Throwable) {
+            // If we can't read the options, keep tabs hidden (safe default).
+            Log.e(TAG, "buildViews[$appWidgetId]: ❌ mode_tabs 失败（继续，保持 hidden）", e)
+            try { views.setViewVisibility(R.id.widget_mode_tabs, View.GONE) } catch (_: Throwable) {}
+        }
+
         // ===== 刷新按钮 → 发送 WIDGET_REFRESH 广播，强制刷新 Widget =====
         try {
             val refreshIntent = Intent(context, TaskWidgetProvider::class.java).apply {
@@ -271,16 +357,7 @@ object WidgetHelper {
         } catch (e: Throwable) {
             Log.e(TAG, "buildViews[$appWidgetId]: ❌ widget_btn_new 失败（继续）", e)
         }
-        try {
-            views.setTextViewText(
-                R.id.count_text,
-                if (remaining > 0) context.getString(R.string.widget_remaining, remaining)
-                else context.getString(R.string.widget_all_done)
-            )
-        } catch (e: Throwable) {
-            Log.e(TAG, "buildViews[$appWidgetId]: ❌ R.id.count_text 失败", e)
-            throw e
-        }
+        // count_text already configured above as the mode toggle badge.
         val listIntent = Intent(context, TaskListRemoteViewsService::class.java).apply {
             putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
             // Unique data URI per widget id — ensures Launcher creates separate
@@ -317,7 +394,7 @@ object WidgetHelper {
         try {
             views.setViewVisibility(R.id.task_list, View.VISIBLE)
             views.setViewVisibility(R.id.empty_text, View.GONE)
-            Log.d(TAG, "buildViews[$appWidgetId]: list_always_visible OK (remaining=$remaining)")
+            Log.d(TAG, "buildViews[$appWidgetId]: list_always_visible OK (allCount=$allCount)")
         } catch (e: Throwable) {
             Log.e(TAG, "buildViews[$appWidgetId]: ❌ list visibility FAILED", e)
             throw e
@@ -369,6 +446,8 @@ object WidgetHelper {
 
         views.setViewVisibility(R.id.task_list, View.GONE)
         views.setViewVisibility(R.id.empty_text, View.VISIBLE)
+        // Hide the responsive tabs in fallback mode — no data to toggle.
+        try { views.setViewVisibility(R.id.widget_mode_tabs, View.GONE) } catch (_: Throwable) {}
         // 在 count_text 显示标题，在 empty_text 显示根因（限长避免截断问题）
         views.setTextViewText(R.id.count_text, "TaskFlow")
         val cause = rootCause.javaClass.simpleName

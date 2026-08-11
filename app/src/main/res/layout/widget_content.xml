@@ -16,7 +16,7 @@
     android:paddingBottom="10dp"
     android:clipToPadding="false">
 
-    <!-- ===== Header（Brand | Pill Badge + 刷新按钮） ===== -->
+    <!-- ===== Header（Brand | Mode Toggle Badge + 刷新按钮） ===== -->
     <LinearLayout
         android:id="@+id/widget_header"
         android:layout_width="match_parent"
@@ -24,44 +24,23 @@
         android:gravity="center_vertical"
         android:orientation="horizontal">
 
-        <!-- Left: Brand（单行，去掉了左侧正方形小图标） + 模式切换 -->
-        <LinearLayout
+        <!-- Left: Brand（单行，去掉了左侧正方形小图标） -->
+        <TextView
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
+            android:text="@string/app_name"
+            android:textColor="@color/widget_text_primary"
+            android:textSize="17sp"
+            android:textStyle="bold"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:includeFontPadding="false" />
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/app_name"
-                android:textColor="@color/widget_text_primary"
-                android:textSize="17sp"
-                android:textStyle="bold"
-                android:maxLines="1"
-                android:ellipsize="end"
-                android:includeFontPadding="false" />
-
-            <!-- 模式切换按钮：今日 / 全部 -->
-            <TextView
-                android:id="@+id/widget_btn_mode"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:minHeight="24dp"
-                android:paddingHorizontal="8dp"
-                android:paddingVertical="2dp"
-                android:gravity="center"
-                android:background="@drawable/widget_badge_pill"
-                android:text="今日"
-                android:textColor="@color/widget_badge_text"
-                android:textSize="11sp"
-                android:textStyle="bold"
-                android:includeFontPadding="false" />
-        </LinearLayout>
-
-        <!-- Right: Pill Capsule Badge + 刷新小图标 -->
+        <!-- Right: Mode Toggle Badge (mini, always visible) + refresh icon.
+             The count_text badge doubles as the Today/All toggle switch.
+             Tapping it flips the mode and refreshes the list. The badge
+             background colour changes to highlight the active mode. -->
         <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -76,8 +55,8 @@
                 android:paddingHorizontal="10dp"
                 android:paddingVertical="3dp"
                 android:gravity="center"
-                android:background="@drawable/widget_badge_pill"
-                android:text="@string/widget_all_done"
+                android:background="@drawable/widget_badge_mode_today"
+                android:text="今日 · 0"
                 android:textColor="@color/widget_badge_text"
                 android:textSize="12sp"
                 android:textStyle="bold"
@@ -93,6 +72,48 @@
                 android:scaleType="fitCenter"
                 android:contentDescription="@null" />
         </LinearLayout>
+    </LinearLayout>
+
+    <!-- ===== Responsive full segmented tabs (hidden by default) =====
+         Shown only on large widgets (width >= 200dp) via WidgetHelper.
+         On small widgets the mini count_text badge above handles the toggle. -->
+    <LinearLayout
+        android:id="@+id/widget_mode_tabs"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/widget_tab_today"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:minHeight="26dp"
+            android:background="@drawable/widget_badge_mode_today"
+            android:text="今日"
+            android:textColor="@color/widget_badge_text"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:includeFontPadding="false" />
+
+        <TextView
+            android:id="@+id/widget_tab_all"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="6dp"
+            android:gravity="center"
+            android:minHeight="26dp"
+            android:background="@drawable/widget_badge_pill"
+            android:text="全部"
+            android:textColor="@color/widget_badge_text"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:includeFontPadding="false" />
     </LinearLayout>
 
     <!-- Divider（柔和分割线） -->

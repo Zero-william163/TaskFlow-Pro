@@ -63,12 +63,19 @@ fun TaskCard(
     val showCompletedTodayBadge = task.isCompletedToday
     val checkboxChecked = task.isCompleted || task.isCompletedToday
 
+    // Overdue tasks (dueDate < today, not completed) get a muted grey card body
+    // + a striking red "已逾期" capsule badge next to the due time. This lowers
+    // the visual weight of stale tasks while making the overdue state unmistakable.
+    val isOverdue = task.isOverdue
+
     SoftCard(
         modifier = modifier.fillMaxWidth(),
         onClick = onClick
     ) {
         Row(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier
+                .padding(16.dp)
+                .then(if (isOverdue) Modifier.background(Color(0xFFF2F2F4)) else Modifier),
             verticalAlignment = Alignment.Top
         ) {
             Box(
@@ -76,7 +83,7 @@ fun TaskCard(
                     .width(4.dp)
                     .height(46.dp)
                     .clip(RoundedCornerShape(50))
-                    .background(accent)
+                    .background(if (isOverdue) Color(0xFFB0B3BC) else accent)
             )
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
@@ -84,7 +91,8 @@ fun TaskCard(
                     text = task.title,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = if (isOverdue) MaterialTheme.colorScheme.onSurfaceVariant
+                    else MaterialTheme.colorScheme.onSurface,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     textDecoration = if (task.isCompleted) TextDecoration.LineThrough else TextDecoration.None,
@@ -124,12 +132,29 @@ fun TaskCard(
                         }
                         Spacer(Modifier.width(8.dp))
                     }
+                    if (isOverdue) {
+                        // Striking red capsule badge for overdue tasks.
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(50))
+                                .background(Color(0xFFFF4D4F).copy(alpha = 0.15f))
+                                .padding(horizontal = 8.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "已逾期",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFFFF4D4F),
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Spacer(Modifier.width(8.dp))
+                    }
                     task.dueDate?.let { due ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
                                 imageVector = Icons.Outlined.Schedule,
                                 contentDescription = null,
-                                tint = if (task.isOverdue) PriorityHigh
+                                tint = if (isOverdue) PriorityHigh
                                 else MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.size(14.dp)
                             )
@@ -137,7 +162,7 @@ fun TaskCard(
                             Text(
                                 text = Format.describeDueShort(due),
                                 style = MaterialTheme.typography.labelMedium,
-                                color = if (task.isOverdue) PriorityHigh
+                                color = if (isOverdue) PriorityHigh
                                 else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }

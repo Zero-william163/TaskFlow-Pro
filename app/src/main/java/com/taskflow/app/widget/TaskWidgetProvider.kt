@@ -106,6 +106,17 @@ class TaskWidgetProvider : AppWidgetProvider() {
                     WidgetHelper.toggleMode(context, widgetId)
                 }
             }
+            ACTION_SET_MODE -> {
+                val widgetId = intent.getIntExtra(
+                    AppWidgetManager.EXTRA_APPWIDGET_ID,
+                    AppWidgetManager.INVALID_APPWIDGET_ID
+                )
+                val mode = intent.getStringExtra(EXTRA_MODE)
+                Log.d(TAG, "onReceive: SET_MODE widgetId=$widgetId, mode=$mode")
+                if (widgetId != AppWidgetManager.INVALID_APPWIDGET_ID && mode != null) {
+                    WidgetHelper.setMode(context, widgetId, mode)
+                }
+            }
             ACTION_TOGGLE_TASK -> {
                 val taskId = intent.getLongExtra(EXTRA_TASK_ID, -1L)
                 Log.d(TAG, "onReceive: TOGGLE_TASK taskId=$taskId")
@@ -138,7 +149,9 @@ class TaskWidgetProvider : AppWidgetProvider() {
         const val ACTION_TASKS_CHANGED = "com.taskflow.app.TASKS_CHANGED"
         const val ACTION_TOGGLE_TASK = "com.taskflow.app.TOGGLE_TASK"
         const val ACTION_TOGGLE_MODE = "com.taskflow.app.TOGGLE_MODE"
+        const val ACTION_SET_MODE = "com.taskflow.app.SET_MODE"
         const val EXTRA_TASK_ID = "extra_task_id"
+        const val EXTRA_MODE = "extra_mode"
 
         // Widget display modes
         const val WIDGET_MODE_TODAY = "today"

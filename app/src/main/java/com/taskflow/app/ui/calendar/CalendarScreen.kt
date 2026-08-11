@@ -54,6 +54,7 @@ import com.taskflow.app.ui.theme.GradientStart
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
+import java.time.ZoneId
 import java.time.format.TextStyle
 import java.util.Locale
 
@@ -209,14 +210,18 @@ fun CalendarScreen(
         } else {
             items(list, key = { it.second.id }) { (task, _) ->
                 val cat = state.categories[task.categoryId]
+                // Calendar page is a "view + check-off" zone: tapping the card
+                // body does NOT open the edit sheet (prevents accidental edits).
+                // Only the checkbox toggles completion. readOnly=false keeps the
+                // checkbox visible; onClick is a no-op.
                 TaskCard(
                     task = task,
                     categoryColor = Color(cat?.color ?: 0xFF4C6EF5.toInt()),
                     categoryName = cat?.name.orEmpty(),
-                    onClick = { onTaskClick(task.id) },
+                    onClick = { /* no edit from calendar */ },
                     onToggleComplete = { viewModel.toggleComplete(task) },
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 5.dp),
-                    readOnly = true
+                    readOnly = false
                 )
             }
         }
@@ -230,7 +235,10 @@ private fun MonthGrid(
     tasksByDate: Map<LocalDate, List<Task>>,
     onSelect: (LocalDate) -> Unit
 ) {
-    val today = LocalDate.now()
+    // Strong-bind "today" to the system-default timezone so the highlighted
+    // cell always matches the user's actual calendar day (e.g. the 11th, not
+    // the UTC-converted 10th which was causing the stale highlight bug).
+    val today = LocalDate.now(ZoneId.systemDefault())
     val firstDay = month.atDay(1)
     val startOffset = firstDay.dayOfWeek.value - 1 // Monday-first grid (Mon=0)
     val daysInMonth = month.lengthOfMonth()

@@ -16,12 +16,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.DeleteSweep
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
@@ -81,6 +83,12 @@ fun HomeScreen(
     var showUnsavedDialog by remember { mutableStateOf(false) }
     var triggerSheetSave by remember { mutableStateOf(false) }
 
+    // ====== COMPLETED tab: delete-confirmation dialogs ======
+    // Tapping a completed card (or its checkbox) opens a Material3 AlertDialog
+    // asking the user to confirm permanent deletion. No edit sheet is opened.
+    var pendingDeleteTask by remember { mutableStateOf<com.taskflow.app.data.model.Task?>(null) }
+    var showClearAllCompletedDialog by remember { mutableStateOf(false) }
+
     // Widget flow state — only resolved AFTER a task is actually saved.
     var pendingTaskId by remember { mutableStateOf<Long?>(null) }
     var showFirstGuide by remember { mutableStateOf(false) }
@@ -107,11 +115,15 @@ fun HomeScreen(
         showManualWidgetGuide = false
         pendingTaskId = null
         triggerSheetSave = false
+        pendingDeleteTask = null
+        showClearAllCompletedDialog = false
     }
     // Also reset on ON_PAUSE to cover quick background transitions
     LifecycleEventEffect(Lifecycle.Event.ON_PAUSE) {
         showAddSheet = false
         showUnsavedDialog = false
+        pendingDeleteTask = null
+        showClearAllCompletedDialog = false
     }
 
     val guideShown by ServiceLocator.userPreferences.widgetGuideShown.collectAsState(initial = false)
@@ -188,9 +200,21 @@ fun HomeScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 12.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     FilterChipRow(state.filter, viewModel::setFilter)
+                    Spacer(Modifier.weight(1f))
+                    // "清空全部已完成" button — only visible on the COMPLETED tab.
+                    if (state.filter == HomeFilter.COMPLETED && state.filtered.isNotEmpty()) {
+                        IconButton(onClick = { showClearAllCompletedDialog = true }) {
+                            Icon(
+                                Icons.Outlined.DeleteSweep,
+                                contentDescription = "清空全部已完成",
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
                 }
             }
 
@@ -205,12 +229,26 @@ fun HomeScreen(
             } else {
                 items(list, key = { it.id }) { task ->
                     val cat = state.categories[task.categoryId]
+                    val isCompletedCard = task.isCompleted || task.isCompletedToday
+                    // On the COMPLETED tab: tapping a completed card opens a
+                    // delete-confirmation dialog instead of the edit sheet.
+                    // On other tabs: normal click opens the task detail/edit page.
+                    val cardClick: () -> Unit = if (state.filter == HomeFilter.COMPLETED && isCompletedCard) {
+                        { pendingDeleteTask = task }
+                    } else {
+                        { onTaskClick(task.id) }
+                    }
+                    val toggleClick: () -> Unit = if (state.filter == HomeFilter.COMPLETED && isCompletedCard) {
+                        { pendingDeleteTask = task }
+                    } else {
+                        { viewModel.toggleComplete(task) }
+                    }
                     TaskCard(
                         task = task,
                         categoryColor = Color(cat?.color ?: 0xFF4C6EF5.toInt()),
                         categoryName = cat?.name.orEmpty(),
-                        onClick = { onTaskClick(task.id) },
-                        onToggleComplete = { viewModel.toggleComplete(task) },
+                        onClick = cardClick,
+                        onToggleComplete = toggleClick,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
                     )
                 }
@@ -363,6 +401,51 @@ fun HomeScreen(
 
     if (showManualWidgetGuide) {
         ManualWidgetPinDialog(onDismiss = { showManualWidgetGuide = false })
+    }
+
+    // ====== COMPLETED tab: single-task delete confirmation ======
+    // Triggered by tapping a completed card or its checkbox on the COMPLETED tab.
+    pendingDeleteTask?.let { taskToDelete ->
+        AlertDialog(
+            onDismissRequest = { pendingDeleteTask = null },
+            title = { Text("删除任务") },
+            text = { Text("确定要彻底删除该已完成任务吗？") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.deleteTask(taskToDelete)
+                    pendingDeleteTask = null
+                }) {
+                    Text("删除", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDeleteTask = null }) {
+                    Text("取消")
+                }
+            }
+        )
+    }
+
+    // ====== COMPLETED tab: "clear all completed" confirmation ======
+    if (showClearAllCompletedDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearAllCompletedDialog = false },
+            title = { Text("清空全部已完成任务") },
+            text = { Text("是否清空所有已完成任务？此操作不可恢复。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.deleteAllCompletedTasks()
+                    showClearAllCompletedDialog = false
+                }) {
+                    Text("清空", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearAllCompletedDialog = false }) {
+                    Text("取消")
+                }
+            }
+        )
     }
 }
 

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Mode toggle badge background (ALL mode): light-purple capsule.
+     Highlights the active "全部" mode so users see at a glance which
+     list they're viewing. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#EDE9FE" />
+    <corners android:radius="16dp" />
+    <padding
+        android:left="10dp"
+        android:top="4dp"
+        android:right="10dp"
+        android:bottom="4dp" />
+</shape>

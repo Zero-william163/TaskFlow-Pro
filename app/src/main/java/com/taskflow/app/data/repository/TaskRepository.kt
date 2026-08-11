@@ -139,6 +139,22 @@ class TaskRepository private constructor(
         notifyTasksChanged()
     }
 
+    /**
+     * Permanently deletes every permanently-completed (archived) task and their
+     * generated [TaskInstanceEntity] rows. Recurring tasks (which never have
+     * isCompleted=1) are preserved. Returns the number of task rows deleted.
+     */
+    suspend fun deleteAllCompletedTasks(): Int {
+        // One-shot read of completed task ids so we can clean up their instance rows too.
+        val completedIds = taskDao.getCompleted().map { it.id }
+        if (completedIds.isEmpty()) return 0
+        val deleted = taskDao.deleteAllCompleted()
+        taskInstanceDao.deleteByTasks(completedIds)
+        android.util.Log.d("TaskRepository", "deleteAllCompletedTasks: $deleted rows, ids=$completedIds")
+        notifyTasksChanged()
+        return deleted
+    }
+
     suspend fun setCompleted(task: Task, completed: Boolean) {
         val now = LocalDateTime.now()
         if (completed && task.isRecurring) {

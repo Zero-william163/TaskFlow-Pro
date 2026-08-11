@@ -144,6 +144,18 @@ class HomeViewModel(
         }
     }
 
+    /**
+     * Permanently deletes every permanently-completed (archived) task.
+     * Recurring tasks (which use lastCompletedDate, not isCompleted) are
+     * preserved. Called from the "清空全部已完成" button on the COMPLETED tab.
+     */
+    fun deleteAllCompletedTasks() {
+        viewModelScope.launch {
+            val deleted = taskRepository.deleteAllCompletedTasks()
+            android.util.Log.d("HomeViewModel", "deleteAllCompletedTasks: $deleted rows")
+        }
+    }
+
     fun reschedule(task: Task) {
         if (task.reminderTime != null && !task.isCompleted) reminderScheduler.schedule(task)
     }

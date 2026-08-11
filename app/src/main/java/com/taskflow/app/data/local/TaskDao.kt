@@ -24,6 +24,16 @@ interface TaskDao {
     @Query("DELETE FROM tasks WHERE id = :id")
     suspend fun deleteById(id: Long)
 
+    /**
+     * Permanently deletes every permanently-completed (archived) task.
+     * Recurring tasks never have isCompleted=1 (they stay alive via
+     * lastCompletedDate), so they are NOT affected by this call — only
+     * non-recurring tasks the user marked complete get wiped.
+     * Returns the number of rows deleted.
+     */
+    @Query("DELETE FROM tasks WHERE isCompleted = 1")
+    suspend fun deleteAllCompleted(): Int
+
     @Query("SELECT * FROM tasks WHERE id = :id")
     fun observeById(id: Long): Flow<TaskEntity?>
 
@@ -38,6 +48,9 @@ interface TaskDao {
 
     @Query("SELECT * FROM tasks WHERE isCompleted = 1 ORDER BY completedAt DESC")
     fun observeCompleted(): Flow<List<TaskEntity>>
+
+    @Query("SELECT * FROM tasks WHERE isCompleted = 1")
+    suspend fun getCompleted(): List<TaskEntity>
 
     @Query("SELECT * FROM tasks WHERE isCompleted = 0 ORDER BY priority DESC, dueDate IS NULL, dueDate ASC, createdAt DESC")
     suspend fun getPending(): List<TaskEntity>

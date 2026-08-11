@@ -49,7 +49,13 @@ class CalendarViewModel(
         taskRepository.observeAll()
     ) { idMap, tasks ->
         val byId = tasks.associateBy { it.id }
-        idMap.mapValues { (_, ids) -> ids.mapNotNull { byId[it] } }
+        // Filter out permanently-completed (archived) tasks so the calendar
+        // dots only reflect ACTIVE work. Recurring tasks never have
+        // isCompleted=true (they stay alive via lastCompletedDate), so they
+        // keep showing dots on their scheduled dates.
+        idMap.mapValues { (_, ids) ->
+            ids.mapNotNull { byId[it] }.filter { !it.isCompleted }
+        }
     }
 
     /** Tasks for the selected date: combine instances on the date with task metadata. */

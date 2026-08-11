@@ -1,25 +1,25 @@
 {
-  "version": "2.6.0",
-  "code": 44,
-  "versionTag": "v2.6.0",
-  "log": "## v2.6.0 更新内容\n\n### 周期/重复任务核心逻辑\n- Task 实体新增 lastCompletedDate(yyyy-MM-dd) 和 nextDueDate(epoch millis) 字段\n- TaskEntity 新增对应数据库列, DB 迁移 v4->v5\n- 点击「标记完成」时: 非重复任务直接 isCompleted=true; 周期任务不死亡, 仅更新 lastCompletedDate=今天 并自动计算 nextDueDate\n- Task 新增 isRecurring / isCompletedToday / isDueToday 计算属性\n\n### App 主界面三 Tab 同步\n- 【今日】Tab: 仅展示今天待办且 lastCompletedDate != 今天的任务(周期任务打卡后立刻从今日列表消失)\n- 【全部】Tab: 展示所有活跃任务, 周期任务今日已打卡时显示绿色「今日已完成」胶囊 Badge + 勾选框已勾选\n- 【已完成】Tab: 展示已彻底完成的普通任务 + 今日已打卡的周期任务\n\n### 桌面小组件模式切换\n- Widget Header 新增「今日/全部」模式切换按钮(胶囊 Badge 样式)\n- 【今日】模式: 仅展示 dueDate==今天 且 lastCompletedDate!=今天 的任务\n- 【全部】模式: 展示所有未归档任务, 周期任务今日已打卡时列表项显示「✓ 今日已完成」\n- 模式按 Widget ID 独立持久化到 SharedPreferences\n\n### 修复\n- 修复日历 Tab 时区 Bug(Converters 从 UTC 改为 systemDefault)\n- 修复任务卡片 00:00 红色时间(日期型任务不显示时间, 次日起才算过期)\n- 修复自定义闹钟铃声不播放(持久化 URI 权限 + 播放前验证)\n- 修复 HomeScreen 全局 UI 冻结(ModalBottomSheet confirmValueChange 放宽)\n\n### 构建信息\n- versionCode: 44\n- versionName: 2.6.0\n",
-  "apk": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.6.0/taskflow-v2.6.0.apk",
-  "sha256": "35ca8e3a6d15c0b24cb991dac13d24b91d8e9988086efaf3e5174b543d2ad573  taskflow-v2.6.0.apk",
-  "size": 46487711,
+  "version": "2.7.0",
+  "code": 45,
+  "versionTag": "v2.7.0",
+  "log": "## v2.7.0 更新内容\n\n### 日历页面修复\n- 日历下方任务卡片改为「查看 + 打卡」模式: 点击卡片不再打开编辑页, 仅保留勾选框打卡功能\n- 修复日历网格中已完成历史任务日期仍显示打点(蓝底+白点)的 Bug: 打点过滤现在排除 isCompleted=true 的归档任务\n- 今日(Today)判定强绑定 ZoneId.systemDefault(), 修复时区漂移导致过去日期被高亮的问题\n\n### 桌面小组件模式切换重构\n- 顶部胶囊 Badge 兼作「今日/全部」切换开关: 显示「今日 · N」或「全部 · N」, 点击切换模式\n- 当前模式用高亮背景色标注(今日=浅蓝, 全部=浅紫)\n- 大尺寸 Widget(>=200dp) 展开标准「[ 今日 | 全部 ]」双选项卡, 小尺寸仅显示 Mini 胶囊\n- 新增 ACTION_SET_MODE 广播, 支持 Tab 直接设定目标模式\n\n### 已完成 Tab 交互升级\n- 已完成 Tab 点击卡片改为弹出「删除任务」确认 Dialog(不再打开编辑页)\n- 已完成 Tab 新增「清空全部已完成」按钮(🗑️ 图标), 批量删除所有 isCompleted=1 的任务\n- 新增 TaskDao.deleteAllCompleted / TaskDao.getCompleted / TaskRepository.deleteAllCompletedTasks 接口\n\n### 逾期任务视觉样式\n- 逾期任务(dueDate < 今天 且未完成)卡片背景变灰, 标题字色降为次要灰色\n- 时间文本旁新增醒目红色「已逾期」胶囊 Badge(#FF4D4F 红字浅红底)\n- 优先级色条同步变灰, 降低视觉权重\n\n### 构建信息\n- versionCode: 45\n- versionName: 2.7.0\n",
+  "apk": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.7.0/taskflow-v2.7.0.apk",
+  "sha256": "bda7124fd465580ae800857f9c6d7bccfd01de9dd65d694893edef04686a64a0",
+  "size": 46505319,
   "downloadUrls": [
     {
       "name": "GH Proxy",
-      "url": "https://gh-proxy.com/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.6.0/taskflow-v2.6.0.apk",
+      "url": "https://gh-proxy.com/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.7.0/taskflow-v2.7.0.apk",
       "region": "domestic"
     },
     {
       "name": "GH Fast",
-      "url": "https://ghfast.top/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.6.0/taskflow-v2.6.0.apk",
+      "url": "https://ghfast.top/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.7.0/taskflow-v2.7.0.apk",
       "region": "cdn"
     },
     {
       "name": "GitHub",
-      "url": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.6.0/taskflow-v2.6.0.apk",
+      "url": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.7.0/taskflow-v2.7.0.apk",
       "region": "international"
     }
   ]
