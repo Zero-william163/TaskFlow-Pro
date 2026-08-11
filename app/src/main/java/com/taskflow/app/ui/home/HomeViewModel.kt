@@ -27,30 +27,40 @@ data class HomeUiState(
     val pendingCount: Int = 0
 ) {
     /**
-     * Filtered task list per spec §3:
-     * - TODAY:     今天需要执行的任务 (dueDate == today, 未完成)
+     * Filtered task list with recurring-task awareness:
+     * - TODAY:     今日待办 (dueDate == today for non-recurring / active today for
+     *              recurring) 且 lastCompletedDate != today 且 未彻底完成
      * - UPCOMING:  未来任务 (dueDate > today, 未完成)
-     * - COMPLETED: status == COMPLETED
-     * - INCOMPLETE:截止日期未到 + status != COMPLETED (含今天/未来/无截止日期)
-     * - ALL:       全部任务
+     * - COMPLETED: isCompleted == true 的普通任务 + 今日已打卡的周期任务
+     * - INCOMPLETE:截止日期未到 + 未彻底完成
+     * - ALL:       全部活跃任务（含今日已打卡的周期任务，卡片会显示「今日已完成」胶囊）
      *
-     * All filters are pure functions of `tasks` so any DB change (create /
-     * complete / delete / edit date) flows through Flow → recompose → instant
-     * UI update. Spec §3 "实时同步".
+     * Recurring tasks never get isCompleted=true — they stay alive and use
+     * lastCompletedDate to track daily check-offs. See TaskRepository.setCompleted.
      */
     val filtered: List<Task>
         get() {
             val today = LocalDate.now()
+            val todayStr = today.toString()
             val base = when (filter) {
-                // ALL 只显示未完成任务，已完成的归入 COMPLETED 栏目
-                HomeFilter.ALL -> tasks.filter { !it.isCompleted }
+                HomeFilter.ALL -> tasks.filter { t ->
+                    // All active tasks: not permanently completed, OR recurring
+                    // tasks that are checked off today (still shown with badge).
+                    !t.isCompleted || t.isCompletedToday
+                }
                 HomeFilter.TODAY -> tasks.filter { t ->
-                    !t.isCompleted && t.dueDate?.toLocalDate() == today
+                    !t.isCompleted &&
+                    t.isDueToday &&
+                    t.lastCompletedDate != todayStr
                 }
                 HomeFilter.UPCOMING -> tasks.filter { t ->
                     !t.isCompleted && t.dueDate?.toLocalDate()?.let { it > today } == true
                 }
-                HomeFilter.COMPLETED -> tasks.filter { it.isCompleted }
+                HomeFilter.COMPLETED -> tasks.filter { t ->
+                    // Permanently completed non-recurring tasks OR recurring
+                    // tasks checked off today.
+                    t.isCompleted || t.isCompletedToday
+                }
                 HomeFilter.INCOMPLETE -> tasks.filter { t ->
                     !t.isCompleted && (t.dueDate?.toLocalDate()?.let { it >= today } ?: true)
                 }
@@ -63,14 +73,17 @@ data class HomeUiState(
             }
         }
 
-    val remaining: Int get() = tasks.count { !it.isCompleted }
+    val remaining: Int get() = tasks.count { !it.isCompleted && !it.isCompletedToday }
 
     /** Per-category counts for the chip badges (spec §3 "实时计算"). */
-    val todayCount: Int get() = tasks.count { !it.isCompleted && it.dueDate?.toLocalDate() == LocalDate.now() }
+    val todayCount: Int get() {
+        val todayStr = LocalDate.now().toString()
+        return tasks.count { !it.isCompleted && it.isDueToday && it.lastCompletedDate != todayStr }
+    }
     val upcomingCount: Int get() = tasks.count { t ->
         !t.isCompleted && t.dueDate?.toLocalDate()?.let { it > LocalDate.now() } == true
     }
-    val completedCount: Int get() = tasks.count { it.isCompleted }
+    val completedCount: Int get() = tasks.count { it.isCompleted || it.isCompletedToday }
     val incompleteCount: Int get() = tasks.count { t ->
         !t.isCompleted && (t.dueDate?.toLocalDate()?.let { it >= LocalDate.now() } ?: true)
     }
@@ -106,10 +119,21 @@ class HomeViewModel(
 
     fun toggleComplete(task: Task) {
         viewModelScope.launch {
-            val completed = !task.isCompleted
-            taskRepository.setCompleted(task, completed)
-            if (completed) reminderScheduler.cancel(task.id)
-            else task.reminderTime?.let { reminderScheduler.schedule(task) }
+            if (task.isRecurring) {
+                // Recurring task: toggle the daily check-off, not isCompleted.
+                val checkOff = !task.isCompletedToday
+                taskRepository.setCompleted(task, checkOff)
+                if (checkOff) {
+                    // Keep the reminder alive — the task recurs tomorrow.
+                    // Only cancel the immediate firing; the scheduler will
+                    // reschedule for the next occurrence.
+                }
+            } else {
+                val completed = !task.isCompleted
+                taskRepository.setCompleted(task, completed)
+                if (completed) reminderScheduler.cancel(task.id)
+                else task.reminderTime?.let { reminderScheduler.schedule(task) }
+            }
         }
     }
 

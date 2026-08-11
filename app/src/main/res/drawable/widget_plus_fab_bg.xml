@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 小加号按钮：圆形紫蓝渐变背景 + 柔和阴影 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <gradient
+        android:startColor="#6C5CE7"
+        android:centerColor="#A29BFE"
+        android:endColor="#8E2DE2"
+        android:angle="135" />
+    <size android:width="40dp" android:height="40dp" />
+</shape>

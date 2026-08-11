@@ -9,6 +9,7 @@
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!-- 闹钟模块所需权限（对应用户模板的完整清单） -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
@@ -52,9 +53,9 @@
             </intent-filter>
         </activity>
 
-        <!-- Full-screen alarm activity: shows over lock screen with sound + vibration -->
+        <!-- 全屏闹钟界面（ui/alarm 目录，对应用户模板结构） -->
         <activity
-            android:name=".notification.AlarmActivity"
+            android:name=".ui.alarm.AlarmActivity"
             android:exported="false"
             android:excludeFromRecents="true"
             android:launchMode="singleInstance"
@@ -69,6 +70,14 @@
             android:excludeFromRecents="true"
             android:launchMode="singleInstance"
             android:theme="@style/Theme.TaskFlow.Dialog" />
+
+        <!-- Widget 小加号新建任务：独立对话框式窗口，不启动 MainActivity，直接弹出创建表单 -->
+        <activity
+            android:name=".widget.WidgetNewTaskActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleInstance"
+            android:theme="@style/Theme.TaskFlow.WidgetNewTask" />
 
         <provider
             android:name="androidx.core.content.FileProvider"
@@ -96,16 +105,33 @@
             </intent-filter>
         </receiver>
 
+        <!-- 闹钟触发接收器（receiver 目录，对应用户模板 AlarmReceiver） -->
         <receiver
-            android:name=".notification.ReminderReceiver"
+            android:name=".receiver.AlarmReceiver"
             android:enabled="true"
             android:exported="false">
             <intent-filter>
-                <action android:name="com.taskflow.app.action.REMINDER" />
-                <action android:name="com.taskflow.app.action.COMPLETE" />
-                <action android:name="com.taskflow.app.action.SNOOZE" />
+                <action android:name="com.taskflow.app.ACTION_DAILY_REMINDER" />
             </intent-filter>
         </receiver>
+
+        <!-- 通知栏操作接收器（receiver 目录，对应用户模板 AlarmActionReceiver） -->
+        <receiver
+            android:name=".receiver.AlarmActionReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.taskflow.app.action.STOP_ALARM" />
+                <action android:name="com.taskflow.app.action.SNOOZE_ALARM" />
+            </intent-filter>
+        </receiver>
+
+        <!-- 闹钟前台服务（service 目录，对应用户模板 AlarmService）：声音/震动/全屏通知 -->
+        <service
+            android:name=".service.AlarmService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback|phoneCall" />
 
         <receiver
             android:name=".widget.TaskWidgetProvider"

@@ -21,15 +21,45 @@ import kotlinx.coroutines.withContext
 
 private const val TAG = "WidgetHelper"
 
+private const val PREFS_NAME = "widget_prefs"
+private const val MODE_KEY_PREFIX = "widget_mode_"
+
 /**
  * Widget 全链路调试入口。所有日志统一 TAG="WidgetHelper"，便于 Logcat 过滤。
- *
- * v7 修复核心问题：
- * - requestPinWidget 不再静默吞掉异常，全部打印完整 stacktrace 到 Logcat
- * - 暴露 [lastPinError] 供 UI 层读取并展示给用户
- * - 全流程日志：API、supported、ComponentName、accepted、异常类型、当前 Widget 数量
  */
 object WidgetHelper {
+
+    /**
+     * 读取某个 Widget 的显示模式（今日 / 全部），默认"今日"。
+     */
+    fun getMode(context: Context, widgetId: Int): String {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getString(MODE_KEY_PREFIX + widgetId, TaskWidgetProvider.WIDGET_MODE_TODAY)
+            ?: TaskWidgetProvider.WIDGET_MODE_TODAY
+    }
+
+    /**
+     * 切换模式并刷新 Widget。
+     */
+    fun toggleMode(context: Context, widgetId: Int) {
+        val current = getMode(context, widgetId)
+        val newMode = if (current == TaskWidgetProvider.WIDGET_MODE_TODAY)
+            TaskWidgetProvider.WIDGET_MODE_ALL
+        else
+            TaskWidgetProvider.WIDGET_MODE_TODAY
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putString(MODE_KEY_PREFIX + widgetId, newMode)
+            .apply()
+        Log.d(TAG, "toggleMode: widgetId=$widgetId, $current → $newMode")
+        // 立即重建 Widget（更新模式按钮文字）+ 通知 ListView 重新筛选
+        CoroutineScope(Dispatchers.Default).launch {
+            val manager = AppWidgetManager.getInstance(context)
+            val views = buildForId(context, widgetId)
+            manager.updateAppWidget(widgetId, views)
+            manager.notifyAppWidgetViewDataChanged(widgetId, R.id.task_list)
+        }
+    }
 
     /**
      * 上一次 requestPinWidget 失败的异常（如果有）。
@@ -194,10 +224,42 @@ object WidgetHelper {
             Log.e(TAG, "buildViews[$appWidgetId]: ❌ R.id.widget_header 失败", e)
             throw e
         }
-        // ===== Footer "+ 新建任务" 按钮 → 打开 App 并弹出 AddEditTaskSheet =====
+        // ===== 模式切换按钮（今日 / 全部） =====
         try {
-            val newTaskIntent = Intent(context, MainActivity::class.java).apply {
-                action = MainActivity.ACTION_NEW_TASK
+            val mode = getMode(context, appWidgetId)
+            val modeLabel = if (mode == TaskWidgetProvider.WIDGET_MODE_TODAY) "今日" else "全部"
+            views.setTextViewText(R.id.widget_btn_mode, modeLabel)
+            val modeIntent = Intent(context, TaskWidgetProvider::class.java).apply {
+                action = TaskWidgetProvider.ACTION_TOGGLE_MODE
+                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+            }
+            val modePi = PendingIntent.getBroadcast(
+                context, (appWidgetId * 10 + 5), modeIntent,
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
+            views.setOnClickPendingIntent(R.id.widget_btn_mode, modePi)
+            Log.d(TAG, "buildViews[$appWidgetId]: ✅ widget_btn_mode → mode=$modeLabel")
+        } catch (e: Throwable) {
+            Log.e(TAG, "buildViews[$appWidgetId]: ❌ widget_btn_mode 失败（继续）", e)
+        }
+        // ===== 刷新按钮 → 发送 WIDGET_REFRESH 广播，强制刷新 Widget =====
+        try {
+            val refreshIntent = Intent(context, TaskWidgetProvider::class.java).apply {
+                action = TaskWidgetProvider.ACTION_WIDGET_REFRESH
+                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+            }
+            val refreshPi = PendingIntent.getBroadcast(
+                context, (appWidgetId * 10 + 3), refreshIntent,
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
+            views.setOnClickPendingIntent(R.id.widget_btn_refresh, refreshPi)
+            Log.d(TAG, "buildViews[$appWidgetId]: ✅ widget_btn_refresh PendingIntent OK")
+        } catch (e: Throwable) {
+            Log.e(TAG, "buildViews[$appWidgetId]: ❌ widget_btn_refresh 失败（继续）", e)
+        }
+        // ===== 右下角小加号 → 直接弹出 WidgetNewTaskActivity 对话框（不打开 MainActivity） =====
+        try {
+            val newTaskIntent = Intent(context, WidgetNewTaskActivity::class.java).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
             }
             val newTaskPi = PendingIntent.getActivity(
@@ -205,7 +267,7 @@ object WidgetHelper {
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
             )
             views.setOnClickPendingIntent(R.id.widget_btn_new, newTaskPi)
-            Log.d(TAG, "buildViews[$appWidgetId]: ✅ widget_btn_new PendingIntent OK")
+            Log.d(TAG, "buildViews[$appWidgetId]: ✅ widget_btn_new(小加号) → WidgetNewTaskActivity OK")
         } catch (e: Throwable) {
             Log.e(TAG, "buildViews[$appWidgetId]: ❌ widget_btn_new 失败（继续）", e)
         }
@@ -280,6 +342,31 @@ object WidgetHelper {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         views.setOnClickPendingIntent(R.id.widget_header, headerPi)
+
+        // 降级时也绑定刷新按钮（否则用户点了没反应）
+        try {
+            val refreshIntent = Intent(context, TaskWidgetProvider::class.java).apply {
+                action = TaskWidgetProvider.ACTION_WIDGET_REFRESH
+            }
+            val refreshPi = PendingIntent.getBroadcast(
+                context, (appWidgetId * 10 + 3), refreshIntent,
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
+            views.setOnClickPendingIntent(R.id.widget_btn_refresh, refreshPi)
+        } catch (_: Throwable) {}
+
+        // 降级时也绑定小加号（直接弹出对话框，不需要 MainActivity）
+        try {
+            val newTaskIntent = Intent(context, WidgetNewTaskActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            }
+            val newTaskPi = PendingIntent.getActivity(
+                context, (appWidgetId * 10 + 2), newTaskIntent,
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
+            views.setOnClickPendingIntent(R.id.widget_btn_new, newTaskPi)
+        } catch (_: Throwable) {}
+
         views.setViewVisibility(R.id.task_list, View.GONE)
         views.setViewVisibility(R.id.empty_text, View.VISIBLE)
         // 在 count_text 显示标题，在 empty_text 显示根因（限长避免截断问题）

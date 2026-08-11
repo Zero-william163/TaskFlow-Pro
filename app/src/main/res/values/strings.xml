@@ -72,6 +72,9 @@
     <string name="widget_remaining">还有 %1$d 个任务</string>
     <string name="widget_all_done">全部完成</string>
     <string name="widget_new_task">新建任务</string>
+    <!-- 闹钟模块通知/前台服务文案 -->
+    <string name="notification_fullscreen_tap">点击展开全屏闹钟</string>
+    <string name="notification_snooze_5">稍后 5 分钟</string>
     <string name="widget_add_hint">打开 TaskFlow 添加任务</string>
     <!-- Widget 精致空状态 (Empty State) -->
     <string name="widget_empty_main">太棒了，今日任务已全部完成！</string>

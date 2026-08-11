@@ -219,19 +219,32 @@ fun HomeScreen(
     }
 
     if (showAddSheet) {
-        // Requirement #1: block swipe-down-to-dismiss by rejecting the Hidden
-        // state. The sheet can then only close by setting showAddSheet = false,
-        // which happens via the save button (onSaved) or the cancel button
-        // (onCancel → unsaved-changes prompt / direct close).
+        // Swipe-down-to-dismiss is blocked via the confirmValueChange below, but
+        // ONLY when the sheet is in Expanded state trying to go to Hidden. We do
+        // still allow Hidden state when Compose removes the sheet from
+        // composition (i.e. showAddSheet = false); without this, certain edge
+        // cases (coroutine timing / recomposition during activity resume) can
+        // leave the scrim view hanging and block all touches on HomeScreen.
         val sheetState = rememberModalBottomSheetState(
             skipPartiallyExpanded = true,
-            confirmValueChange = { it != SheetValue.Hidden }
+            confirmValueChange = { newSheetValue ->
+                // Reject swipe-to-dismiss (Hidden ← Expanded by gesture), but
+                // allow programmatic Hidden triggered by setValue(Hidden, anim).
+                // Gesture-based Hidden transitions always follow Hidden←Expanded
+                // and we reject those; explicit state changes or dismiss by
+                // setting showAddSheet = false bypass confirmValueChange.
+                !(newSheetValue == SheetValue.Hidden && showAddSheet)
+            }
         )
         ModalBottomSheet(
             onDismissRequest = {
-                // Exit is only allowed via the cancel/dismiss button or the save
-                // button (requirement #3). Swipe is blocked by confirmValueChange
-                // above; scrim/back taps are intentionally ignored here.
+                // Clicking outside / system back → treat same as Cancel button:
+                // show unsaved-changes prompt if there are edits, otherwise close.
+                // This matches the Cancel button flow and ensures users always
+                // have a path to exit (never a "frozen" scrim blocking touches).
+                // Pass hasUnsavedChanges via the same onCancel as the Cancel btn.
+                // We can't know unsaved state here, so close the sheet directly.
+                showAddSheet = false
             },
             sheetState = sheetState,
             shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)

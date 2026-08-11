@@ -11,7 +11,7 @@ import com.taskflow.app.data.model.Category
 
 @Database(
     entities = [TaskEntity::class, CategoryEntity::class, TaskInstanceEntity::class],
-    version = 4,
+    version = 5,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -33,7 +33,7 @@ abstract class TaskDatabase : RoomDatabase() {
                     "taskflow.db"
                 )
                     .addCallback(SeedCallback())
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                     .build()
                     .also { INSTANCE = it }
             }
@@ -119,6 +119,25 @@ abstract class TaskDatabase : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
                     "ALTER TABLE tasks ADD COLUMN alarmSoundUri TEXT"
+                )
+            }
+        }
+
+        /**
+         * v4 → v5: add recurring-task completion fields.
+         * - lastCompletedDate: "yyyy-MM-dd" of last check-off for recurring tasks
+         * - nextDueDate: pre-computed next due timestamp (epoch millis)
+         *
+         * Both default to NULL — existing tasks are unaffected. Non-recurring
+         * tasks simply never use these columns.
+         */
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE tasks ADD COLUMN lastCompletedDate TEXT"
+                )
+                db.execSQL(
+                    "ALTER TABLE tasks ADD COLUMN nextDueDate INTEGER"
                 )
             }
         }

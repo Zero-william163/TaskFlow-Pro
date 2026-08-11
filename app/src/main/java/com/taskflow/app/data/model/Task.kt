@@ -51,11 +51,72 @@ data class Task(
      * Value comes from RingtoneManager picker (content:// URI) and is persisted
      * as a plain string so Room can store it with a single TEXT column.
      */
-    val alarmSoundUri: String? = null
+    val alarmSoundUri: String? = null,
+    /**
+     * Last date this recurring task was "checked off" (format "yyyy-MM-dd").
+     * For non-recurring tasks this stays null (they use [isCompleted] instead).
+     * For recurring tasks, comparing this to today's date tells us whether the
+     * task has already been done today.
+     */
+    val lastCompletedDate: String? = null,
+    /**
+     * Pre-computed next due timestamp (epoch millis, local zone) for recurring
+     * tasks. Updated every time the user checks off a recurring task so the
+     * widget / UI can show "next: Aug 12" without re-running the generator.
+     */
+    val nextDueDate: Long? = null
 ) {
     val hasReminder: Boolean get() = reminderTime != null
+
+    /** True if this task repeats (DAILY / WEEKLY / MONTHLY / CUSTOM). */
+    val isRecurring: Boolean get() = frequency != FrequencyType.NONE
+
+    /** True if the user already checked off this recurring task today. */
+    val isCompletedToday: Boolean
+        get() = isRecurring && lastCompletedDate == LocalDate.now().toString()
+
+    /**
+     * True if this task is due/active today:
+     * - Non-recurring: dueDate falls on today.
+     * - Recurring: today is within [startDate, dueDate] (the active range).
+     */
+    val isDueToday: Boolean
+        get() {
+            val today = LocalDate.now()
+            return if (isRecurring) {
+                val start = startDate ?: today
+                val end = dueDate?.toLocalDate()
+                !today.isBefore(start) && (end == null || !today.isAfter(end))
+            } else {
+                dueDate?.toLocalDate() == today
+            }
+        }
+
+    /**
+     * Returns true if the due-time is exactly 00:00:00. This means the user set
+     * only a DATE (no specific time-of-day) for the deadline. For such tasks we
+     * should:
+     *  - Not display the "00:00" time label inline (it's misleading — the task
+     *    isn't literally due the second the day starts)
+     *  - Treat end-of-day (instead of start-of-day) as the overdue cutoff so a
+     *    task due "Aug 11" is NOT flagged "overdue" at 09:27 on Aug 11.
+     */
+    val isDueDateOnly: Boolean
+        get() = dueDate != null &&
+            dueDate.hour == 0 && dueDate.minute == 0 &&
+            dueDate.second == 0 && dueDate.nano == 0
+
     val isOverdue: Boolean
-        get() = !isCompleted && dueDate != null && dueDate.isBefore(LocalDateTime.now())
+        get() {
+            if (isCompleted || dueDate == null) return false
+            return if (isDueDateOnly) {
+                // "Date only" task: overdue starts the day AFTER the due date.
+                val dueDay = dueDate.toLocalDate()
+                dueDay.isBefore(LocalDate.now())
+            } else {
+                dueDate.isBefore(LocalDateTime.now())
+            }
+        }
 
     val customDates: List<LocalDate>
         get() = customDatesRaw

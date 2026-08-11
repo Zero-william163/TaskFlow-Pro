@@ -21,19 +21,28 @@ object Format {
 
     fun describeDueDate(due: LocalDateTime, now: LocalDateTime = LocalDateTime.now()): String {
         val today = now.toLocalDate()
+        val dateOnly = due.hour == 0 && due.minute == 0 && due.second == 0 && due.nano == 0
         return when {
-            due.toLocalDate().isEqual(today) -> "今天 " + due.format(timeFmt)
-            due.toLocalDate().isEqual(today.plusDays(1)) -> "明天 " + due.format(timeFmt)
-            due.toLocalDate().isEqual(today.minusDays(1)) -> "昨天 " + due.format(timeFmt)
-            due.year == now.year -> due.format(monthDayFmt) + " " + due.format(timeFmt)
-            else -> due.format(fullDateFmt)
+            due.toLocalDate().isEqual(today) ->
+                if (dateOnly) "今天" else "今天 " + due.format(timeFmt)
+            due.toLocalDate().isEqual(today.plusDays(1)) ->
+                if (dateOnly) "明天" else "明天 " + due.format(timeFmt)
+            due.toLocalDate().isEqual(today.minusDays(1)) ->
+                if (dateOnly) "昨天" else "昨天 " + due.format(timeFmt)
+            due.year == now.year ->
+                if (dateOnly) due.format(monthDayFmt)
+                else due.format(monthDayFmt) + " " + due.format(timeFmt)
+            else ->
+                if (dateOnly) due.format(fullDateFmt)
+                else due.format(fullDateFmt) + " " + due.format(timeFmt)
         }
     }
 
     fun describeDueShort(due: LocalDateTime, now: LocalDateTime = LocalDateTime.now()): String {
         val today = now.toLocalDate()
+        val dateOnly = due.hour == 0 && due.minute == 0 && due.second == 0 && due.nano == 0
         return when {
-            due.toLocalDate().isEqual(today) -> due.format(timeFmt)
+            due.toLocalDate().isEqual(today) -> if (dateOnly) "今天" else due.format(timeFmt)
             due.toLocalDate().isEqual(today.plusDays(1)) -> "明天"
             due.toLocalDate().isEqual(today.minusDays(1)) -> "昨天"
             due.year == now.year -> due.format(monthDayFmt)

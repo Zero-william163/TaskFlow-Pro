@@ -57,8 +57,22 @@ class TaskListRemoteViewsService : RemoteViewsService() {
             // Runs on a background thread; blocking read is safe and standard here.
             Log.d(TAG, "factory[$widgetId].onDataSetChanged: querying Room...")
             tasks = try {
-                val result = runBlocking { TaskRepository.get(context).getPinnedPending() }
-                Log.d(TAG, "factory[$widgetId].onDataSetChanged: Room returned ${result.size} tasks")
+                val all = runBlocking { TaskRepository.get(context).getPinnedPending() }
+                val mode = context.getSharedPreferences("widget_prefs", Context.MODE_PRIVATE)
+                    .getString("widget_mode_$widgetId", "today") ?: "today"
+                val todayStr = java.time.LocalDate.now().toString()
+                val result = if (mode == "today") {
+                    // 今日模式：dueDate == today（非周期）/ 活跃今天（周期）
+                    // 且 lastCompletedDate != today 且未彻底完成
+                    all.filter { t ->
+                        t.isDueToday && t.lastCompletedDate != todayStr
+                    }
+                } else {
+                    // 全部模式：展示所有未归档任务（含今日已打卡的周期任务）
+                    all
+                }
+                Log.d(TAG, "factory[$widgetId].onDataSetChanged: mode=$mode, " +
+                    "all=${all.size}, filtered=${result.size}")
                 result
             } catch (e: Throwable) {
                 Log.e(TAG, "factory[$widgetId].onDataSetChanged: Room query FAILED → 空列表", e)
@@ -92,8 +106,13 @@ class TaskListRemoteViewsService : RemoteViewsService() {
                     Log.e(TAG, "factory[$widgetId].getViewAt($position): R.id.item_title FAILED", e)
                 }
 
+                // 周期任务今日已打卡 → meta 显示「✓ 今日已完成」
                 val meta = try {
-                    task.dueDate?.let { describeTime(it) }
+                    if (task.isCompletedToday) {
+                        "✓ 今日已完成"
+                    } else {
+                        task.dueDate?.let { describeTime(it) }
+                    }
                 } catch (e: Throwable) {
                     Log.e(TAG, "factory[$widgetId].getViewAt($position): describeTime FAILED", e)
                     null

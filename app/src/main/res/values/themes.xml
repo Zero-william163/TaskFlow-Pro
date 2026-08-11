@@ -22,4 +22,13 @@
         <item name="android:backgroundDimEnabled">true</item>
     </style>
 
+    <!-- Widget 小加号：新建任务对话框（全屏填满式卡片，半透明遮罩，不启动主界面） -->
+    <style name="Theme.TaskFlow.WidgetNewTask" parent="Theme.TaskFlow">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:windowAnimationStyle">@android:style/Animation.Dialog</item>
+    </style>
+
 </resources>

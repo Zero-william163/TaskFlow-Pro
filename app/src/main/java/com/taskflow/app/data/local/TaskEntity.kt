@@ -50,5 +50,9 @@ data class TaskEntity(
      */
     val pinnedToWidget: Boolean = true,
     /** Reminder sound URI (RingtoneManager content://). Null = system default. */
-    val alarmSoundUri: String? = null
+    val alarmSoundUri: String? = null,
+    /** "yyyy-MM-dd" of the last time a recurring task was checked off. */
+    val lastCompletedDate: String? = null,
+    /** Pre-computed next due timestamp (epoch millis) for recurring tasks. */
+    val nextDueDate: Long? = null
 )

@@ -183,7 +183,26 @@ fun AddEditTaskSheet(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { ar ->
         val uri = ar.data?.getParcelableExtra<Uri>(RingtoneManager.EXTRA_RINGTONE_PICKED_URI)
-        alarmSoundUri = uri?.toString()
+        if (uri != null) {
+            // Persist any read permission granted by the ringtone picker so we can
+            // play this custom sound later (even after process restart / alarm fire).
+            runCatching {
+                val takeFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION
+                context.contentResolver.takePersistableUriPermission(uri, takeFlags)
+            }.recoverCatching { _ ->
+                // If persistable grant isn't supported (non-document provider URI),
+                // fall back to an explicit non-persisted grant. Still works until
+                // the app's process is killed, and covers the overwhelmingly-common
+                // RingtoneManager/MediaStore ringtone URIs.
+                try {
+                    context.grantUriPermission(context.packageName, uri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                } catch (_: Throwable) {}
+            }
+            alarmSoundUri = uri.toString()
+        } else {
+            alarmSoundUri = null
+        }
     }
     // ====== 通知权限 (POST_NOTIFICATIONS)：按需触发 (Just-In-Time) ======
     // 仅当用户主动打开"提醒"开关时，才请求通知权限。移除首次启动强制弹窗。

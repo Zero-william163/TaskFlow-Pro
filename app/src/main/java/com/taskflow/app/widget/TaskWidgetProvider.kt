@@ -96,6 +96,16 @@ class TaskWidgetProvider : AppWidgetProvider() {
         super.onReceive(context, intent)
         when (intent.action) {
             ACTION_TASKS_CHANGED, ACTION_WIDGET_REFRESH -> WidgetHelper.refresh(context)
+            ACTION_TOGGLE_MODE -> {
+                val widgetId = intent.getIntExtra(
+                    AppWidgetManager.EXTRA_APPWIDGET_ID,
+                    AppWidgetManager.INVALID_APPWIDGET_ID
+                )
+                Log.d(TAG, "onReceive: TOGGLE_MODE widgetId=$widgetId")
+                if (widgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
+                    WidgetHelper.toggleMode(context, widgetId)
+                }
+            }
             ACTION_TOGGLE_TASK -> {
                 val taskId = intent.getLongExtra(EXTRA_TASK_ID, -1L)
                 Log.d(TAG, "onReceive: TOGGLE_TASK taskId=$taskId")
@@ -104,8 +114,14 @@ class TaskWidgetProvider : AppWidgetProvider() {
                         val repo = TaskRepository.get(context)
                         val task = repo.getTask(taskId)
                         if (task != null) {
-                            repo.setCompleted(task, !task.isCompleted)
-                            Log.d(TAG, "onReceive: task $taskId toggled to ${!task.isCompleted}")
+                            if (task.isRecurring) {
+                                // Recurring: toggle daily check-off
+                                repo.setCompleted(task, !task.isCompletedToday)
+                                Log.d(TAG, "onReceive: recurring task $taskId checkOff=${!task.isCompletedToday}")
+                            } else {
+                                repo.setCompleted(task, !task.isCompleted)
+                                Log.d(TAG, "onReceive: task $taskId toggled to ${!task.isCompleted}")
+                            }
                         } else {
                             Log.w(TAG, "onReceive: task $taskId not found")
                         }
@@ -121,6 +137,11 @@ class TaskWidgetProvider : AppWidgetProvider() {
         const val ACTION_REFRESH = ACTION_WIDGET_REFRESH
         const val ACTION_TASKS_CHANGED = "com.taskflow.app.TASKS_CHANGED"
         const val ACTION_TOGGLE_TASK = "com.taskflow.app.TOGGLE_TASK"
+        const val ACTION_TOGGLE_MODE = "com.taskflow.app.TOGGLE_MODE"
         const val EXTRA_TASK_ID = "extra_task_id"
+
+        // Widget display modes
+        const val WIDGET_MODE_TODAY = "today"
+        const val WIDGET_MODE_ALL = "all"
     }
 }

@@ -60,6 +60,15 @@ interface TaskDao {
     @Query("UPDATE tasks SET isCompleted = :completed, completedAt = :completedAt, updatedAt = :now WHERE id = :id")
     suspend fun setCompleted(id: Long, completed: Boolean, completedAt: LocalDateTime?, now: LocalDateTime)
 
+    /**
+     * Updates only the recurring-completion fields without marking the task as
+     * permanently completed. Used by the recurring-task check-off flow:
+     * the task stays alive (isCompleted stays 0) but [lastCompletedDate] is set
+     * to today and [nextDueDate] is advanced.
+     */
+    @Query("UPDATE tasks SET lastCompletedDate = :lastCompletedDate, nextDueDate = :nextDueDate, updatedAt = :now WHERE id = :id")
+    suspend fun setRecurringCheckoff(id: Long, lastCompletedDate: String?, nextDueDate: Long?, now: LocalDateTime)
+
     @Query("UPDATE tasks SET pinnedToWidget = :pinned, updatedAt = :now WHERE id = :id")
     suspend fun setPinnedToWidget(id: Long, pinned: Boolean, now: LocalDateTime)
 

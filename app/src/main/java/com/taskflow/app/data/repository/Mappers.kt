@@ -25,7 +25,9 @@ internal fun TaskEntity.toDomain(): Task = Task(
     createdAt = createdAt,
     updatedAt = updatedAt,
     pinnedToWidget = pinnedToWidget,
-    alarmSoundUri = alarmSoundUri
+    alarmSoundUri = alarmSoundUri,
+    lastCompletedDate = lastCompletedDate,
+    nextDueDate = nextDueDate
 )
 
 internal fun Task.toEntity(): TaskEntity = TaskEntity(
@@ -47,7 +49,9 @@ internal fun Task.toEntity(): TaskEntity = TaskEntity(
     createdAt = createdAt,
     updatedAt = updatedAt,
     pinnedToWidget = pinnedToWidget,
-    alarmSoundUri = alarmSoundUri
+    alarmSoundUri = alarmSoundUri,
+    lastCompletedDate = lastCompletedDate,
+    nextDueDate = nextDueDate
 )
 
 internal fun CategoryEntity.toDomain(): Category = Category(

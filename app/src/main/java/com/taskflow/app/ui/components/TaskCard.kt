@@ -47,7 +47,7 @@ fun TaskCard(
     readOnly: Boolean = false
 ) {
     val completedAlpha by animateFloatAsState(
-        targetValue = if (task.isCompleted) 0.45f else 1f,
+        targetValue = if (task.isCompleted || task.isCompletedToday) 0.55f else 1f,
         animationSpec = tween(260),
         label = "completedAlpha"
     )
@@ -57,6 +57,11 @@ fun TaskCard(
         Priority.LOW -> PriorityLow
         Priority.NONE -> PriorityNone
     }
+
+    // Recurring tasks checked off today show a "今日已完成" badge and a checked
+    // checkbox, but the task itself is NOT isCompleted — it stays alive.
+    val showCompletedTodayBadge = task.isCompletedToday
+    val checkboxChecked = task.isCompleted || task.isCompletedToday
 
     SoftCard(
         modifier = modifier.fillMaxWidth(),
@@ -102,6 +107,23 @@ fun TaskCard(
                         TagChip(text = categoryName, color = categoryColor)
                         Spacer(Modifier.width(8.dp))
                     }
+                    if (showCompletedTodayBadge) {
+                        // Green capsule badge for recurring tasks checked off today
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(50))
+                                .background(Color(0xFF4CAF50).copy(alpha = 0.15f))
+                                .padding(horizontal = 8.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "今日已完成",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFF2E7D32),
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                        Spacer(Modifier.width(8.dp))
+                    }
                     task.dueDate?.let { due ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
@@ -125,7 +147,7 @@ fun TaskCard(
             Spacer(Modifier.width(12.dp))
             if (!readOnly) {
                 TaskCheckbox(
-                    checked = task.isCompleted,
+                    checked = checkboxChecked,
                     onCheckedChange = { onToggleComplete() }
                 )
             }

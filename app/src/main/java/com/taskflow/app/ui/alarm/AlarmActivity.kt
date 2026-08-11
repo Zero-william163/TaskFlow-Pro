@@ -1,9 +1,7 @@
-package com.taskflow.app.notification
+package com.taskflow.app.ui.alarm
 
 import android.app.Activity
-import android.app.AlarmManager
 import android.app.KeyguardManager
-import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.media.AudioAttributes
@@ -26,7 +24,9 @@ import android.view.WindowManager
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
+import com.taskflow.app.R
 import com.taskflow.app.data.repository.TaskRepository
+import com.taskflow.app.service.AlarmService
 import com.taskflow.app.widget.WidgetHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -35,13 +35,16 @@ import kotlinx.coroutines.withContext
 import java.time.LocalTime
 
 /**
- * 全屏闹钟页面 v3
- * - 锁屏上面显示 + 强制点亮屏幕
- * - 最大音量播放系统闹钟铃声（循环，永不停止直到用户操作）
- * - 震动：波形节奏（响-停-响-停 …），直到用户操作
- * - 超时：10 分钟后自动关闭，避免用户不在场无限响
+ * 全屏闹钟界面
  *
- * 用户明确要求：到了提醒时间，要"全屏闹钟、有声音、有震动"。
+ * 对齐用户模板中的 ui/alarm/AlarmActivity：
+ *   - 锁屏上面显示 + 强制点亮屏幕（WakeLock + setShowWhenLocked/setTurnScreenOn）
+ *   - 最大音量播放系统闹钟铃声（循环，永不停止直到用户操作）
+ *   - 震动：波形节奏（响-停-响-停 …），直到用户操作
+ *   - 超时：10 分钟后自动关闭，避免用户不在场无限响
+ *
+ * UI 展示用户模板的 eventContent / daysRemaining / targetReached 字段，
+ * 同时从 TaskRepository 中回查 Task 数据获取描述信息。
  */
 class AlarmActivity : Activity() {
 
@@ -54,7 +57,6 @@ class AlarmActivity : Activity() {
     private var previousVolume: Int = -1
     private var audioFocusAbandoned = false
 
-    // 10 分钟超时自动关闭，避免用户远离手机时无限响
     private val autoDismissRunnable = Runnable { finishAlarm(snooze = false) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -63,19 +65,17 @@ class AlarmActivity : Activity() {
         taskId = intent.getLongExtra(EXTRA_TASK_ID, -1L)
         if (taskId == -1L) { finish(); return }
 
-        // ====== 1. WakeLock：保持 CPU 唤醒 + 屏幕点亮 ======
         val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
         wakeLock = pm.newWakeLock(
             PowerManager.SCREEN_BRIGHT_WAKE_LOCK or
             PowerManager.ACQUIRE_CAUSES_WAKEUP or
             PowerManager.ON_AFTER_RELEASE,
-            "TaskFlow:AlarmWakeLock-v3"
+            "TaskFlow:AlarmWakeLock"
         ).apply {
             setReferenceCounted(false)
-            acquire(10 * 60 * 1000L) // 10 分钟
+            acquire(10 * 60 * 1000L)
         }
 
-        // ====== 2. 锁屏上显示 + 打开屏幕 ======
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
             setShowWhenLocked(true)
             setTurnScreenOn(true)
@@ -94,7 +94,6 @@ class AlarmActivity : Activity() {
             )
         }
 
-        // 额外确保全屏遮挡
         window.addFlags(
             WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
             WindowManager.LayoutParams.FLAG_ALLOW_LOCK_WHILE_SCREEN_ON or
@@ -106,18 +105,23 @@ class AlarmActivity : Activity() {
             or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
         )
 
-        // ====== 3. 拉取任务 → 构建 UI → 播放响铃震动 ======
         CoroutineScope(Dispatchers.Main).launch {
             val task = withContext(Dispatchers.IO) {
                 TaskRepository.get(this@AlarmActivity).getTask(taskId)
             }
-            if (task == null) { finishAlarm(snooze = false); return@launch }
+            val fallbackContent = intent.getStringExtra(EXTRA_EVENT_CONTENT) ?: "任务"
+            val title = task?.title?.takeIf { it.isNotBlank() } ?: fallbackContent
+            val description = task?.description ?: if (task?.dueDate != null) {
+                val days = java.time.LocalDate.now().until(task.dueDate.toLocalDate()).days
+                if (days >= 0) "还剩 $days 天" else "已过期 ${-days} 天"
+            } else "任务即将到期"
 
-            buildAlarmUI(task.title, task.description)
+            buildAlarmUI(title, description)
 
-            // 先抢音频焦点 + 把闹钟音量拉到最大，再启动播放 + 震动
+            AlarmService.stopAlarmMediaOnly(this@AlarmActivity)
+
             boostAlarmVolume()
-            startAlarmSound(task.alarmSoundUri)
+            startAlarmSound(task?.alarmSoundUri)
             startVibration()
 
             handler.postDelayed(autoDismissRunnable, 10 * 60 * 1000L)
@@ -129,7 +133,7 @@ class AlarmActivity : Activity() {
     private fun buildAlarmUI(title: String, description: String) {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(0xFF0F0C29.toInt()) // 午夜深蓝紫背景
+            setBackgroundColor(0xFF0F0C29.toInt())
             setPadding(48, 80, 48, 64)
             gravity = Gravity.CENTER_HORIZONTAL
         }
@@ -169,7 +173,7 @@ class AlarmActivity : Activity() {
         }
 
         val snoozeBtn = Button(this).apply {
-            text = "稍后提醒（5分钟）"
+            text = getString(R.string.notification_snooze_5)
             textSize = 17f
             setBackgroundColor(0xFF2D2B4A.toInt())
             setTextColor(0xFFFFFFFF.toInt())
@@ -181,7 +185,7 @@ class AlarmActivity : Activity() {
         }
 
         val dismissBtn = Button(this).apply {
-            text = "关闭闹钟"
+            text = getString(R.string.common_close)
             textSize = 18f
             setTextColor(0xFFFFFFFF.toInt())
             setBackgroundColor(0xFF8E2DE2.toInt())
@@ -205,10 +209,6 @@ class AlarmActivity : Activity() {
 
     // ====================== 音量 + 响铃 ======================
 
-    /**
-     * 把 STREAM_ALARM 音量拉到最大，让用户一定能听见。
-     * finishAlarm 时再恢复到之前的音量。
-     */
     private fun boostAlarmVolume() {
         try {
             audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
@@ -235,7 +235,6 @@ class AlarmActivity : Activity() {
     private fun startAlarmSound(customUri: String?) {
         audioFocusAbandoned = false
         try {
-            // 请求音频焦点（AUDIOFOCUS_GAIN_TRANSMITTER 抢占式 — 用户一定会听到）
             val am: AudioManager = audioManager
                 ?: (getSystemService(Context.AUDIO_SERVICE) as AudioManager).also { audioManager = it }
             @Suppress("DEPRECATION")
@@ -244,10 +243,35 @@ class AlarmActivity : Activity() {
                 AudioManager.AUDIOFOCUS_GAIN
             )
 
-            val uri = customUri?.takeIf { it.isNotBlank() }
+            val parsedCustom = customUri?.takeIf { it.isNotBlank() }
                 ?.let { runCatching { Uri.parse(it) }.getOrNull() }
-                ?: RingtoneManager.getActualDefaultRingtoneUri(this, RingtoneManager.TYPE_ALARM)
+            val defaultUri = RingtoneManager.getActualDefaultRingtoneUri(this, RingtoneManager.TYPE_ALARM)
                 ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+
+            // Prefer user-selected custom sound first. If setDataSource throws
+            // (e.g. SecurityException because the persisted URI lost its read
+            // grant after a system ringtone update / media rescan), fall back
+            // only AFTER trying to re-acquire the permission and trying again.
+            val uri: Uri = parsedCustom?.let { custom ->
+                runCatching {
+                    try {
+                        contentResolver.takePersistableUriPermission(
+                            custom, Intent.FLAG_GRANT_READ_URI_PERMISSION
+                        )
+                    } catch (_: Throwable) {}
+                    try {
+                        grantUriPermission(packageName, custom, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    } catch (_: Throwable) {}
+                    // Try to open the file descriptor to validate BEFORE setDataSource
+                    contentResolver.openFileDescriptor(custom, "r").use { fd ->
+                        if (fd == null) error("openFileDescriptor returned null")
+                    }
+                    custom
+                }.getOrElse { ex ->
+                    Log.w(TAG, "自定义铃声 ${custom} 不可访问，回退默认铃声", ex)
+                    defaultUri
+                }
+            } ?: defaultUri
 
             mediaPlayer = MediaPlayer().apply {
                 setDataSource(this@AlarmActivity, uri)
@@ -258,11 +282,11 @@ class AlarmActivity : Activity() {
                         .build()
                 )
                 isLooping = true
-                setVolume(1.0f, 1.0f) // 最高音量
+                setVolume(1.0f, 1.0f)
                 prepare()
                 start()
             }
-            Log.d(TAG, "startAlarmSound: uri=$uri")
+            Log.d(TAG, "startAlarmSound: customProvided=${parsedCustom != null}, actualUri=$uri")
         } catch (e: Exception) {
             Log.e(TAG, "startAlarmSound 主路径失败，尝试 fallback", e)
             try {
@@ -282,7 +306,6 @@ class AlarmActivity : Activity() {
                 }
             } catch (e2: Throwable) {
                 Log.e(TAG, "startAlarmSound fallback 也失败了", e2)
-                // 最后一招：震动继续响就好，MediaPlayer 已失败则不强求
             }
         }
     }
@@ -290,7 +313,6 @@ class AlarmActivity : Activity() {
     // ====================== 震动（波形循环） ======================
 
     private fun startVibration() {
-        // 响 1s 停 0.4s 响 1s 停 0.4s —— 形成规律的"滴-滴-滴…"节奏
         val pattern = longArrayOf(0, 800, 250, 800, 250, 800, 600)
         vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             (getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager)?.defaultVibrator
@@ -300,9 +322,7 @@ class AlarmActivity : Activity() {
         }
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                vibrator?.vibrate(
-                    VibrationEffect.createWaveform(pattern, 0) // index=0：循环
-                )
+                vibrator?.vibrate(VibrationEffect.createWaveform(pattern, 0))
             } else {
                 @Suppress("DEPRECATION")
                 vibrator?.vibrate(pattern, 0)
@@ -312,12 +332,22 @@ class AlarmActivity : Activity() {
         }
     }
 
-    // ====================== 结束闹钟（用户点按钮 / 自动超时） ======================
+    @Suppress("DEPRECATION")
+    private fun cancelVibrate(context: Context) {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                (context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager)?.cancel()
+            } else {
+                (context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator)?.cancel()
+            }
+        } catch (_: Throwable) {}
+    }
+
+    // ====================== 结束闹钟 ======================
 
     private fun finishAlarm(snooze: Boolean) {
         handler.removeCallbacks(autoDismissRunnable)
 
-        // 1. 停声音
         mediaPlayer?.let {
             runCatching { if (it.isPlaying) it.stop() }
             runCatching { it.reset() }
@@ -325,10 +355,8 @@ class AlarmActivity : Activity() {
         }
         mediaPlayer = null
 
-        // 2. 恢复之前的闹钟音量
         restoreAlarmVolume()
 
-        // 3. 释放音频焦点
         if (!audioFocusAbandoned) {
             audioFocusAbandoned = true
             runCatching {
@@ -339,41 +367,21 @@ class AlarmActivity : Activity() {
             }
         }
 
-        // 4. 停震动
         vibrator?.cancel()
 
-        // 5. 释放 WakeLock
         wakeLock?.let { if (it.isHeld) it.release() }
         wakeLock = null
 
-        // 6. 取消通知与震动
         runCatching {
             androidx.core.app.NotificationManagerCompat.from(this).cancel(taskId.toInt())
         }
         cancelVibrate(this)
 
-        if (snooze) { scheduleSnooze(taskId) }
+        if (snooze) { AlarmService.snoozeAlarm(this, taskId) }
+        else { AlarmService.stopAlarm(this@AlarmActivity) }
         WidgetHelper.refresh(this)
 
         finish()
-    }
-
-    private fun scheduleSnooze(taskId: Long) {
-        val triggerAt = System.currentTimeMillis() + 5 * 60_000L
-        val intent = Intent(this, ReminderReceiver::class.java).apply {
-            action = ReminderReceiver.ACTION_REMINDER
-            putExtra(ReminderReceiver.EXTRA_TASK_ID, taskId)
-        }
-        val pi = PendingIntent.getBroadcast(
-            this, taskId.toInt(), intent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
-        val am = getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        try {
-            am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pi)
-        } catch (_: SecurityException) {
-            am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pi)
-        }
     }
 
     override fun onDestroy() {
@@ -389,13 +397,13 @@ class AlarmActivity : Activity() {
         wakeLock?.let { if (it.isHeld) it.release() }
     }
 
-    /** 屏蔽返回键，不允许退出而不停止闹钟 */
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() { /* do nothing */ }
 
     companion object {
-        private const val TAG = "AlarmActivity-v3"
+        private const val TAG = "AlarmActivity"
         const val EXTRA_TASK_ID = "extra_task_id"
+        const val EXTRA_EVENT_CONTENT = "event_content"
 
         fun createIntent(context: Context, taskId: Long): Intent =
             Intent(context, AlarmActivity::class.java).apply {

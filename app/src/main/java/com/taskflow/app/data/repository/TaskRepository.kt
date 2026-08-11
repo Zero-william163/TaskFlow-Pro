@@ -141,14 +141,86 @@ class TaskRepository private constructor(
 
     suspend fun setCompleted(task: Task, completed: Boolean) {
         val now = LocalDateTime.now()
-        taskDao.setCompleted(
-            id = task.id,
-            completed = completed,
-            completedAt = if (completed) now else null,
-            now = now
-        )
-        android.util.Log.d("TaskRepository", "Task setCompleted id=${task.id}, isCompleted=$completed")
+        if (completed && task.isRecurring) {
+            // ===== Recurring task check-off: the task stays alive =====
+            // Don't set isCompleted=true. Instead record today as the last
+            // completion date and advance nextDueDate to the next occurrence.
+            val todayStr = java.time.LocalDate.now().toString()
+            val nextDue = computeNextDueDate(task)
+            taskDao.setRecurringCheckoff(
+                id = task.id,
+                lastCompletedDate = todayStr,
+                nextDueDate = nextDue,
+                now = now
+            )
+            android.util.Log.d("TaskRepository",
+                "Recurring check-off id=${task.id}, freq=${task.frequency}, " +
+                "lastCompletedDate=$todayStr, nextDueDate=$nextDue")
+        } else if (!completed && task.isRecurring && task.isCompletedToday) {
+            // Un-check a recurring task that was checked off today: clear the
+            // lastCompletedDate so it re-appears in today's list.
+            taskDao.setRecurringCheckoff(
+                id = task.id,
+                lastCompletedDate = null,
+                nextDueDate = null,
+                now = now
+            )
+            android.util.Log.d("TaskRepository",
+                "Recurring un-check id=${task.id}, cleared lastCompletedDate")
+        } else {
+            // ===== Non-recurring: existing behavior =====
+            taskDao.setCompleted(
+                id = task.id,
+                completed = completed,
+                completedAt = if (completed) now else null,
+                now = now
+            )
+            android.util.Log.d("TaskRepository",
+                "Task setCompleted id=${task.id}, isCompleted=$completed")
+        }
         notifyTasksChanged()
+    }
+
+    /**
+     * Computes the next due timestamp (epoch millis, local zone) for a recurring
+     * task after today's check-off. Returns null if the recurrence range has
+     * ended (dueDate is in the past).
+     */
+    private fun computeNextDueDate(task: Task): Long? {
+        val today = java.time.LocalDate.now()
+        val dueEnd = task.dueDate?.toLocalDate()
+        // If the overall due-date has passed, there's no "next" occurrence.
+        if (dueEnd != null && dueEnd.isBefore(today)) return null
+
+        val next: java.time.LocalDate = when (task.frequency) {
+            com.taskflow.app.data.model.FrequencyType.DAILY -> today.plusDays(1)
+            com.taskflow.app.data.model.FrequencyType.WEEKLY -> {
+                // Find the next configured weekday, or default to same day next week.
+                val weekdays = (0 until 7)
+                    .filter { (task.weeklyWeekdays and (1 shl it)) != 0 }
+                    .map { it + 1 }
+                    .toSet()
+                if (weekdays.isEmpty()) today.plusWeeks(1)
+                else {
+                    var cursor = today.plusDays(1)
+                    while (cursor.dayOfWeek.value !in weekdays) cursor = cursor.plusDays(1)
+                    cursor
+                }
+            }
+            com.taskflow.app.data.model.FrequencyType.MONTHLY -> {
+                val days = (1..31)
+                    .filter { (task.monthlyDays and (1 shl (it - 1))) != 0 }
+                    .toSet()
+                val targetDay = if (days.isEmpty()) today.dayOfMonth else days.minOrNull()!!
+                val ym = java.time.YearMonth.from(today).plusMonths(1)
+                if (targetDay in 1..ym.lengthOfMonth()) ym.atDay(targetDay) else ym.atEndOfMonth()
+            }
+            else -> today.plusDays(1) // CUSTOM / fallback
+        }
+        // Don't advance past the overall due end.
+        val clamped = if (dueEnd != null && next.isAfter(dueEnd)) dueEnd else next
+        return clamped.atStartOfDay(java.time.ZoneId.systemDefault())
+            .toInstant().toEpochMilli()
     }
 
     /**
