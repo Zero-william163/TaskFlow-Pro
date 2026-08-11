@@ -12,11 +12,11 @@ import kotlinx.coroutines.launch
 /**
  * 通知操作接收器（关闭/稍后提醒）
  *
- * 对应用户模板中的 AlarmActionReceiver：
- *   - ACTION_STOP_ALARM    → 关闭闹钟（对应用户模板的"关闭"操作）
- *   - ACTION_SNOOZE_ALARM  → 稍后提醒（对应用户模板的"稍后提醒"操作）
+ * v2.8.0: 支持 aggregated multi-task alarms。
+ *   - ACTION_STOP_ALARM    → 标记所有任务完成 + 停止闹钟
+ *   - ACTION_SNOOZE_ALARM  → 稍后提醒（5分钟后）
  *
- * 所有操作转发到 AlarmService 的静态入口，保证前台服务/媒体/震动的生命周期统一管理。
+ * 兼容旧版单任务 EXTRA_TASK_ID 和新版多任务 EXTRA_TASK_IDS。
  */
 class AlarmActionReceiver : BroadcastReceiver() {
 
@@ -24,31 +24,42 @@ class AlarmActionReceiver : BroadcastReceiver() {
         const val ACTION_STOP_ALARM = "com.taskflow.app.action.STOP_ALARM"
         const val ACTION_SNOOZE_ALARM = "com.taskflow.app.action.SNOOZE_ALARM"
         const val EXTRA_TASK_ID = "extra_task_id"
+        const val EXTRA_TASK_IDS = "extra_task_ids"
         private const val TAG = "AlarmActionReceiver"
     }
 
     override fun onReceive(context: Context, intent: Intent) {
         val action = intent.action ?: return
-        val taskId = intent.getLongExtra(EXTRA_TASK_ID, -1L)
-        if (taskId == -1L) {
-            Log.w(TAG, "onReceive: invalid taskId, action=$action")
+
+        // Resolve task IDs: prefer the array (v2.8.0), fall back to single id.
+        val taskIds: LongArray = if (intent.hasExtra(EXTRA_TASK_IDS)) {
+            intent.getLongArrayExtra(EXTRA_TASK_IDS) ?: longArrayOf()
+        } else {
+            val single = intent.getLongExtra(EXTRA_TASK_ID, -1L)
+            if (single == -1L) longArrayOf() else longArrayOf(single)
+        }
+        if (taskIds.isEmpty()) {
+            Log.w(TAG, "onReceive: no taskIds, action=$action")
             return
         }
+
         val pending = goAsync()
         CoroutineScope(Dispatchers.Default).launch {
             try {
                 when (action) {
                     ACTION_STOP_ALARM -> {
-                        Log.d(TAG, "ACTION_STOP_ALARM taskId=$taskId")
-                        // 1. 标记任务完成
-                        AlarmService.markTaskCompleted(context, taskId)
-                        // 2. 停止闹钟（声音/震动/前台通知）
+                        Log.d(TAG, "ACTION_STOP_ALARM taskIds=${taskIds.toList()}")
+                        // 1. Mark ALL tasks in the batch as completed
+                        AlarmService.markAllTasksCompleted(context, taskIds)
+                        // 2. Stop the alarm (sound/vibration/foreground notification)
                         AlarmService.stopAlarm(context)
                     }
                     ACTION_SNOOZE_ALARM -> {
-                        Log.d(TAG, "ACTION_SNOOZE_ALARM taskId=$taskId")
-                        // 统一入口：稍后提醒 5 分钟
-                        AlarmService.snoozeAlarm(context, taskId)
+                        Log.d(TAG, "ACTION_SNOOZE_ALARM taskIds=${taskIds.toList()}")
+                        // Snooze the primary task (first in the batch). The
+                        // AlarmScheduler handles re-registration for the others
+                        // via rescheduleDailyAfterFire.
+                        AlarmService.snoozeAlarm(context, taskIds.first())
                     }
                 }
             } finally {

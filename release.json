@@ -1,25 +1,25 @@
 {
-  "version": "2.7.0",
-  "code": 45,
-  "versionTag": "v2.7.0",
-  "log": "## v2.7.0 更新内容\n\n### 日历页面修复\n- 日历下方任务卡片改为「查看 + 打卡」模式: 点击卡片不再打开编辑页, 仅保留勾选框打卡功能\n- 修复日历网格中已完成历史任务日期仍显示打点(蓝底+白点)的 Bug: 打点过滤现在排除 isCompleted=true 的归档任务\n- 今日(Today)判定强绑定 ZoneId.systemDefault(), 修复时区漂移导致过去日期被高亮的问题\n\n### 桌面小组件模式切换重构\n- 顶部胶囊 Badge 兼作「今日/全部」切换开关: 显示「今日 · N」或「全部 · N」, 点击切换模式\n- 当前模式用高亮背景色标注(今日=浅蓝, 全部=浅紫)\n- 大尺寸 Widget(>=200dp) 展开标准「[ 今日 | 全部 ]」双选项卡, 小尺寸仅显示 Mini 胶囊\n- 新增 ACTION_SET_MODE 广播, 支持 Tab 直接设定目标模式\n\n### 已完成 Tab 交互升级\n- 已完成 Tab 点击卡片改为弹出「删除任务」确认 Dialog(不再打开编辑页)\n- 已完成 Tab 新增「清空全部已完成」按钮(🗑️ 图标), 批量删除所有 isCompleted=1 的任务\n- 新增 TaskDao.deleteAllCompleted / TaskDao.getCompleted / TaskRepository.deleteAllCompletedTasks 接口\n\n### 逾期任务视觉样式\n- 逾期任务(dueDate < 今天 且未完成)卡片背景变灰, 标题字色降为次要灰色\n- 时间文本旁新增醒目红色「已逾期」胶囊 Badge(#FF4D4F 红字浅红底)\n- 优先级色条同步变灰, 降低视觉权重\n\n### 构建信息\n- versionCode: 45\n- versionName: 2.7.0\n",
-  "apk": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.7.0/taskflow-v2.7.0.apk",
-  "sha256": "bda7124fd465580ae800857f9c6d7bccfd01de9dd65d694893edef04686a64a0",
-  "size": 46505319,
+  "version": "2.8.0",
+  "code": 46,
+  "versionTag": "v2.8.0",
+  "log": "## v2.8.0 更新内容\n\n### 闹钟系统三大核心重构\n\n#### 一、已完成/提前打卡任务不响铃 (Alarm Suppression)\n- **方案 A（主动取消）**：完成任务时同步调用 AlarmManager.cancel 取消今日闹钟\n  - 非重复任务完成 → 取消闹钟；取消完成 → 重新注册闹钟\n  - 周期任务今日打卡 → 取消今日闹钟 + 自动注册下一个设定日期的闹钟\n  - 周期任务取消打卡 → 恢复今日闹钟\n- **方案 B（Receiver 校验拦截）**：AlarmReceiver 响铃前优先查询数据库\n  - isCompleted == true → 丢弃，不响铃\n  - 周期任务 lastCompletedDate == 今天 → 丢弃，不响铃\n- **Service 层安全网**：AlarmService.handleStartAlarm 再次过滤已完成任务\n\n#### 二、同一时间多个闹钟合并提醒 (Alarm Aggregation)\n- AlarmReceiver 触发时查询所有同一时刻(同 hour:minute)设定的未完成任务\n- 通过 EXTRA_TASK_IDS 数组传递给 AlarmService → AlarmActivity\n- 全屏 UI 同时列出所有任务名称（1. 开会 2. 提交日报）\n- 新增【全部完成】按钮，一键处理该时间段所有任务\n- AlarmActionReceiver 兼容单任务/多任务 EXTRA_TASK_IDS\n\n#### 三、跨应用/后台弹出全屏闹钟 (Full-Screen Alarm Over Apps)\n- Manifest: USE_FULL_SCREEN_INTENT + SCHEDULE_EXACT_ALARM 权限已就绪\n- AlarmActivity: showWhenLocked + turnScreenOn + singleTop + excludeFromRecents\n- onCreate: setShowWhenLocked/setTurnScreenOn + KeyguardManager.requestDismissKeyguard\n- AlarmService: NotificationCompat setFullScreenIntent(contentPi, true) + PRIORITY_MAX + CATEGORY_ALARM\n- 通知 Body 使用 BigTextStyle 展示合并后的任务名列表\n\n### 已完成 Tab「清空已完成」精修\n- 对话框标题改为「清空已完成任务」\n- 对话框内容改为「确定要彻底删除所有已完成的任务记录吗？此操作无法撤销。」\n- 确认按钮改为「彻底删除」（红色破坏性样式）\n- 删除成功后弹出 Toast「已清空所有已完成任务」\n- 新增 TaskDao.clearAllCompletedTasks() 别名方法\n\n### 构建信息\n- versionCode: 46\n- versionName: 2.8.0\n",
+  "apk": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.8.0/taskflow-v2.8.0.apk",
+  "sha256": "dcc1928525bb0526fdddf9c7c0ca6d8a75d94704c2a9bd2386bcce779ae464bb",
+  "size": 46521707,
   "downloadUrls": [
     {
       "name": "GH Proxy",
-      "url": "https://gh-proxy.com/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.7.0/taskflow-v2.7.0.apk",
+      "url": "https://gh-proxy.com/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.8.0/taskflow-v2.8.0.apk",
       "region": "domestic"
     },
     {
       "name": "GH Fast",
-      "url": "https://ghfast.top/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.7.0/taskflow-v2.7.0.apk",
+      "url": "https://ghfast.top/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.8.0/taskflow-v2.8.0.apk",
       "region": "cdn"
     },
     {
       "name": "GitHub",
-      "url": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.7.0/taskflow-v2.7.0.apk",
+      "url": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.8.0/taskflow-v2.8.0.apk",
       "region": "international"
     }
   ]

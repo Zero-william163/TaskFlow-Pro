@@ -114,6 +114,24 @@ class TaskRepository private constructor(
     suspend fun getDueReminders(before: LocalDateTime): List<Task> =
         taskDao.getDueReminders(before).map { it.toDomain() }
 
+    /**
+     * Returns all active (not completed, not checked-off-today) tasks whose
+     * reminder time matches the reference task's hour:minute. Used by the
+     * alarm aggregation logic so that multiple tasks set for the same time
+     * fire as a single combined full-screen alarm instead of N separate ones.
+     */
+    suspend fun getTasksAtSameReminderTime(referenceTask: Task): List<Task> {
+        val reminder = referenceTask.reminderTime ?: return listOf(referenceTask)
+        val todayStr = LocalDate.now().toString()
+        return getPending().filter { t ->
+            t.reminderTime != null &&
+                t.reminderTime.hour == reminder.hour &&
+                t.reminderTime.minute == reminder.minute &&
+                !t.isCompleted &&
+                t.lastCompletedDate != todayStr
+        }
+    }
+
     suspend fun addTask(task: Task): Long {
         val id = taskDao.insert(task.copy(updatedAt = LocalDateTime.now()).toEntity())
         regenerateInstances(id, task.copy(id = id))
@@ -172,6 +190,30 @@ class TaskRepository private constructor(
             android.util.Log.d("TaskRepository",
                 "Recurring check-off id=${task.id}, freq=${task.frequency}, " +
                 "lastCompletedDate=$todayStr, nextDueDate=$nextDue")
+
+            // ===== Alarm suppression (Method A): cancel today's pending alarm =====
+            // so it doesn't fire for a task the user already checked off.
+            com.taskflow.app.util.AlarmScheduler.cancelTaskReminder(context, task.id)
+
+            // ===== Recurring auto-restore: reschedule the NEXT occurrence's alarm =====
+            // The task stays alive — register the alarm for the next due date so
+            // the user gets reminded again when the recurrence rolls around.
+            if (nextDue != null && task.reminderTime != null) {
+                val nextReminder = java.time.Instant.ofEpochMilli(nextDue)
+                    .atZone(java.time.ZoneId.systemDefault())
+                    .toLocalDateTime()
+                    .withHour(task.reminderTime!!.hour)
+                    .withMinute(task.reminderTime!!.minute)
+                    .withSecond(0).withNano(0)
+                val refreshedTask = task.copy(
+                    lastCompletedDate = todayStr,
+                    nextDueDate = nextDue,
+                    reminderTime = nextReminder
+                )
+                com.taskflow.app.util.AlarmScheduler.scheduleTaskReminder(context, refreshedTask)
+                android.util.Log.d("TaskRepository",
+                    "Recurring alarm rescheduled id=${task.id} → nextReminder=$nextReminder")
+            }
         } else if (!completed && task.isRecurring && task.isCompletedToday) {
             // Un-check a recurring task that was checked off today: clear the
             // lastCompletedDate so it re-appears in today's list.
@@ -183,6 +225,11 @@ class TaskRepository private constructor(
             )
             android.util.Log.d("TaskRepository",
                 "Recurring un-check id=${task.id}, cleared lastCompletedDate")
+
+            // Restore today's alarm since the user un-checked the task.
+            if (task.reminderTime != null) {
+                com.taskflow.app.util.AlarmScheduler.scheduleTaskReminder(context, task)
+            }
         } else {
             // ===== Non-recurring: existing behavior =====
             taskDao.setCompleted(
@@ -193,6 +240,14 @@ class TaskRepository private constructor(
             )
             android.util.Log.d("TaskRepository",
                 "Task setCompleted id=${task.id}, isCompleted=$completed")
+
+            // ===== Alarm suppression (Method A): cancel the alarm on completion, =====
+            // reschedule on un-completion.
+            if (completed) {
+                com.taskflow.app.util.AlarmScheduler.cancelTaskReminder(context, task.id)
+            } else if (task.reminderTime != null) {
+                com.taskflow.app.util.AlarmScheduler.scheduleTaskReminder(context, task)
+            }
         }
         notifyTasksChanged()
     }

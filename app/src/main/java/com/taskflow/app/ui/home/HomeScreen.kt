@@ -430,14 +430,18 @@ fun HomeScreen(
     if (showClearAllCompletedDialog) {
         AlertDialog(
             onDismissRequest = { showClearAllCompletedDialog = false },
-            title = { Text("清空全部已完成任务") },
-            text = { Text("是否清空所有已完成任务？此操作不可恢复。") },
+            title = { Text("清空已完成任务") },
+            text = { Text("确定要彻底删除所有已完成的任务记录吗？此操作无法撤销。") },
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.deleteAllCompletedTasks()
                     showClearAllCompletedDialog = false
+                    android.widget.Toast.makeText(
+                        context, "已清空所有已完成任务",
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
                 }) {
-                    Text("清空", color = MaterialTheme.colorScheme.error)
+                    Text("彻底删除", color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {

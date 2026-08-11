@@ -17,12 +17,19 @@ import kotlinx.coroutines.withContext
 /**
  * 闹钟触发接收器
  *
- * 完全对齐用户提供的模板结构：
- *   - onReceive 中先判断 intent.action == ACTION_DAILY_REMINDER
- *   - hasExtras == true  →  稍后提醒场景：直接使用 Intent extras（eventContent / daysRemaining / targetReached）
- *   - hasExtras == false →  每日闹钟场景：从 Repository 读取任务数据
- *   - 最后统一调用 startAlarmService 启动前台服务
- *   - 每日场景末尾重新注册明天的闹钟
+ * 核心职责（v2.8.0 重构）：
+ *   1. **Alarm Suppression (Method B — Receiver 校验拦截)**
+ *      响铃前优先查询数据库：若任务 `isCompleted == true` 或周期任务
+ *      `lastCompletedDate == 今天`，直接 return 丢弃，绝不触发响铃与全屏 UI。
+ *
+ *   2. **Alarm Aggregation（同时间多任务合并提醒）**
+ *      不针对每个任务单独弹出 Activity。根据触发任务的 reminderTime
+ *      查询所有同一时刻设定的未完成任务，将任务 ID/标题数组传递给
+ *      AlarmService → AlarmActivity，一次性展示合并后的任务列表。
+ *
+ *   3. **跨应用全屏提醒**
+ *      通过 AlarmService 构建高优先级 Notification + setFullScreenIntent，
+ *      在第三方 App 之上/锁屏之上拉起 AlarmActivity。
  */
 class AlarmReceiver : BroadcastReceiver() {
 
@@ -57,7 +64,14 @@ class AlarmReceiver : BroadcastReceiver() {
                     val eventContent = intent.getStringExtra(EXTRA_EVENT_CONTENT) ?: "任务"
                     val daysRemaining = intent.getLongExtra(EXTRA_DAYS_REMAINING, 0)
                     val targetReached = intent.getBooleanExtra(EXTRA_TARGET_REACHED, false)
-                    startAlarmService(context, taskId, eventContent, daysRemaining, targetReached)
+                    // Snooze alarms still need suppression check.
+                    val repository = TaskRepository.get(context)
+                    val task = withContext(Dispatchers.IO) { repository.getTask(taskId) }
+                    if (task != null && shouldSuppressAlarm(task)) {
+                        Log.d(TAG, "Snooze alarm for task $taskId suppressed (already completed)")
+                        return@launch
+                    }
+                    startAlarmService(context, longArrayOf(taskId), arrayOf(eventContent), daysRemaining, targetReached)
                 } else {
                     // ==================== 每日闹钟：从 Repository 读取数据 ====================
                     val repository = TaskRepository.get(context)
@@ -68,20 +82,35 @@ class AlarmReceiver : BroadcastReceiver() {
                         AlarmScheduler.cancelTaskReminder(context, taskId)
                         return@launch
                     }
-                    if (task.isCompleted) {
-                        Log.d(TAG, "task $taskId already completed, cancel alarm")
+
+                    // ===== Alarm Suppression (Method B): Receiver 校验拦截 =====
+                    // If the task is permanently completed OR a recurring task
+                    // already checked off today, drop the alarm silently.
+                    if (shouldSuppressAlarm(task)) {
+                        Log.d(TAG, "Alarm suppressed for task $taskId (isCompleted=${task.isCompleted}, " +
+                            "isCompletedToday=${task.isCompletedToday})")
                         AlarmScheduler.cancelTaskReminder(context, taskId)
                         return@launch
                     }
 
+                    // ===== Alarm Aggregation: 合并同一时间的所有未完成任务 =====
+                    val aggregatedTasks = withContext(Dispatchers.IO) {
+                        repository.getTasksAtSameReminderTime(task)
+                    }
+                    Log.d(TAG, "Aggregation: triggered by task $taskId, found ${aggregatedTasks.size} tasks at same time")
+
+                    val taskIds = aggregatedTasks.map { it.id }.toLongArray()
+                    val taskNames = aggregatedTasks.map { it.title.ifEmpty { "任务" } }.toTypedArray()
+
                     val daysRemaining = daysRemainingForTask(task)
                     val targetReached = isTargetReachedForTask(task)
-                    val eventContent = task.title.ifEmpty { "任务" }
 
-                    startAlarmService(context, taskId, eventContent, daysRemaining, targetReached)
+                    startAlarmService(context, taskIds, taskNames, daysRemaining, targetReached)
 
-                    // 重新注册明天的闹钟（仅 DAILY 模式）
-                    AlarmScheduler.rescheduleDailyAfterFire(context, task)
+                    // 重新注册明天的闹钟（仅 DAILY 模式）— 对每个聚合任务执行
+                    aggregatedTasks.forEach { aggregatedTask ->
+                        AlarmScheduler.rescheduleDailyAfterFire(context, aggregatedTask)
+                    }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error handling alarm", e)
@@ -91,27 +120,37 @@ class AlarmReceiver : BroadcastReceiver() {
         }
     }
 
+    /**
+     * Alarm Suppression 判定：永久完成 或 周期任务今日已打卡 → 抑制响铃。
+     */
+    private fun shouldSuppressAlarm(task: Task): Boolean {
+        if (task.isCompleted) return true
+        // Recurring task checked off today: lastCompletedDate == today
+        if (task.isRecurring && task.isCompletedToday) return true
+        return false
+    }
+
     // ==================== 统一启动 AlarmService 前台服务 ====================
 
     private fun startAlarmService(
         context: Context,
-        taskId: Long,
-        eventContent: String,
+        taskIds: LongArray,
+        taskNames: Array<String>,
         daysRemaining: Long,
         targetReached: Boolean
     ) {
         val alarmIntent = Intent(context, AlarmService::class.java).apply {
             action = AlarmService.ACTION_START_ALARM
-            putExtra(AlarmService.EXTRA_TASK_ID, taskId)
-            putExtra(AlarmService.EXTRA_EVENT_CONTENT, eventContent)
+            putExtra(AlarmService.EXTRA_TASK_IDS, taskIds)
+            putExtra(AlarmService.EXTRA_TASK_NAMES, taskNames)
             putExtra(AlarmService.EXTRA_DAYS_REMAINING, daysRemaining)
             putExtra(AlarmService.EXTRA_TARGET_REACHED, targetReached)
         }
         ContextCompat.startForegroundService(context, alarmIntent)
-        Log.d(TAG, "startAlarmService: taskId=$taskId, event=$eventContent, days=$daysRemaining")
+        Log.d(TAG, "startAlarmService: taskIds=${taskIds.toList()}, names=${taskNames.toList()}, days=$daysRemaining")
     }
 
-    // ==================== TaskFlow 业务适配：将 Task 字段映射为模板的 daysRemaining / targetReached ====================
+    // ==================== TaskFlow 业务适配 ====================
 
     private fun daysRemainingForTask(task: Task): Long {
         val due = task.dueDate ?: return 0L

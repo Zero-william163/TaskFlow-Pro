@@ -53,12 +53,13 @@
             </intent-filter>
         </activity>
 
-        <!-- 全屏闹钟界面（ui/alarm 目录，对应用户模板结构） -->
+        <!-- 全屏闹钟界面（ui/alarm 目录，对应用户模板结构）
+             v2.8.0: showWhenLocked + turnScreenOn + singleTop 支持跨应用/锁屏全屏弹出 -->
         <activity
             android:name=".ui.alarm.AlarmActivity"
             android:exported="false"
             android:excludeFromRecents="true"
-            android:launchMode="singleInstance"
+            android:launchMode="singleTop"
             android:showWhenLocked="true"
             android:turnScreenOn="true"
             android:theme="@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen" />

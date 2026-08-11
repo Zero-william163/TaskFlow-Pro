@@ -82,35 +82,53 @@ class AlarmService : Service() {
     // ==================== 启动闹钟 ====================
 
     private fun handleStartAlarm(intent: Intent) {
-        val taskId = intent.getLongExtra(EXTRA_TASK_ID, -1L)
-        if (taskId == -1L) {
-            Log.w(TAG, "handleStartAlarm: invalid taskId, stopSelf")
+        // v2.8.0: support aggregated multi-task alarms via EXTRA_TASK_IDS array.
+        // Fall back to single-task EXTRA_TASK_ID for backward compatibility.
+        val taskIds: LongArray = if (intent.hasExtra(EXTRA_TASK_IDS)) {
+            intent.getLongArrayExtra(EXTRA_TASK_IDS) ?: longArrayOf()
+        } else {
+            val single = intent.getLongExtra(EXTRA_TASK_ID, -1L)
+            if (single == -1L) longArrayOf() else longArrayOf(single)
+        }
+        if (taskIds.isEmpty()) {
+            Log.w(TAG, "handleStartAlarm: no taskIds, stopSelf")
             stopSelf()
             return
         }
-        val eventContent = intent.getStringExtra(EXTRA_EVENT_CONTENT) ?: "任务提醒"
+        val taskNames: Array<String> = if (intent.hasExtra(EXTRA_TASK_NAMES)) {
+            intent.getStringArrayExtra(EXTRA_TASK_NAMES) ?: arrayOf("任务提醒")
+        } else {
+            arrayOf(intent.getStringExtra(EXTRA_EVENT_CONTENT) ?: "任务提醒")
+        }
+        val eventContent = taskNames.joinToString("、")
         scope.launch {
             val repo = TaskRepository.get(this@AlarmService)
-            val task = withContext(Dispatchers.IO) { repo.getTask(taskId) }
-            if (task != null && task.isCompleted) {
-                Log.d(TAG, "task $taskId already completed, stopSelf")
+            // Filter out completed tasks (suppression safety net at service level).
+            val activeTasks = withContext(Dispatchers.IO) {
+                taskIds.toList().map { id -> repo.getTask(id) }.filterNotNull()
+                    .filter { !it.isCompleted && !(it.isRecurring && it.isCompletedToday) }
+            }
+            if (activeTasks.isEmpty()) {
+                Log.d(TAG, "All tasks already completed, stopSelf")
                 withContext(Dispatchers.Main) { stopSelf() }
                 return@launch
             }
-            val title = task?.title?.takeIf { it.isNotBlank() } ?: eventContent
-            val customSound = task?.alarmSoundUri?.takeIf { it.isNotBlank() }?.let { Uri.parse(it) }
+            val activeIds = activeTasks.map { it.id }.toLongArray()
+            val activeNames = activeTasks.map { it.title.ifEmpty { "任务" } }.toTypedArray()
+            val displayTitle = if (activeIds.size == 1) activeNames[0] else "${activeIds.size} 个任务提醒"
+            val customSound = activeTasks.firstOrNull()?.alarmSoundUri?.takeIf { it.isNotBlank() }?.let { Uri.parse(it) }
             withContext(Dispatchers.Main) {
-                startForegroundAlarm(taskId, title)
+                startForegroundAlarm(activeIds, activeNames, displayTitle, eventContent)
                 try {
                     val alarmIntent = Intent(this@AlarmService, AlarmActivity::class.java).apply {
                         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or
                                 Intent.FLAG_ACTIVITY_NO_USER_ACTION or
                                 Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                        putExtra(AlarmActivity.EXTRA_TASK_ID, taskId)
-                        putExtra(AlarmActivity.EXTRA_EVENT_CONTENT, eventContent)
+                        putExtra(AlarmActivity.EXTRA_TASK_IDS, activeIds)
+                        putExtra(AlarmActivity.EXTRA_TASK_NAMES, activeNames)
                     }
                     startActivity(alarmIntent)
-                    Log.d(TAG, "AlarmActivity launched for taskId=$taskId")
+                    Log.d(TAG, "AlarmActivity launched for taskIds=${activeIds.toList()}")
                 } catch (e: Throwable) {
                     Log.e(TAG, "start AlarmActivity failed", e)
                 }
@@ -120,41 +138,56 @@ class AlarmService : Service() {
         }
     }
 
-    private fun startForegroundAlarm(taskId: Long, taskTitle: String) {
+    private fun startForegroundAlarm(
+        taskIds: LongArray,
+        taskNames: Array<String>,
+        displayTitle: String,
+        eventContent: String
+    ) {
         val contentIntent = Intent(this, AlarmActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            putExtra(AlarmActivity.EXTRA_TASK_ID, taskId)
+            putExtra(AlarmActivity.EXTRA_TASK_IDS, taskIds)
+            putExtra(AlarmActivity.EXTRA_TASK_NAMES, taskNames)
         }
         val contentPi = PendingIntent.getActivity(
-            this, taskId.toInt(), contentIntent,
+            this, taskIds.contentHashCode(), contentIntent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        // 通知按钮 1 —— 关闭闹钟（标记为已完成）
+        // 通知按钮 1 —— 全部完成（标记所有任务为已完成）
         val stopIntent = Intent(this, AlarmActionReceiver::class.java).apply {
             action = AlarmActionReceiver.ACTION_STOP_ALARM
-            putExtra(AlarmActionReceiver.EXTRA_TASK_ID, taskId)
+            putExtra(AlarmActionReceiver.EXTRA_TASK_IDS, taskIds)
         }
         val stopPi = PendingIntent.getBroadcast(
-            this, (taskId + REQ_STOP_OFFSET).toInt(), stopIntent,
+            this, (taskIds.contentHashCode() + REQ_STOP_OFFSET).toInt(), stopIntent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
         // 通知按钮 2 —— 稍后提醒 5 分钟
         val snoozeIntent = Intent(this, AlarmActionReceiver::class.java).apply {
             action = AlarmActionReceiver.ACTION_SNOOZE_ALARM
-            putExtra(AlarmActionReceiver.EXTRA_TASK_ID, taskId)
+            putExtra(AlarmActionReceiver.EXTRA_TASK_IDS, taskIds)
         }
         val snoozePi = PendingIntent.getBroadcast(
-            this, (taskId + REQ_SNOOZE_OFFSET).toInt(), snoozeIntent,
+            this, (taskIds.contentHashCode() + REQ_SNOOZE_OFFSET).toInt(), snoozeIntent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
+
+        // Aggregated notification body: list all task names so the user sees
+        // every task at a glance even before opening the full-screen UI.
+        val bodyText = if (taskNames.size <= 1) {
+            getString(R.string.notification_fullscreen_tap)
+        } else {
+            taskNames.indices.joinToString("\n") { "${it + 1}. ${taskNames[it]}" }
+        }
 
         val notification: Notification = NotificationCompat.Builder(
             this, NotificationHelper.CHANNEL_REMINDER
         )
-            .setContentTitle(taskTitle.ifBlank { getString(R.string.app_name) })
-            .setContentText(getString(R.string.notification_fullscreen_tap))
+            .setContentTitle(displayTitle.ifBlank { getString(R.string.app_name) })
+            .setContentText(bodyText)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(bodyText))
             .setSmallIcon(R.drawable.ic_alarm_notification)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setPriority(NotificationCompat.PRIORITY_MAX)
@@ -174,7 +207,7 @@ class AlarmService : Service() {
             )
             .build()
 
-        startForeground(NOTIF_FOREGROUND_ID + (taskId % 10000).toInt(), notification)
+        startForeground(NOTIF_FOREGROUND_ID + (taskIds.first() % 10000).toInt(), notification)
     }
 
     // ==================== 停止闹钟 / 稍后提醒 ====================
@@ -339,6 +372,8 @@ class AlarmService : Service() {
         private const val SNOOZE_MINUTES = 5L
 
         const val EXTRA_TASK_ID = "extra_task_id"
+        const val EXTRA_TASK_IDS = "extra_task_ids"
+        const val EXTRA_TASK_NAMES = "extra_task_names"
         const val EXTRA_EVENT_CONTENT = "event_content"
         const val EXTRA_DAYS_REMAINING = "days_remaining"
         const val EXTRA_TARGET_REACHED = "target_reached"
@@ -393,11 +428,33 @@ class AlarmService : Service() {
             val repo = TaskRepository.get(context)
             val task = withContext(Dispatchers.IO) { repo.getTask(taskId) } ?: return
             withContext(Dispatchers.IO) { repo.setCompleted(task, true) }
+            // Alarm cancellation is now handled inside TaskRepository.setCompleted
+            // (Method A), but we keep this as a safety net.
             AlarmScheduler.cancelTaskReminder(context, taskId)
             WidgetHelper.refresh(context)
             runCatching {
                 (context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
                     .cancel(taskId.toInt())
+            }
+        }
+
+        /**
+         * Marks all tasks in the aggregated alarm batch as completed.
+         * Used by the "全部完成" button on the multi-task full-screen alarm UI.
+         * Alarm cancellation for each task is handled inside setCompleted (Method A).
+         */
+        suspend fun markAllTasksCompleted(context: Context, taskIds: LongArray) {
+            val repo = TaskRepository.get(context)
+            withContext(Dispatchers.IO) {
+                taskIds.forEach { id ->
+                    val task = repo.getTask(id) ?: return@forEach
+                    repo.setCompleted(task, true)
+                }
+            }
+            WidgetHelper.refresh(context)
+            runCatching {
+                val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                taskIds.forEach { nm.cancel(it.toInt()) }
             }
         }
     }

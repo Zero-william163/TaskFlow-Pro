@@ -34,6 +34,10 @@ interface TaskDao {
     @Query("DELETE FROM tasks WHERE isCompleted = 1")
     suspend fun deleteAllCompleted(): Int
 
+    /** Alias matching the spec method name `clearAllCompletedTasks()`. */
+    @Query("DELETE FROM tasks WHERE isCompleted = 1")
+    suspend fun clearAllCompletedTasks()
+
     @Query("SELECT * FROM tasks WHERE id = :id")
     fun observeById(id: Long): Flow<TaskEntity?>
 

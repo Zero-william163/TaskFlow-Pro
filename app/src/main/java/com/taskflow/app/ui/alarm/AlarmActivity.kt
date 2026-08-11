@@ -51,7 +51,8 @@ class AlarmActivity : Activity() {
     private var mediaPlayer: MediaPlayer? = null
     private var vibrator: Vibrator? = null
     private var wakeLock: PowerManager.WakeLock? = null
-    private var taskId: Long = -1L
+    private var taskIds: LongArray = longArrayOf()
+    private var taskNames: Array<String> = arrayOf()
     private val handler = Handler(Looper.getMainLooper())
     private var audioManager: AudioManager? = null
     private var previousVolume: Int = -1
@@ -62,8 +63,22 @@ class AlarmActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        taskId = intent.getLongExtra(EXTRA_TASK_ID, -1L)
-        if (taskId == -1L) { finish(); return }
+        // v2.8.0: support aggregated multi-task alarms.
+        // Read EXTRA_TASK_IDS array; fall back to single EXTRA_TASK_ID for
+        // backward compatibility with snooze / legacy callers.
+        taskIds = if (intent.hasExtra(EXTRA_TASK_IDS)) {
+            intent.getLongArrayExtra(EXTRA_TASK_IDS) ?: longArrayOf()
+        } else {
+            val single = intent.getLongExtra(EXTRA_TASK_ID, -1L)
+            if (single == -1L) longArrayOf() else longArrayOf(single)
+        }
+        if (taskIds.isEmpty()) { finish(); return }
+
+        taskNames = if (intent.hasExtra(EXTRA_TASK_NAMES)) {
+            intent.getStringArrayExtra(EXTRA_TASK_NAMES) ?: arrayOf("任务")
+        } else {
+            arrayOf(intent.getStringExtra(EXTRA_EVENT_CONTENT) ?: "任务")
+        }
 
         val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
         wakeLock = pm.newWakeLock(
@@ -76,6 +91,7 @@ class AlarmActivity : Activity() {
             acquire(10 * 60 * 1000L)
         }
 
+        // ===== Cross-app full-screen: show over lock screen + third-party apps =====
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
             setShowWhenLocked(true)
             setTurnScreenOn(true)
@@ -106,22 +122,24 @@ class AlarmActivity : Activity() {
         )
 
         CoroutineScope(Dispatchers.Main).launch {
-            val task = withContext(Dispatchers.IO) {
-                TaskRepository.get(this@AlarmActivity).getTask(taskId)
+            // Load task details from DB for richer descriptions.
+            val repo = TaskRepository.get(this@AlarmActivity)
+            val tasks = withContext(Dispatchers.IO) {
+                taskIds.toList().mapNotNull { repo.getTask(it) }
             }
-            val fallbackContent = intent.getStringExtra(EXTRA_EVENT_CONTENT) ?: "任务"
-            val title = task?.title?.takeIf { it.isNotBlank() } ?: fallbackContent
-            val description = task?.description ?: if (task?.dueDate != null) {
-                val days = java.time.LocalDate.now().until(task.dueDate.toLocalDate()).days
-                if (days >= 0) "还剩 $days 天" else "已过期 ${-days} 天"
-            } else "任务即将到期"
+            // Use DB titles if available, otherwise fall back to intent names.
+            val displayNames = if (tasks.isNotEmpty()) {
+                tasks.map { it.title.ifEmpty { "任务" } }
+            } else {
+                taskNames.toList()
+            }
 
-            buildAlarmUI(title, description)
+            buildAlarmUI(displayNames, tasks)
 
             AlarmService.stopAlarmMediaOnly(this@AlarmActivity)
 
             boostAlarmVolume()
-            startAlarmSound(task?.alarmSoundUri)
+            startAlarmSound(tasks.firstOrNull()?.alarmSoundUri)
             startVibration()
 
             handler.postDelayed(autoDismissRunnable, 10 * 60 * 1000L)
@@ -130,7 +148,12 @@ class AlarmActivity : Activity() {
 
     // ====================== 全屏 UI 构建 ======================
 
-    private fun buildAlarmUI(title: String, description: String) {
+    /**
+     * Builds the full-screen alarm UI. When multiple tasks are aggregated at
+     * the same reminder time, they are listed as "1. 开会 / 2. 提交日报".
+     * The "全部完成" button marks ALL tasks complete; "关闭闹钟" just dismisses.
+     */
+    private fun buildAlarmUI(displayNames: List<String>, tasks: List<com.taskflow.app.data.model.Task>) {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(0xFF0F0C29.toInt())
@@ -155,8 +178,10 @@ class AlarmActivity : Activity() {
             typeface = android.graphics.Typeface.DEFAULT_BOLD
         }
 
+        // ===== Aggregated task list =====
+        val isMulti = displayNames.size > 1
         val titleText = TextView(this).apply {
-            text = title.ifBlank { "任务提醒" }
+            text = if (isMulti) "${displayNames.size} 个任务提醒" else displayNames.firstOrNull()?.ifBlank { "任务提醒" } ?: "任务提醒"
             textSize = 30f
             setTextColor(0xFFFFFFFF.toInt())
             gravity = Gravity.CENTER
@@ -164,12 +189,51 @@ class AlarmActivity : Activity() {
             typeface = android.graphics.Typeface.DEFAULT_BOLD
         }
 
-        val descText = TextView(this).apply {
-            text = if (description.isBlank()) "任务即将到期" else description
-            textSize = 17f
-            setTextColor(0xFFBBBBCC.toInt())
-            gravity = Gravity.CENTER
+        // For multi-task: show numbered list of all task names.
+        // For single-task: show the task description or due-date info.
+        val descContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
             setPadding(0, 0, 0, 40)
+        }
+        if (isMulti) {
+            displayNames.forEachIndexed { index, name ->
+                val itemText = TextView(this).apply {
+                    text = "${index + 1}. $name"
+                    textSize = 18f
+                    setTextColor(0xFFDDDDDD.toInt())
+                    gravity = Gravity.CENTER
+                    setPadding(0, 6, 0, 6)
+                }
+                descContainer.addView(itemText)
+            }
+        } else {
+            val task = tasks.firstOrNull()
+            val description = task?.description ?: if (task?.dueDate != null) {
+                val days = java.time.LocalDate.now().until(task.dueDate.toLocalDate()).days
+                if (days >= 0) "还剩 $days 天" else "已过期 ${-days} 天"
+            } else "任务即将到期"
+            val descText = TextView(this).apply {
+                text = if (description.isBlank()) "任务即将到期" else description
+                textSize = 17f
+                setTextColor(0xFFBBBBCC.toInt())
+                gravity = Gravity.CENTER
+                setPadding(0, 0, 0, 0)
+            }
+            descContainer.addView(descText)
+        }
+
+        // ===== 全部完成 button (marks all tasks complete) =====
+        val completeAllBtn = Button(this).apply {
+            text = if (isMulti) "全部完成" else getString(R.string.widget_mark_complete_yes)
+            textSize = 18f
+            setTextColor(0xFFFFFFFF.toInt())
+            setBackgroundColor(0xFF4CAF50.toInt())
+            setOnClickListener { finishAlarm(snooze = false, completeAll = true) }
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                140
+            ).apply { bottomMargin = 14 }
         }
 
         val snoozeBtn = Button(this).apply {
@@ -184,6 +248,7 @@ class AlarmActivity : Activity() {
             ).apply { bottomMargin = 14 }
         }
 
+        // ===== 关闭闹钟 button (just dismiss, don't mark complete) =====
         val dismissBtn = Button(this).apply {
             text = getString(R.string.common_close)
             textSize = 18f
@@ -200,7 +265,8 @@ class AlarmActivity : Activity() {
             addView(iconText)
             addView(timeText)
             addView(titleText)
-            addView(descText)
+            addView(descContainer)
+            addView(completeAllBtn)
             addView(snoozeBtn)
             addView(dismissBtn)
         }
@@ -345,7 +411,12 @@ class AlarmActivity : Activity() {
 
     // ====================== 结束闹钟 ======================
 
-    private fun finishAlarm(snooze: Boolean) {
+    /**
+     * @param snooze if true, snooze the primary task for 5 minutes.
+     * @param completeAll if true, mark ALL tasks in the batch as completed
+     *                     before stopping the alarm (used by the "全部完成" button).
+     */
+    private fun finishAlarm(snooze: Boolean, completeAll: Boolean = false) {
         handler.removeCallbacks(autoDismissRunnable)
 
         mediaPlayer?.let {
@@ -373,12 +444,21 @@ class AlarmActivity : Activity() {
         wakeLock = null
 
         runCatching {
-            androidx.core.app.NotificationManagerCompat.from(this).cancel(taskId.toInt())
+            val nm = androidx.core.app.NotificationManagerCompat.from(this)
+            taskIds.forEach { nm.cancel(it.toInt()) }
         }
         cancelVibrate(this)
 
-        if (snooze) { AlarmService.snoozeAlarm(this, taskId) }
-        else { AlarmService.stopAlarm(this@AlarmActivity) }
+        if (completeAll && taskIds.isNotEmpty()) {
+            // Mark all tasks complete — AlarmService handles the suspend call.
+            CoroutineScope(Dispatchers.Default).launch {
+                AlarmService.markAllTasksCompleted(this@AlarmActivity, taskIds)
+            }
+        }
+        if (snooze && taskIds.isNotEmpty()) {
+            AlarmService.snoozeAlarm(this, taskIds.first())
+        }
+        AlarmService.stopAlarm(this@AlarmActivity)
         WidgetHelper.refresh(this)
 
         finish()
@@ -403,8 +483,11 @@ class AlarmActivity : Activity() {
     companion object {
         private const val TAG = "AlarmActivity"
         const val EXTRA_TASK_ID = "extra_task_id"
+        const val EXTRA_TASK_IDS = "extra_task_ids"
+        const val EXTRA_TASK_NAMES = "extra_task_names"
         const val EXTRA_EVENT_CONTENT = "event_content"
 
+        /** Single-task intent (backward compatible). */
         fun createIntent(context: Context, taskId: Long): Intent =
             Intent(context, AlarmActivity::class.java).apply {
                 addFlags(
@@ -414,6 +497,19 @@ class AlarmActivity : Activity() {
                     Intent.FLAG_ACTIVITY_NO_USER_ACTION
                 )
                 putExtra(EXTRA_TASK_ID, taskId)
+            }
+
+        /** Multi-task (aggregated) intent. */
+        fun createIntent(context: Context, taskIds: LongArray, taskNames: Array<String>): Intent =
+            Intent(context, AlarmActivity::class.java).apply {
+                addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK or
+                    Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                    Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS or
+                    Intent.FLAG_ACTIVITY_NO_USER_ACTION
+                )
+                putExtra(EXTRA_TASK_IDS, taskIds)
+                putExtra(EXTRA_TASK_NAMES, taskNames)
             }
     }
 }
