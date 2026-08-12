@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Intent
 import android.net.Uri
 import android.view.WindowManager
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -170,6 +171,15 @@ fun PomodoroScreen(
     val wallpaperSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var wallpaperCategory by rememberSaveable { mutableStateOf(WallpaperCategory.SCENERY) }
 
+    // ====== Exit confirmation dialog (spec: 退出拦截弹窗 — 提前完成) ======
+    var showExitDialog by rememberSaveable { mutableStateOf(false) }
+
+    // Intercept back press: if focus is still running (not completed), show the
+    // exit dialog instead of navigating back immediately.
+    BackHandler(enabled = !state.completed) {
+        showExitDialog = true
+    }
+
     // ====== Pick a motivational quote on entry (stable per session). ======
     val quote = remember {
         MOTIVATIONAL_QUOTES[Random.nextInt(MOTIVATIONAL_QUOTES.size)]
@@ -255,17 +265,13 @@ fun PomodoroScreen(
                         }
                     },
                     actions = {
-                        // 🖼️ 壁纸设置 (top-right entry — always reachable)
-                        IconButton(onClick = { showWallpaperSheet = true }) {
-                            Icon(
-                                Icons.Outlined.Image,
-                                contentDescription = "壁纸设置",
-                                tint = Color.White
-                            )
-                        }
+                        // 壁纸图标已移除 — 仅保留底部主控制栏中的 [🖼️ 壁纸] 胶囊按钮，避免重复。
                     },
                     navigationIcon = {
-                        IconButton(onClick = onBack) {
+                        IconButton(onClick = {
+                            // 退出拦截：未完成时弹窗确认
+                            if (state.completed) onBack() else { showExitDialog = true }
+                        }) {
                             Icon(
                                 Icons.AutoMirrored.Outlined.ArrowBack,
                                 contentDescription = "返回",
@@ -430,6 +436,46 @@ fun PomodoroScreen(
                 onClose = { showWallpaperSheet = false }
             )
         }
+    }
+
+    // ====== Exit confirmation dialog (spec: 退出拦截弹窗 — 提前完成) ======
+    if (showExitDialog) {
+        AlertDialog(
+            onDismissRequest = { showExitDialog = false },
+            title = { Text("结束专注", fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    "专注尚未结束，是否标记该任务为提前完成？",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showExitDialog = false
+                        viewModel.markTaskCompletedAndStop()
+                        onBack()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = GradientStart)
+                ) {
+                    Text("标记已完成并退出", color = Color.White)
+                }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = { showExitDialog = false }) {
+                        Text("继续专注")
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    TextButton(onClick = {
+                        showExitDialog = false
+                        onBack()
+                    }) {
+                        Text("仅退出")
+                    }
+                }
+            }
+        )
     }
 }
 

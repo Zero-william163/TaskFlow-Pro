@@ -4,7 +4,10 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -77,6 +80,24 @@ fun SettingsScreen(
     val viewModel: SettingsViewModel = viewModel(factory = AppViewModelFactory)
     val state by viewModel.state.collectAsState()
     val context = LocalContext.current
+
+    // ====== 自定义音效文件选择器 (spec: 允许选择本地短音效文件作为按键反馈音) ======
+    val soundFileLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            // Take persistable read permission so playback survives process death.
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri, Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            }
+            viewModel.setSoundCustomUri(uri.toString())
+            viewModel.setSoundType(SoundType.CUSTOM)
+            viewModel.previewSound(SoundType.CUSTOM)
+            Toast.makeText(context, "已设置自定义音效", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     // 只信任系统 API 的 Widget 状态（不依赖任何本地缓存）
     var widgetStatus by remember { mutableStateOf(WidgetStatus()) }
@@ -198,24 +219,49 @@ fun SettingsScreen(
                 if (state.soundEnabled) {
                     Spacer(Modifier.height(16.dp))
 
-                    // 音效类型 (FilterChip 选择 + 试听)
+                    // 音效类型 (FilterChip 选择 + 试听) — 横向可滑动，避免右侧被遮挡
                     Text(
                         text = stringResource(R.string.settings_sound_type),
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(Modifier.height(8.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.horizontalScroll(rememberScrollState())
+                    ) {
                         SoundType.entries.forEach { st ->
                             FilterChip(
                                 selected = state.soundType == st,
                                 onClick = {
-                                    viewModel.setSoundType(st)
-                                    // 点击即试听该音效
-                                    viewModel.previewSound(st)
+                                    if (st == SoundType.CUSTOM && state.soundCustomUri == null) {
+                                        // 未选择自定义音效文件 → 触发文件选择器
+                                        soundFileLauncher.launch(arrayOf("audio/*"))
+                                    } else {
+                                        viewModel.setSoundType(st)
+                                        // 点击即试听该音效
+                                        viewModel.previewSound(st)
+                                    }
                                 },
                                 label = { Text(st.label) }
                             )
+                        }
+                    }
+
+                    // 自定义音效文件选择入口 (仅当选中 CUSTOM 时显示)
+                    if (state.soundType == SoundType.CUSTOM) {
+                        Spacer(Modifier.height(8.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = if (state.soundCustomUri != null) "✓ 已选择自定义音效"
+                                else "未选择音效文件",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.weight(1f)
+                            )
+                            TextButton(onClick = { soundFileLauncher.launch(arrayOf("audio/*")) }) {
+                                Text(if (state.soundCustomUri != null) "重新选择" else "选择文件")
+                            }
                         }
                     }
 

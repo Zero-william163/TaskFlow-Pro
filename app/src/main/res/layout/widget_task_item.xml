@@ -19,14 +19,21 @@
     android:paddingHorizontal="12dp"
     android:paddingVertical="10dp">
 
-    <!-- Checkbox Circle -->
-    <ImageView
-        android:id="@+id/item_check"
-        android:layout_width="20dp"
-        android:layout_height="20dp"
-        android:contentDescription="@null"
-        android:src="@drawable/widget_checkbox_circle"
-        android:scaleType="fitCenter" />
+    <!-- Checkbox Circle — 48dp 触摸区域，内部 24dp 图标居中 -->
+    <FrameLayout
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:padding="12dp"
+        android:clipToPadding="false">
+        <ImageView
+            android:id="@+id/item_check"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_gravity="center"
+            android:contentDescription="@null"
+            android:src="@drawable/widget_checkbox_circle"
+            android:scaleType="fitCenter" />
+    </FrameLayout>
 
     <!-- Title + Meta Column -->
     <LinearLayout

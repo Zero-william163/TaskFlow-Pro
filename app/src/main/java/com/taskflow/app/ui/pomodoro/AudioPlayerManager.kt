@@ -2,12 +2,16 @@ package com.taskflow.app.ui.pomodoro
 
 import android.content.Context
 import android.media.AudioAttributes
+import android.media.AudioFormat
 import android.media.MediaPlayer
 import android.net.Uri
+import android.util.Log
 import android.widget.Toast
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import kotlin.math.PI
+import kotlin.math.sin
 
 /**
  * Tracks for the Pomodoro background-music BottomSheet. Grouped by the three
@@ -37,6 +41,20 @@ sealed interface AudioSource {
      * death. See [AudioPlayerManager.playImported].
      */
     data class LocalFile(val uri: String, val displayName: String) : AudioSource
+    /**
+     * Synthesize a relaxing ambient sound at runtime using [AudioTrack].
+     * Used as a guaranteed fallback when no local raw resource or online URL
+     * is available — the user always hears something.
+     */
+    data class Synthesized(val type: SynthType) : AudioSource
+}
+
+/** Types of ambient sounds that can be synthesized at runtime. */
+enum class SynthType(val label: String) {
+    RAIN("雨声"),
+    OCEAN("海浪"),
+    TICK("滴答钟"),
+    WHITE_NOISE("白噪音")
 }
 
 enum class AudioCategory(val label: String) {
@@ -47,7 +65,7 @@ enum class AudioCategory(val label: String) {
 
 object AudioLibrary {
     val tracks: List<AudioTrack> = listOf(
-        // 自然音
+        // 自然音 — 本地 raw 优先, 缺失时自动降级为 AudioTrack 合成
         AudioTrack("雨声", AudioCategory.NATURE, AudioSource.Local("rain_rain")),
         AudioTrack("滴答钟", AudioCategory.NATURE, AudioSource.Local("tick_clock")),
         AudioTrack("海浪", AudioCategory.NATURE, AudioSource.Local("ocean_waves")),
@@ -86,9 +104,13 @@ class AudioPlayerManager(private val context: Context) {
         private set
 
     private var player: MediaPlayer? = null
+    private var synthTrack: android.media.AudioTrack? = null
+    private var synthThread: Thread? = null
+    @Volatile private var synthRunning = false
 
     fun play(track: AudioTrack) {
         releasePlayer()
+        stopSynth()
         val mp = MediaPlayer()
         try {
             mp.setAudioAttributes(
@@ -102,12 +124,11 @@ class AudioPlayerManager(private val context: Context) {
                 is AudioSource.Local -> {
                     val resId = context.resources.getIdentifier(src.rawName, "raw", context.packageName)
                     if (resId == 0) {
-                        Toast.makeText(
-                            context,
-                            "暂无本地音源「${track.title}」，请将 ${src.rawName}.mp3 放入 res/raw",
-                            Toast.LENGTH_LONG
-                        ).show()
+                        // ====== 保底机制: 本地 raw 缺失 → 自动降级为 AudioTrack 合成 ======
+                        Log.w(TAG, "Local raw '${src.rawName}' not found → fallback to synthesized audio")
                         mp.release()
+                        val synthType = mapRawNameToSynth(src.rawName)
+                        startSynth(synthType, track.title)
                         return
                     }
                     val afd = context.resources.openRawResourceFd(resId)
@@ -121,6 +142,12 @@ class AudioPlayerManager(private val context: Context) {
                     // User-imported audio (content:// URI from file picker).
                     mp.setDataSource(context, Uri.parse(src.uri))
                 }
+                is AudioSource.Synthesized -> {
+                    // Direct synthesis request — no MediaPlayer needed.
+                    mp.release()
+                    startSynth(src.type, track.title)
+                    return
+                }
             }
             mp.setOnPreparedListener {
                 it.start()
@@ -128,17 +155,22 @@ class AudioPlayerManager(private val context: Context) {
                 currentTitle = track.title
             }
             mp.setOnErrorListener { _, _, _ ->
-                Toast.makeText(context, "音频播放失败，请检查网络或音源", Toast.LENGTH_SHORT).show()
+                Log.e(TAG, "MediaPlayer error → fallback to synthesized audio")
+                Toast.makeText(context, "音源加载失败，已切换至合成白噪音", Toast.LENGTH_SHORT).show()
+                mp.release()
+                player = null
+                // Fallback: synthesize white noise so the user always hears something.
+                startSynth(SynthType.WHITE_NOISE, track.title)
                 isPlaying = false
-                currentTitle = null
                 true
             }
             mp.prepareAsync()
             player = mp
         } catch (t: Throwable) {
-            Toast.makeText(context, "无法播放「${track.title}」", Toast.LENGTH_SHORT).show()
+            Log.e(TAG, "play() failed → fallback to synthesized audio", t)
             mp.release()
-            isPlaying = false
+            // Final fallback: synthesize white noise.
+            startSynth(SynthType.WHITE_NOISE, track.title)
         }
     }
 
@@ -177,6 +209,7 @@ class AudioPlayerManager(private val context: Context) {
 
     fun stop() {
         releasePlayer()
+        stopSynth()
         isPlaying = false
         currentTitle = null
     }
@@ -194,5 +227,119 @@ class AudioPlayerManager(private val context: Context) {
 
     fun release() {
         releasePlayer()
+        stopSynth()
+    }
+
+    // ====== AudioTrack 合成保底 (spec: 绝不直接报错静音) ======
+
+    private val TAG = "AudioPlayerManager"
+
+    /** Map a missing raw resource name to the closest synth type. */
+    private fun mapRawNameToSynth(rawName: String): SynthType = when {
+        rawName.contains("rain") -> SynthType.RAIN
+        rawName.contains("ocean") || rawName.contains("wave") -> SynthType.OCEAN
+        rawName.contains("tick") || rawName.contains("clock") -> SynthType.TICK
+        else -> SynthType.WHITE_NOISE
+    }
+
+    /**
+     * Start a background thread that continuously synthesizes ambient audio
+     * via [AudioTrack]. The user always hears something — no silent failure.
+     */
+    private fun startSynth(type: SynthType, title: String) {
+        synthRunning = true
+        currentTitle = title
+        isPlaying = true
+        synthThread = Thread {
+            try {
+                val sampleRate = 44100
+                val bufferSize = android.media.AudioTrack.getMinBufferSize(
+                    sampleRate,
+                    AudioFormat.CHANNEL_OUT_MONO,
+                    AudioFormat.ENCODING_PCM_16BIT
+                ).coerceAtLeast(4096)
+                val track = android.media.AudioTrack.Builder()
+                    .setAudioAttributes(
+                        AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_MEDIA)
+                            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                            .build()
+                    )
+                    .setAudioFormat(
+                        AudioFormat.Builder()
+                            .setSampleRate(sampleRate)
+                            .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                            .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                            .build()
+                    )
+                    .setBufferSizeInBytes(bufferSize)
+                    .setTransferMode(android.media.AudioTrack.MODE_STREAM)
+                    .build()
+                synthTrack = track
+                track.play()
+                val chunkSize = bufferSize / 2 // samples
+                val buffer = ShortArray(chunkSize)
+                var phase = 0.0
+                val step = 2.0 * PI / sampleRate
+                val rng = java.util.Random(42)
+                while (synthRunning) {
+                    when (type) {
+                        SynthType.RAIN -> {
+                            // Rain: filtered white noise with occasional drops
+                            for (i in 0 until chunkSize) {
+                                val noise = rng.nextGaussian() * 0.15
+                                val drop = if (rng.nextInt(200) == 0) 0.5 else 0.0
+                                val s = (noise + drop) * Short.MAX_VALUE * 0.5
+                                buffer[i] = s.toInt().coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
+                            }
+                        }
+                        SynthType.OCEAN -> {
+                            // Ocean waves: low-freq amplitude modulation of noise
+                            for (i in 0 until chunkSize) {
+                                val t = phase
+                                val wave = (0.5 + 0.5 * sin(t * 0.5)).toFloat()
+                                val noise = rng.nextGaussian() * 0.2
+                                val s = (noise * wave) * Short.MAX_VALUE * 0.6
+                                buffer[i] = s.toInt().coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
+                                phase += step
+                            }
+                        }
+                        SynthType.TICK -> {
+                            // Tick-tock: 1kHz beep every 0.5s
+                            for (i in 0 until chunkSize) {
+                                val sampleIdx = i + (phase / step).toInt()
+                                val cycle = sampleIdx % (sampleRate / 2) // 0.5s period
+                                val s = if (cycle < sampleRate / 50) {
+                                    // First 20ms: tick
+                                    sin(phase * 1000.0) * 0.4 * Short.MAX_VALUE
+                                } else 0.0
+                                buffer[i] = s.toInt().coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
+                                phase += step
+                            }
+                        }
+                        SynthType.WHITE_NOISE -> {
+                            // Soft white noise: gentle and continuous
+                            for (i in 0 until chunkSize) {
+                                val noise = rng.nextGaussian() * 0.2
+                                val s = noise * Short.MAX_VALUE * 0.4
+                                buffer[i] = s.toInt().coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
+                            }
+                        }
+                    }
+                    track.write(buffer, 0, chunkSize)
+                }
+            } catch (t: Throwable) {
+                Log.e(TAG, "startSynth: FAILED for $type", t)
+            }
+        }.also { it.start() }
+    }
+
+    private fun stopSynth() {
+        synthRunning = false
+        try { synthThread?.join(500) } catch (_: Throwable) {}
+        synthThread = null
+        try { synthTrack?.stop() } catch (_: Throwable) {}
+        try { synthTrack?.release() } catch (_: Throwable) {}
+        synthTrack = null
     }
 }

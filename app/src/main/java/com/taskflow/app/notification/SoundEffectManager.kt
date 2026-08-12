@@ -2,7 +2,9 @@ package com.taskflow.app.notification
 
 import android.content.Context
 import android.media.AudioAttributes
+import android.media.MediaPlayer
 import android.media.SoundPool
+import android.net.Uri
 import android.util.Log
 import com.taskflow.app.data.preferences.SoundType
 import com.taskflow.app.data.preferences.UserPreferences
@@ -65,6 +67,11 @@ class SoundEffectManager(
     private val _volume = MutableStateFlow(70)
     val volume: StateFlow<Int> = _volume.asStateFlow()
 
+    private val _customUri = MutableStateFlow<String?>(null)
+    val customUri: StateFlow<String?> = _customUri.asStateFlow()
+
+    private var customPlayer: MediaPlayer? = null
+
     /** soundId registry: 每个 SoundType 对应一个已加载的 soundId (0 = 未加载). */
     private val soundIds = HashMap<SoundType, Int>()
 
@@ -86,6 +93,9 @@ class SoundEffectManager(
         }
         scope.launch {
             preferences.soundVolume.collectLatest { _volume.value = it }
+        }
+        scope.launch {
+            preferences.soundCustomUri.collectLatest { _customUri.value = it }
         }
     }
 
@@ -133,8 +143,15 @@ class SoundEffectManager(
      */
     fun playClick(override: SoundType? = null) {
         if (!_enabled.value) return
-        val pool = soundPool ?: return
         val st = override ?: _type.value
+
+        // CUSTOM type: play user-imported local audio file via MediaPlayer.
+        if (st == SoundType.CUSTOM) {
+            playCustomSound()
+            return
+        }
+
+        val pool = soundPool ?: return
         val sid = soundIds[st] ?: return
         if (sid == 0) return
         // SoundPool volume: 0.0~1.0
@@ -146,12 +163,43 @@ class SoundEffectManager(
         }
     }
 
+    /** Play the user-imported custom sound file (if set). */
+    private fun playCustomSound() {
+        val uriStr = _customUri.value ?: run {
+            Log.w(TAG, "playCustomSound: no custom URI set")
+            return
+        }
+        try {
+            customPlayer?.release()
+            val mp = MediaPlayer()
+            mp.setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build()
+            )
+            mp.setDataSource(context, Uri.parse(uriStr))
+            mp.setOnPreparedListener { it.start() }
+            mp.setOnCompletionListener { it.release(); customPlayer = null }
+            mp.setOnErrorListener { mpErr, _, _ ->
+                Log.w(TAG, "playCustomSound: MediaPlayer error")
+                mpErr.release(); customPlayer = null; true
+            }
+            mp.prepareAsync()
+            customPlayer = mp
+        } catch (t: Throwable) {
+            Log.w(TAG, "playCustomSound: FAILED", t)
+        }
+    }
+
     /** 释放资源 (应用退出时调用, 单例场景一般不需要). */
     fun release() {
         soundPool?.release()
         soundPool = null
         soundIds.clear()
         ready = false
+        customPlayer?.release()
+        customPlayer = null
     }
 
     // ====== PCM 合成 (无外部音频素材) ======
@@ -171,6 +219,7 @@ class SoundEffectManager(
             SoundType.MECHANICAL -> synthMechanical()
             SoundType.BUBBLE -> synthBubble()
             SoundType.TICK -> synthTick()
+            SoundType.CUSTOM -> synthWoodFish() // fallback: custom uses MediaPlayer, never reaches here
         }
         return encodeWav(samples, sampleRate)
     }

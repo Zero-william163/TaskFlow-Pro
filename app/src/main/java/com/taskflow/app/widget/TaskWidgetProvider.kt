@@ -134,7 +134,21 @@ class TaskWidgetProvider : AppWidgetProvider() {
                                 Log.d(TAG, "onReceive: task $taskId toggled to ${!task.isCompleted}")
                             }
                             // ====== Spec: 点击直接完成/恢复任务，并刷新小组件 ======
+                            // Full rebuild + per-widget ListView notify for instant UI update.
                             WidgetHelper.refresh(context)
+                            // Also explicitly notify all widget ListViews to re-query.
+                            try {
+                                val mgr = AppWidgetManager.getInstance(context)
+                                val ids = mgr.getAppWidgetIds(
+                                    android.content.ComponentName(context, TaskWidgetProvider::class.java)
+                                )
+                                ids.forEach { id ->
+                                    mgr.notifyAppWidgetViewDataChanged(id, R.id.task_list)
+                                }
+                                Log.d(TAG, "onReceive: notified ${ids.size} widget ListViews")
+                            } catch (e: Throwable) {
+                                Log.w(TAG, "onReceive: notifyAppWidgetViewDataChanged failed", e)
+                            }
                         } else {
                             Log.w(TAG, "onReceive: task $taskId not found")
                         }

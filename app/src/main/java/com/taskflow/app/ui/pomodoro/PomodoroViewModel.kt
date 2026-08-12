@@ -193,6 +193,22 @@ class PomodoroViewModel(
         _state.update { it.copy(completed = false) }
     }
 
+    /**
+     * Mark the current task as completed (提前完成) and stop the timer.
+     * Called when the user chooses "标记已完成并退出" in the exit confirmation dialog.
+     */
+    fun markTaskCompletedAndStop() {
+        tickJob?.cancel()
+        pauseJob?.cancel()
+        _state.update { it.copy(isRunning = false, isPausing = false, completed = true) }
+        viewModelScope.launch {
+            val task = taskRepository.getTask(taskId)
+            if (task != null) {
+                taskRepository.setCompleted(task, true)
+            }
+        }
+    }
+
     override fun onCleared() {
         super.onCleared()
         tickJob?.cancel()

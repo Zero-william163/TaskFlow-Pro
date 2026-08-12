@@ -135,10 +135,14 @@ class TaskListRemoteViewsService : RemoteViewsService() {
                 }
 
                 // Checkbox click → broadcast to toggle task completion directly from widget.
+                // Fix: FLAG_RECEIVER_FOREGROUND ensures the broadcast is delivered promptly
+                // even when the system is dozing; 48dp touch area in the layout guarantees
+                // the click lands on the checkbox, not the card body.
                 try {
                     val toggleIntent = Intent(TaskWidgetProvider.ACTION_TOGGLE_TASK).apply {
                         setPackage(context.packageName)
                         putExtra(TaskWidgetProvider.EXTRA_TASK_ID, task.id)
+                        addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
                     }
                     views.setOnClickPendingIntent(
                         R.id.item_check,

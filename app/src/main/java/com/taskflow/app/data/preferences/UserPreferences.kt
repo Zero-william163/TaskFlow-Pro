@@ -27,7 +27,8 @@ enum class SoundType(val key: String, val label: String) {
     WOOD_FISH("wood_fish", "清脆木鱼"),
     MECHANICAL("mechanical", "机械轴体"),
     BUBBLE("bubble", "柔和气泡"),
-    TICK("tick", "经典滴答");
+    TICK("tick", "经典滴答"),
+    CUSTOM("custom", "自定义");
 
     companion object {
         fun fromKey(key: String?): SoundType =
@@ -52,6 +53,7 @@ class UserPreferences private constructor(private val context: Context) {
         val SOUND_ENABLED = booleanPreferencesKey("sound_enabled")
         val SOUND_TYPE = stringPreferencesKey("sound_type")
         val SOUND_VOLUME = intPreferencesKey("sound_volume")
+        val SOUND_CUSTOM_URI = stringPreferencesKey("sound_custom_uri")
     }
 
     val themeMode: Flow<ThemeMode> = context.dataStore.data.map { prefs ->
@@ -85,6 +87,10 @@ class UserPreferences private constructor(private val context: Context) {
     /** 音效音量 0~100 (默认 70). */
     val soundVolume: Flow<Int> =
         context.dataStore.data.map { it[Keys.SOUND_VOLUME] ?: 70 }
+
+    /** 自定义音效文件 URI (content:// 格式, 由文件选择器写入). */
+    val soundCustomUri: Flow<String?> =
+        context.dataStore.data.map { it[Keys.SOUND_CUSTOM_URI] }
 
     suspend fun setThemeMode(mode: ThemeMode) {
         context.dataStore.edit { it[Keys.THEME_MODE] = mode.name }
@@ -123,6 +129,13 @@ class UserPreferences private constructor(private val context: Context) {
 
     suspend fun setSoundVolume(volume: Int) {
         context.dataStore.edit { it[Keys.SOUND_VOLUME] = volume.coerceIn(0, 100) }
+    }
+
+    suspend fun setSoundCustomUri(uri: String?) {
+        context.dataStore.edit { prefs ->
+            if (uri != null) prefs[Keys.SOUND_CUSTOM_URI] = uri
+            else prefs.remove(Keys.SOUND_CUSTOM_URI)
+        }
     }
 
     companion object {
