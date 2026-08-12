@@ -64,7 +64,19 @@ data class Task(
      * tasks. Updated every time the user checks off a recurring task so the
      * widget / UI can show "next: Aug 12" without re-running the generator.
      */
-    val nextDueDate: Long? = null
+    val nextDueDate: Long? = null,
+    /**
+     * Whether the user explicitly set a due date. When false the task has no
+     * deadline (executed indefinitely from the start date). Source of truth for
+     * the form's "截止日期" toggle; [dueDate] may still hold a value for
+     * frequency-range tasks even when this is false.
+     */
+    val hasDueDate: Boolean = false,
+    /**
+     * Pomodoro focus duration in minutes. Drives the initial ring-timer value on
+     * the Pomodoro focus screen. 0 = use app default (25 min).
+     */
+    val focusDurationMinutes: Int = 0
 ) {
     val hasReminder: Boolean get() = reminderTime != null
 

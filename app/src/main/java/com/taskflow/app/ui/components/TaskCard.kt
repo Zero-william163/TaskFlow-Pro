@@ -14,8 +14,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -44,7 +46,10 @@ fun TaskCard(
     onClick: () -> Unit,
     onToggleComplete: () -> Unit,
     modifier: Modifier = Modifier,
-    readOnly: Boolean = false
+    readOnly: Boolean = false,
+    // Spec: 右上角编辑图标 — 仅点击此图标才唤起【编辑任务】弹窗。
+    // The card body (onClick) navigates to the Pomodoro focus screen instead.
+    onEditClick: (() -> Unit)? = null
 ) {
     val completedAlpha by animateFloatAsState(
         targetValue = if (task.isCompleted || task.isCompletedToday) 0.55f else 1f,
@@ -171,6 +176,23 @@ fun TaskCard(
             }
             Spacer(Modifier.width(12.dp))
             if (!readOnly) {
+                // 右上角编辑图标：仅点击此图标才唤起【编辑任务】弹窗 (spec)。
+                // IconButton consumes its own click so it does NOT trigger the
+                // card-body onClick (Pomodoro navigation).
+                if (onEditClick != null) {
+                    IconButton(
+                        onClick = onEditClick,
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Edit,
+                            contentDescription = "编辑任务",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Spacer(Modifier.width(4.dp))
+                }
                 TaskCheckbox(
                     checked = checkboxChecked,
                     onCheckedChange = { onToggleComplete() }

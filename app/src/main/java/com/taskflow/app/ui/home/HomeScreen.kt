@@ -12,10 +12,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.outlined.DeleteSweep
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.AlertDialog
@@ -69,6 +72,7 @@ import java.time.LocalDateTime
 @Composable
 fun HomeScreen(
     onTaskClick: (Long) -> Unit,
+    onPomodoroClick: (Long) -> Unit,
     contentPadding: PaddingValues = PaddingValues(0.dp),
     newTaskRequested: Boolean = false,
     onNewTaskConsumed: () -> Unit = {}
@@ -204,21 +208,48 @@ fun HomeScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     FilterChipRow(state.filter, viewModel::setFilter)
-                    Spacer(Modifier.weight(1f))
-                    // "清空全部已完成" button — only visible on the COMPLETED tab.
-                    if (state.filter == HomeFilter.COMPLETED && state.filtered.isNotEmpty()) {
-                        IconButton(onClick = { showClearAllCompletedDialog = true }) {
-                            Icon(
-                                Icons.Outlined.DeleteSweep,
-                                contentDescription = "清空全部已完成",
-                                tint = MaterialTheme.colorScheme.error
-                            )
-                        }
-                    }
                 }
             }
 
             val list = state.filtered
+
+            // ====== COMPLETED tab: Header row with "清空全部" button ======
+            // Placed in its own item BELOW the filter chips. The previous
+            // implementation put an IconButton in the same Row as the greedy
+            // LazyRow (FilterChipRow), which consumed all horizontal width and
+            // squeezed the button to zero width — that's why it never showed.
+            // This dedicated header row renders the button reliably.
+            if (state.filter == HomeFilter.COMPLETED && list.isNotEmpty()) {
+                item {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "已完成 (${list.size})",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        TextButton(
+                            onClick = { showClearAllCompletedDialog = true },
+                            colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
+                                contentColor = MaterialTheme.colorScheme.error
+                            )
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "清空全部",
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("清空全部")
+                        }
+                    }
+                }
+            }
             if (list.isEmpty()) {
                 item {
                     EmptyState(
@@ -230,15 +261,25 @@ fun HomeScreen(
                 items(list, key = { it.id }) { task ->
                     val cat = state.categories[task.categoryId]
                     val isCompletedCard = task.isCompleted || task.isCompletedToday
-                    // On the COMPLETED tab: tapping a completed card opens a
-                    // delete-confirmation dialog instead of the edit sheet.
-                    // On other tabs: normal click opens the task detail/edit page.
-                    val cardClick: () -> Unit = if (state.filter == HomeFilter.COMPLETED && isCompletedCard) {
+                    // Spec (card touch zones):
+                    //  - COMPLETED tab: tapping card / checkbox / edit icon all
+                    //    open the delete-confirmation dialog (editing disabled).
+                    //  - Other tabs:
+                    //      • card body (onClick) → Pomodoro focus screen (with taskId)
+                    //      • edit icon (onEditClick) → task detail/edit screen
+                    //      • checkbox → complete/restore toggle
+                    val isCompletedTab = state.filter == HomeFilter.COMPLETED && isCompletedCard
+                    val cardClick: () -> Unit = if (isCompletedTab) {
+                        { pendingDeleteTask = task }
+                    } else {
+                        { onPomodoroClick(task.id) }
+                    }
+                    val editClick: () -> Unit = if (isCompletedTab) {
                         { pendingDeleteTask = task }
                     } else {
                         { onTaskClick(task.id) }
                     }
-                    val toggleClick: () -> Unit = if (state.filter == HomeFilter.COMPLETED && isCompletedCard) {
+                    val toggleClick: () -> Unit = if (isCompletedTab) {
                         { pendingDeleteTask = task }
                     } else {
                         { viewModel.toggleComplete(task) }
@@ -249,6 +290,7 @@ fun HomeScreen(
                         categoryName = cat?.name.orEmpty(),
                         onClick = cardClick,
                         onToggleComplete = toggleClick,
+                        onEditClick = editClick,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
                     )
                 }
@@ -409,7 +451,7 @@ fun HomeScreen(
         AlertDialog(
             onDismissRequest = { pendingDeleteTask = null },
             title = { Text("删除任务") },
-            text = { Text("确定要彻底删除该已完成任务吗？") },
+            text = { Text("确定彻底删除该任务？") },
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.deleteTask(taskToDelete)

@@ -27,7 +27,9 @@ internal fun TaskEntity.toDomain(): Task = Task(
     pinnedToWidget = pinnedToWidget,
     alarmSoundUri = alarmSoundUri,
     lastCompletedDate = lastCompletedDate,
-    nextDueDate = nextDueDate
+    nextDueDate = nextDueDate,
+    hasDueDate = hasDueDate,
+    focusDurationMinutes = focusDurationMinutes
 )
 
 internal fun Task.toEntity(): TaskEntity = TaskEntity(
@@ -51,21 +53,25 @@ internal fun Task.toEntity(): TaskEntity = TaskEntity(
     pinnedToWidget = pinnedToWidget,
     alarmSoundUri = alarmSoundUri,
     lastCompletedDate = lastCompletedDate,
-    nextDueDate = nextDueDate
+    nextDueDate = nextDueDate,
+    hasDueDate = hasDueDate,
+    focusDurationMinutes = focusDurationMinutes
 )
 
 internal fun CategoryEntity.toDomain(): Category = Category(
     id = id,
     name = name,
     color = color,
-    sortOrder = sortOrder
+    sortOrder = sortOrder,
+    isCustom = isCustom
 )
 
 internal fun Category.toEntity(): CategoryEntity = CategoryEntity(
     id = id,
     name = name,
     color = color,
-    sortOrder = sortOrder
+    sortOrder = sortOrder,
+    isCustom = isCustom
 )
 
 internal fun priorityFromString(name: String): Priority = Priority.fromName(name)

@@ -52,6 +52,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.taskflow.app.R
+import com.taskflow.app.data.local.DailyFocusMinutes
 import com.taskflow.app.data.model.Priority
 import com.taskflow.app.data.model.labelRes
 import com.taskflow.app.ui.AppViewModelFactory
@@ -167,6 +168,16 @@ fun StatsScreen() {
                 color = Color(cat?.color ?: 0xFF4C6EF5.toInt())
             )
         }
+
+        Spacer(Modifier.height(20.dp))
+        // ====== Pomodoro focus stats (spec: 同步更新至 StatisticsScreen 统计图表) ======
+        SectionTitle("番茄专注")
+        FocusStatsCard(
+            totalMinutes = state.totalFocusMinutes,
+            totalSessions = state.totalFocusSessions,
+            focusByDay = state.focusByDay,
+            weekStart = state.weekStart
+        )
     }
 }
 
@@ -640,5 +651,135 @@ private fun computeYAxisMax(dataMax: Int): Pair<Int, Int> {
             val max = ((rawMax + 9) / 10 * 10)
             max to 10
         }
+    }
+}
+
+// ====== Pomodoro Focus Stats Card ======
+// Spec: 倒计时完成时自动写入 focus_history 表，并同步更新至 StatisticsScreen 统计图表.
+// This card renders the cumulative focus minutes + a 7-day bar chart of daily
+// focus minutes, fed live by the focus_history table.
+
+@Composable
+private fun FocusStatsCard(
+    totalMinutes: Int,
+    totalSessions: Int,
+    focusByDay: List<DailyFocusMinutes>,
+    weekStart: LocalDate
+) {
+    val accentColor = Color(0xFF15D0AB)
+
+    SoftCard(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column {
+                    Text(
+                        text = "累计专注时长",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = formatFocusMinutes(totalMinutes),
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = accentColor
+                    )
+                }
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        text = "完成轮数",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "$totalSessions",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+            Text(
+                text = "近 7 天专注分布",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(Modifier.height(8.dp))
+            FocusBarChart(focusByDay = focusByDay, weekStart = weekStart, accentColor = accentColor)
+        }
+    }
+}
+
+@Composable
+private fun FocusBarChart(
+    focusByDay: List<DailyFocusMinutes>,
+    weekStart: LocalDate,
+    accentColor: Color
+) {
+    val byDay = focusByDay.associate { LocalDate.parse(it.day) to it.minutes }
+    val window = (0 until 7).map { offset ->
+        val date = weekStart.plusDays(offset.toLong())
+        date to (byDay[date] ?: 0)
+    }
+    val maxMinutes = (window.maxOfOrNull { it.second } ?: 0).coerceAtLeast(1)
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(120.dp),
+        verticalAlignment = Alignment.Bottom,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        window.forEach { (date, minutes) ->
+            val ratio = (minutes.toFloat() / maxMinutes).coerceIn(0f, 1f)
+            val animatedRatio by animateFloatAsState(
+                targetValue = ratio,
+                animationSpec = tween(600),
+                label = "focusBar"
+            )
+            Column(
+                modifier = Modifier.weight(1f),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Bottom
+            ) {
+                Text(
+                    text = if (minutes > 0) minutes.toString() else "",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(4.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(0.7f)
+                        .height((animatedRatio * 80f + 2f).dp)
+                        .clip(RoundedCornerShape(50))
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(accentColor.copy(alpha = 0.55f), accentColor)
+                            )
+                        )
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = "${date.monthValue}/${date.dayOfMonth}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+private fun formatFocusMinutes(minutes: Int): String {
+    val h = minutes / 60
+    val m = minutes % 60
+    return when {
+        h > 0 && m > 0 -> "${h}h ${m}m"
+        h > 0 -> "${h}h"
+        else -> "${m}m"
     }
 }

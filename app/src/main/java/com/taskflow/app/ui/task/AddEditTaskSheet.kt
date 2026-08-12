@@ -15,10 +15,11 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
@@ -27,11 +28,16 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.outlined.AccessTime
 import androidx.compose.material.icons.outlined.DateRange
 import androidx.compose.material.icons.outlined.Event
@@ -65,6 +71,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -74,6 +81,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.taskflow.app.R
+import com.taskflow.app.data.model.Category
 import com.taskflow.app.data.model.FrequencyType
 import com.taskflow.app.data.model.Priority
 import com.taskflow.app.data.model.ReminderMode
@@ -122,6 +130,10 @@ fun AddEditTaskSheet(
     var startDate by remember(task) {
         mutableStateOf(task?.startDate ?: LocalDate.now())
     }
+    // Due date is now OPTIONAL (spec: 默认关闭，从开始日期起无限期执行).
+    // hasDueDate is the source of truth for the form toggle; dueDate holds the
+    // picked value but is only persisted when hasDueDate is true.
+    var hasDueDate by remember(task) { mutableStateOf(task?.hasDueDate ?: false) }
     var dueDate by remember(task) { mutableStateOf(task?.dueDate?.toLocalDate() ?: LocalDate.now()) }
     var dueDateError by remember { mutableStateOf(false) }
     // Distinguish the two due-date error cases so the inline message can match
@@ -129,17 +141,28 @@ fun AddEditTaskSheet(
     // "截止日期不能早于开始日期"). Null = no error.
     var dueDateErrorMessage by remember { mutableStateOf<String?>(null) }
 
-    // Default reminder OFF for new tasks (#1 fix).
-    var reminderEnabled by remember(task) { mutableStateOf(task?.reminderTime != null && isEdit) }
+    // Default reminder ON for new tasks (spec change: 提醒时间默认开关 = 开启).
+    // For edits, mirror the persisted state.
+    var reminderEnabled by remember(task) {
+        mutableStateOf(task?.reminderTime != null || !isEdit)
+    }
     var reminderTime by remember(task) {
         mutableStateOf(task?.reminderTime?.toLocalTime() ?: LocalTime.of(9, 0))
     }
+    // Default reminder frequency = DAILY (spec: 提醒频率默认「每日」RepeatMode.DAILY).
     var reminderMode by remember(task) {
-        mutableStateOf(task?.reminderMode ?: ReminderMode.ONCE)
+        mutableStateOf(task?.reminderMode ?: ReminderMode.DAILY)
     }
     var alarmSoundUri by remember(task) {
         mutableStateOf(task?.alarmSoundUri.takeUnless { it.isNullOrBlank() })
     }
+
+    // Pomodoro focus duration (spec: 默认 25 分). 0 on existing tasks falls
+    // back to 25 in the UI/Pomodoro screen; the form offers 10/25/35/自定义 chips.
+    var focusDurationMinutes by remember(task) {
+        mutableStateOf(task?.focusDurationMinutes?.takeIf { it > 0 } ?: 25)
+    }
+    var showFocusDurationDialog by remember { mutableStateOf(false) }
 
     var frequency by remember(task) { mutableStateOf(task?.frequency ?: FrequencyType.DAILY) }
     var customDates by remember(task) {
@@ -157,6 +180,10 @@ fun AddEditTaskSheet(
     var showCustomDatePicker by remember { mutableStateOf(false) }
     var showSoundPickerDialog by remember { mutableStateOf(false) }
 
+    // ====== Custom category dialog state (feature: 自定义分类 + 自定义颜色) ======
+    var showCustomCategoryDialog by remember { mutableStateOf(false) }
+    var showDeleteCategoryConfirm by remember { mutableStateOf<Category?>(null) }
+
     // ====== Lifecycle safety: reset all dialog states when Activity goes to
     // background. Prevents frozen state where a dialog scrim blocks touches. ======
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
@@ -167,6 +194,9 @@ fun AddEditTaskSheet(
         showFrequencyDialog = false
         showCustomDatePicker = false
         showSoundPickerDialog = false
+        showCustomCategoryDialog = false
+        showDeleteCategoryConfirm = null
+        showFocusDurationDialog = false
     }
     LifecycleEventEffect(Lifecycle.Event.ON_PAUSE) {
         showStartPicker = false
@@ -246,18 +276,31 @@ fun AddEditTaskSheet(
     // Extracted so the unsaved-changes dialog in the host screen can trigger a
     // save without going through the button (see externalSaveTrigger).
     val performSave: () -> Unit = save@{
-        // ====== Due date is required (Requirement #2) ======
-        if (dueDate == null) {
-            dueDateError = true
-            dueDateErrorMessage = "请填写截止日期"
-            coroutineScope.launch {
-                scrollState.scrollTo(scrollState.maxValue)
+        // ====== Due date is now OPTIONAL (spec: 默认关闭，无限期执行).
+        // Only validate when the user has explicitly enabled a due date.
+        if (hasDueDate) {
+            if (dueDate == null) {
+                dueDateError = true
+                dueDateErrorMessage = "请填写截止日期"
+                coroutineScope.launch {
+                    scrollState.scrollTo(scrollState.maxValue)
+                }
+                return@save
             }
-            return@save
+            val start = startDate ?: LocalDate.now()
+            if (dueDate!!.isBefore(start)) {
+                dueDateError = true
+                dueDateErrorMessage = "截止日期不能早于开始日期"
+                coroutineScope.launch {
+                    scrollState.scrollTo(scrollState.maxValue)
+                }
+                return@save
+            }
         }
         val start = startDate ?: LocalDate.now()
-        val endLocal = dueDate!!
-        val end = endLocal.atStartOfDay()
+        // Persist dueDate only when hasDueDate is true; otherwise null so the
+        // task is treated as having no deadline.
+        val end = if (hasDueDate) dueDate!!.atStartOfDay() else null
         val reminder = if (reminderEnabled) start.atTime(reminderTime) else null
         val customRaw = if (frequency == FrequencyType.CUSTOM)
             customDates.sorted().joinToString(",") { it.toString() }
@@ -269,12 +312,14 @@ fun AddEditTaskSheet(
             priority = priority,
             startDate = start,
             dueDate = end,
+            hasDueDate = hasDueDate,
             reminderTime = reminder,
             reminderMode = if (reminderEnabled) reminderMode else ReminderMode.ONCE,
             frequency = frequency,
             customDatesRaw = customRaw,
             weeklyWeekdays = weeklyWeekdays,
-            alarmSoundUri = alarmSoundUri
+            alarmSoundUri = alarmSoundUri,
+            focusDurationMinutes = focusDurationMinutes
         )
         viewModel.saveTask(built) { id, isNew ->
             onSaved(id, isNew)
@@ -343,13 +388,41 @@ fun AddEditTaskSheet(
         }
 
         SectionTitle(stringResource(R.string.task_category))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            categories.forEach { cat ->
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(end = 4.dp)
+        ) {
+            items(categories, key = { it.id }) { cat ->
                 FilterChip(
                     selected = categoryId == cat.id,
                     onClick = { categoryId = cat.id },
                     label = { Text(cat.name) },
-                    leadingIcon = { PriorityDot(color = Color(cat.color), size = 8) }
+                    leadingIcon = { PriorityDot(color = Color(cat.color), size = 8) },
+                    // Long-press a custom category to delete it (spec: 管理与删除/配套).
+                    // Built-in categories are not deletable. Use pointerInput so it
+                    // does not conflict with FilterChip's own click handling.
+                    modifier = Modifier.pointerInput(cat.id) {
+                        detectTapGestures(
+                            onLongPress = {
+                                if (cat.isCustom) showDeleteCategoryConfirm = cat
+                            }
+                        )
+                    }
+                )
+            }
+            item(key = "add_custom") {
+                // "+ 自定义" chip — opens the create-custom-category dialog.
+                FilterChip(
+                    selected = false,
+                    onClick = { showCustomCategoryDialog = true },
+                    label = { Text("＋ 自定义") },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Filled.Add,
+                            contentDescription = "自定义",
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
                 )
             }
         }
@@ -363,32 +436,59 @@ fun AddEditTaskSheet(
         )
 
         SectionTitle(stringResource(R.string.task_due_date))
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .border(
-                    width = if (dueDateError) 2.dp else 0.dp,
-                    color = if (dueDateError) MaterialTheme.colorScheme.error else Color.Transparent,
-                    shape = RoundedCornerShape(14.dp)
-                )
+        // Due date is OPTIONAL (spec: 默认关闭，从开始日期起无限期执行).
+        // A toggle controls whether a deadline is set; the date picker only
+        // shows when the toggle is on.
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            SelectorRow(
-                icon = Icons.Outlined.Event,
-                text = dueDate?.let { Format.date(it.atStartOfDay()) } ?: "选择截止日期",
-                onClick = {
-                    showEndPicker = true
-                    dueDateError = false
-                    dueDateErrorMessage = null
+            Text(
+                text = if (hasDueDate) "设置截止日期" else "无截止日期（无限期执行）",
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f),
+                color = if (hasDueDate) MaterialTheme.colorScheme.onSurface
+                else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Switch(
+                checked = hasDueDate,
+                onCheckedChange = { enabled ->
+                    hasDueDate = enabled
+                    if (!enabled) {
+                        dueDateError = false
+                        dueDateErrorMessage = null
+                    }
                 }
             )
         }
-        if (dueDateError) {
-            Text(
-                text = dueDateErrorMessage ?: "请填写截止日期",
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.padding(start = 14.dp, top = 2.dp)
-            )
+        if (hasDueDate) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(
+                        width = if (dueDateError) 2.dp else 0.dp,
+                        color = if (dueDateError) MaterialTheme.colorScheme.error else Color.Transparent,
+                        shape = RoundedCornerShape(14.dp)
+                    )
+            ) {
+                SelectorRow(
+                    icon = Icons.Outlined.Event,
+                    text = dueDate?.let { Format.date(it.atStartOfDay()) } ?: "选择截止日期",
+                    onClick = {
+                        showEndPicker = true
+                        dueDateError = false
+                        dueDateErrorMessage = null
+                    }
+                )
+            }
+            if (dueDateError) {
+                Text(
+                    text = dueDateErrorMessage ?: "请填写截止日期",
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(start = 14.dp, top = 2.dp)
+                )
+            }
         }
 
         SectionTitle(stringResource(R.string.task_frequency))
@@ -444,6 +544,25 @@ fun AddEditTaskSheet(
                     Text(stringResource(R.string.common_edit))
                 }
             }
+        }
+
+        // ====== 专注时长 (Pomodoro focus duration) ======
+        // FilterChips: 10 / 25(默认) / 35 / ⚙️自定义. Drives the initial ring
+        // timer value on the Pomodoro focus screen.
+        SectionTitle("专注时长")
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf(10, 25, 35).forEach { mins ->
+                FilterChip(
+                    selected = focusDurationMinutes == mins,
+                    onClick = { focusDurationMinutes = mins },
+                    label = { Text("${mins}分") }
+                )
+            }
+            FilterChip(
+                selected = focusDurationMinutes !in listOf(10, 25, 35),
+                onClick = { showFocusDurationDialog = true },
+                label = { Text("⚙️自定义") }
+            )
         }
 
         SectionTitle(stringResource(R.string.task_reminder))
@@ -549,7 +668,11 @@ fun AddEditTaskSheet(
         DatePickerDialog(
             onConfirm = {
                 state.selectedDateMillis?.let {
-                    val picked = Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate()
+                    // Material3 DatePicker stores UTC midnight millis. Convert
+                    // back with UTC (NOT systemDefault) so the calendar day
+                    // matches what the user tapped — otherwise negative timezones
+                    // (e.g. UTC-8) shift the picked date back one day ("昨天" bug).
+                    val picked = Instant.ofEpochMilli(it).atZone(ZoneId.of("UTC")).toLocalDate()
                     // Clamp: past dates → today, future beyond dueDate → dueDate
                     // (safety net for timezone edge cases).
                     val clamped = when {
@@ -589,7 +712,9 @@ fun AddEditTaskSheet(
         DatePickerDialog(
             onConfirm = {
                 state.selectedDateMillis?.let {
-                    val picked = Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate()
+                    // DatePicker stores UTC midnight; convert back with UTC to
+                    // avoid the timezone-induced "昨天" off-by-one bug.
+                    val picked = Instant.ofEpochMilli(it).atZone(ZoneId.of("UTC")).toLocalDate()
                     // dueDate must be >= startDate. If user picks earlier (shouldn't
                     // happen with SelectableDates, but kept as a safety net for
                     // timezone edge cases), show the spec-exact error and scroll
@@ -723,6 +848,225 @@ fun AddEditTaskSheet(
             onDismiss = { showCustomDatePicker = false }
         )
     }
+
+    // ====== 创建自定义分类弹窗 (feature: 自定义分类 + 自定义颜色) ======
+    // 含分类名称输入框 (限 6 字) + Material/莫兰迪色调色盘 (8~12 种预设颜色)。
+    // 保存后该新分类自动加入列表并默认选中，Chip 圆点颜色即用户所选颜色。
+    if (showCustomCategoryDialog) {
+        CustomCategoryDialog(
+            onDismiss = { showCustomCategoryDialog = false },
+            onSave = { name, color ->
+                viewModel.addCustomCategory(name, color) { newId ->
+                    // 自动选中新建的分类 (spec: 保存后的实时选中状态)。
+                    categoryId = newId
+                    showCustomCategoryDialog = false
+                }
+            }
+        )
+    }
+
+    // ====== 删除自定义分类确认弹窗 (长按自定义 Chip 触发) ======
+    showDeleteCategoryConfirm?.let { cat ->
+        AlertDialog(
+            onDismissRequest = { showDeleteCategoryConfirm = null },
+            title = { Text("删除分类") },
+            text = { Text("确定要删除自定义分类「${cat.name}」吗？\n已有任务将保留，但其分类会变为未匹配。") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        // 若被删分类正被选中，回退到第一个分类。
+                        if (categoryId == cat.id) {
+                            categories.firstOrNull()?.let { categoryId = it.id }
+                        }
+                        viewModel.deleteCategory(cat.id)
+                        showDeleteCategoryConfirm = null
+                    },
+                    colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    )
+                ) { Text("删除") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteCategoryConfirm = null }) {
+                    Text(stringResource(R.string.common_cancel))
+                }
+            }
+        )
+    }
+
+    // ====== 专注时长自定义弹窗 (⚙️自定义 Chip 触发) ======
+    if (showFocusDurationDialog) {
+        var customMinutes by remember { mutableStateOf(focusDurationMinutes.toString()) }
+        AlertDialog(
+            onDismissRequest = { showFocusDurationDialog = false },
+            title = { Text("自定义专注时长") },
+            text = {
+                Column {
+                    Text(
+                        text = "请输入专注时长（分钟，1~180）",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = customMinutes,
+                        onValueChange = { input ->
+                            // 只保留数字
+                            customMinutes = input.filter { it.isDigit() }.take(3)
+                        },
+                        label = { Text("分钟") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp)
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val mins = customMinutes.toIntOrNull() ?: 0
+                    if (mins in 1..180) {
+                        focusDurationMinutes = mins
+                        showFocusDurationDialog = false
+                    } else {
+                        Toast.makeText(context, "请输入 1~180 之间的数字", Toast.LENGTH_SHORT).show()
+                    }
+                }) { Text(stringResource(R.string.common_confirm)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showFocusDurationDialog = false }) {
+                    Text(stringResource(R.string.common_cancel))
+                }
+            }
+        )
+    }
+}
+
+/**
+ * "创建自定义分类"弹窗：分类名称输入框 (限 6 字以内) + 莫兰迪/Material 调色盘
+ * (8~12 种预设颜色 circle，选中显示 Check 图标)。底部【取消】+【保存并使用】。
+ * 保存后调用 [onSave]，由上层持久化并自动选中新建分类。
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CustomCategoryDialog(
+    onDismiss: () -> Unit,
+    onSave: (name: String, color: Int) -> Unit
+) {
+    var name by remember { mutableStateOf("") }
+    var selectedColor by remember { mutableStateOf(Category.COLOR_PALETTE.first()) }
+    val canSave = name.isNotBlank() && name.length <= 6
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("创建自定义分类") },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                // 分类名称输入框 (限 6 字以内)
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { input ->
+                        // 限制 6 个字符 (中英文均按字符计)。
+                        name = if (input.length <= 6) input else input.take(6)
+                    },
+                    label = { Text("分类名称") },
+                    placeholder = { Text("如：健身、财务、旅行") },
+                    singleLine = true,
+                    isError = name.isNotBlank() && name.length > 6,
+                    supportingText = {
+                        Text(
+                            text = "最多 6 个字 (${name.length}/6)",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp)
+                )
+
+                Spacer(Modifier.height(16.dp))
+
+                // 颜色选择器 (调色盘) — 莫兰迪/Material 预设颜色 circle。
+                Text(
+                    text = "主题色",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(8.dp))
+                // 5 列流式布局展示颜色圆点。
+                val rows = Category.COLOR_PALETTE.chunked(5)
+                rows.forEach { rowColors ->
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                    ) {
+                        rowColors.forEach { c ->
+                            val isSelected = selectedColor == c
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(c))
+                                    .border(
+                                        width = if (isSelected) 3.dp else 0.dp,
+                                        color = if (isSelected)
+                                            MaterialTheme.colorScheme.onSurface
+                                        else Color.Transparent,
+                                        shape = CircleShape
+                                    )
+                                    .clickable { selectedColor = c },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (isSelected) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Check,
+                                        contentDescription = "已选中",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 实时预览：展示当前 Chip 样式 (圆点 + 名称)。
+                Spacer(Modifier.height(12.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp)
+                ) {
+                    Text(
+                        text = "预览：",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    PriorityDot(color = Color(selectedColor), size = 10)
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = name.ifBlank { "分类名称" },
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onSave(name, selectedColor) },
+                enabled = canSave,
+                shape = RoundedCornerShape(14.dp)
+            ) { Text("保存并使用") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.common_cancel))
+            }
+        }
+    )
 }
 
 private fun describeRingtone(ctx: Context, uri: Uri): String {
@@ -774,12 +1118,40 @@ private fun DatePickerDialog(
     onDismiss: () -> Unit,
     content: @Composable () -> Unit
 ) {
-    AlertDialog(
+    // BUG FIX (数字裁剪): AlertDialog constrains its content to a narrow max
+    // width, which clips the rightmost grid day numbers (14/21/28) in the M3
+    // DatePicker. Switching to a plain Dialog with usePlatformDefaultWidth =
+    // false lets the DatePicker take its full design-spec width so every day
+    // cell renders completely.
+    androidx.compose.ui.window.Dialog(
         onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = onConfirm) { Text(stringResource(R.string.common_confirm)) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) } },
-        text = { content() }
-    )
+        properties = androidx.compose.ui.window.DialogProperties(
+            usePlatformDefaultWidth = false
+        )
+    ) {
+        Surface(
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp),
+            tonalElevation = 6.dp,
+            color = MaterialTheme.colorScheme.surface,
+            modifier = Modifier.padding(horizontal = 16.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                content()
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text(stringResource(R.string.common_cancel))
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    TextButton(onClick = onConfirm) {
+                        Text(stringResource(R.string.common_confirm))
+                    }
+                }
+            }
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

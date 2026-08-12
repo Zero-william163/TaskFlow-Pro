@@ -13,6 +13,7 @@ import com.taskflow.app.ServiceLocator
 import com.taskflow.app.data.repository.TaskRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -110,7 +111,23 @@ class TaskCompletionDialogActivity : Activity() {
                 Log.d(TAG, "onCancel: user tapped outside / pressed back")
                 finish()
             }
+            // CRITICAL FIX (freeze bug): setOnDismissListener is the catch-all
+            // that guarantees finish() runs when the dialog leaves the screen
+            // for ANY reason (rotation, backgrounding, system back, etc.).
+            // Without it, a transparent Activity can stay on top and intercept
+            // ALL touch events across the app — the "全局冻结" symptom.
+            .setOnDismissListener {
+                Log.d(TAG, "onDismiss: dialog left screen → finish Activity")
+                if (!isFinishing) finish()
+            }
             .show()
+    }
+
+    override fun onDestroy() {
+        // Cancel any pending coroutines so a destroyed Activity never holds
+        // a stale reference that could call finish() on a dead instance.
+        scope.cancel()
+        super.onDestroy()
     }
 
     /**

@@ -3,6 +3,7 @@ package com.taskflow.app
 import android.content.Context
 import com.taskflow.app.data.preferences.UserPreferences
 import com.taskflow.app.data.repository.CategoryRepository
+import com.taskflow.app.data.repository.FocusHistoryRepository
 import com.taskflow.app.data.repository.TaskRepository
 import com.taskflow.app.notification.ReminderScheduler
 import com.taskflow.app.permission.PermissionManager
@@ -20,6 +21,8 @@ object ServiceLocator {
         private set
     lateinit var categoryRepository: CategoryRepository
         private set
+    lateinit var focusHistoryRepository: FocusHistoryRepository
+        private set
     lateinit var userPreferences: UserPreferences
         private set
     lateinit var reminderScheduler: ReminderScheduler
@@ -36,6 +39,7 @@ object ServiceLocator {
             val app = context.applicationContext
             taskRepository = TaskRepository.get(app)
             categoryRepository = CategoryRepository.get(app)
+            focusHistoryRepository = FocusHistoryRepository.get(app)
             userPreferences = UserPreferences.get(app)
             reminderScheduler = ReminderScheduler(app)
             permissionManager = PermissionManager(app)

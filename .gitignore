@@ -16,3 +16,8 @@ local.properties
 *.aab
 # Signing files (kept in repo for reproducible builds)
 app/keystore/taskflow-release.jks
+
+# Build scripts & logs (kept local, not part of source tree)
+/build*.sh
+/build.log
+/.kotlin/

@@ -44,6 +44,7 @@ import com.taskflow.app.ui.home.HomeScreen
 import com.taskflow.app.ui.permission.PermissionScreen
 import com.taskflow.app.ui.settings.SettingsScreen
 import com.taskflow.app.ui.stats.StatsScreen
+import com.taskflow.app.ui.pomodoro.PomodoroScreen
 import com.taskflow.app.ui.task.TaskDetailScreen
 import com.taskflow.app.ui.update.UpdateScreen
 import com.taskflow.app.ui.update.UpdateViewModel
@@ -130,6 +131,7 @@ fun TaskFlowNavHost(
             composable(Destinations.Home.route) {
                 HomeScreen(
                     onTaskClick = { id -> navController.navigate(Destinations.TaskDetail.create(id)) },
+                    onPomodoroClick = { id -> navController.navigate(Destinations.Pomodoro.create(id)) },
                     newTaskRequested = newTaskRequested,
                     onNewTaskConsumed = onNewTaskConsumed
                 )
@@ -150,6 +152,13 @@ fun TaskFlowNavHost(
             ) { entry ->
                 val id = entry.arguments?.getLong(Destinations.TaskDetail.ARG_ID) ?: -1L
                 TaskDetailScreen(taskId = id, onBack = { navController.popBackStack() })
+            }
+            composable(
+                route = Destinations.Pomodoro.route,
+                arguments = listOf(navArgument(Destinations.Pomodoro.ARG_ID) { type = NavType.LongType })
+            ) { entry ->
+                val taskId = entry.arguments?.getLong(Destinations.Pomodoro.ARG_ID) ?: -1L
+                PomodoroScreen(taskId = taskId, onBack = { navController.popBackStack() })
             }
             composable(Destinations.Permissions.route) {
                 PermissionScreen(onBack = { navController.popBackStack() })

@@ -54,5 +54,18 @@ data class TaskEntity(
     /** "yyyy-MM-dd" of the last time a recurring task was checked off. */
     val lastCompletedDate: String? = null,
     /** Pre-computed next due timestamp (epoch millis) for recurring tasks. */
-    val nextDueDate: Long? = null
+    val nextDueDate: Long? = null,
+    /**
+     * Whether the user explicitly set a due date for this task. When false the
+     * task has no deadline (executed indefinitely from the start date). The
+     * [dueDate] column may still hold a value for frequency-range tasks even
+     * when this is false; this flag is the source of truth for the form's
+     * "截止日期" toggle and for overdue/status UI.
+     */
+    val hasDueDate: Boolean = false,
+    /**
+     * Pomodoro focus duration in minutes for this task. Drives the initial
+     * ring-timer value on the Pomodoro focus screen. 0 = use app default (25).
+     */
+    val focusDurationMinutes: Int = 0
 )

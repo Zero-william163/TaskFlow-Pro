@@ -10,8 +10,8 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import com.taskflow.app.data.model.Category
 
 @Database(
-    entities = [TaskEntity::class, CategoryEntity::class, TaskInstanceEntity::class],
-    version = 5,
+    entities = [TaskEntity::class, CategoryEntity::class, TaskInstanceEntity::class, FocusHistoryEntity::class],
+    version = 7,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -20,6 +20,7 @@ abstract class TaskDatabase : RoomDatabase() {
     abstract fun taskDao(): TaskDao
     abstract fun categoryDao(): CategoryDao
     abstract fun taskInstanceDao(): TaskInstanceDao
+    abstract fun focusHistoryDao(): FocusHistoryDao
 
     companion object {
         @Volatile
@@ -33,7 +34,7 @@ abstract class TaskDatabase : RoomDatabase() {
                     "taskflow.db"
                 )
                     .addCallback(SeedCallback())
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                     .build()
                     .also { INSTANCE = it }
             }
@@ -142,15 +143,73 @@ abstract class TaskDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v5 → v6: add isCustom column to categories table so user-created
+         * categories can be distinguished from built-in ones (used by the
+         * custom-category feature for long-press delete, etc.).
+         * Defaults to 0 (false) — all existing categories are built-in.
+         */
+        private val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE categories ADD COLUMN isCustom INTEGER NOT NULL DEFAULT 0"
+                )
+            }
+        }
+
+        /**
+         * v6 → v7:
+         * - tasks: add [TaskEntity.hasDueDate] (Boolean) and
+         *   [TaskEntity.focusDurationMinutes] (Int). Both default to 0 so
+         *   existing tasks keep their current behavior (hasDueDate=false means
+         *   "no explicit deadline"; focusDurationMinutes=0 falls back to the
+         *   25-min app default on the Pomodoro screen).
+         * - New `focus_history` table recording completed Pomodoro sessions,
+         *   with a CASCADE foreign key to tasks and indexes on taskId /
+         *   timestamp for the Stats screen's trend queries.
+         *
+         * CREATE TABLE column types/nullability/defaults mirror the
+         * [FocusHistoryEntity] definition so Room's runtime schema validation
+         * passes (see MIGRATION_2_3 for the same pattern).
+         */
+        private val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE tasks ADD COLUMN hasDueDate INTEGER NOT NULL DEFAULT 0"
+                )
+                db.execSQL(
+                    "ALTER TABLE tasks ADD COLUMN focusDurationMinutes INTEGER NOT NULL DEFAULT 0"
+                )
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS focus_history (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        taskId INTEGER NOT NULL,
+                        durationMinutes INTEGER NOT NULL,
+                        timestamp INTEGER NOT NULL,
+                        FOREIGN KEY(taskId) REFERENCES tasks(id) ON DELETE CASCADE
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS index_focus_history_taskId ON focus_history(taskId)"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS index_focus_history_timestamp ON focus_history(timestamp)"
+                )
+            }
+        }
+
         private class SeedCallback : Callback() {
             override fun onCreate(db: SupportSQLiteDatabase) {
                 super.onCreate(db)
                 // Seed default categories synchronously (onCreate runs in a transaction).
+                // isCustom=0 for all built-in categories.
                 val rows = Category.DEFAULTS.joinToString(",") { c ->
-                    "(${c.sortOrder}, '${c.name.replace("'", "''")}', ${c.color})"
+                    "(${c.sortOrder}, '${c.name.replace("'", "''")}', ${c.color}, 0)"
                 }
                 db.execSQL(
-                    "INSERT INTO categories (sortOrder, name, color) VALUES $rows"
+                    "INSERT INTO categories (sortOrder, name, color, isCustom) VALUES $rows"
                 )
             }
         }

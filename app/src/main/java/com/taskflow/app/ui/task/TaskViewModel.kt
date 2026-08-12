@@ -96,4 +96,23 @@ class TaskViewModel(
             }
         }
     }
+
+    /**
+     * Persist a new user-defined category and return its row id via [onDone].
+     * The new category is appended after the highest existing sortOrder and
+     * flagged isCustom=true. Used by the "创建自定义分类" dialog.
+     */
+    fun addCustomCategory(name: String, color: Int, onDone: (id: Long) -> Unit) {
+        viewModelScope.launch {
+            val id = categoryRepository.addCustom(name.trim(), color)
+            onDone(id)
+        }
+    }
+
+    /** Delete a custom category by id (used by long-press on custom chips). */
+    fun deleteCategory(id: Long) {
+        viewModelScope.launch {
+            categoryRepository.delete(id)
+        }
+    }
 }

@@ -20,6 +20,10 @@ sealed class Destinations(val route: String) {
         const val ARG_ID = "id"
         fun create(id: Long) = "task/$id"
     }
+    data object Pomodoro : Destinations("pomodoro/{taskId}") {
+        const val ARG_ID = "taskId"
+        fun create(taskId: Long) = "pomodoro/$taskId"
+    }
     data object Permissions : Destinations("permissions")
     data object Update : Destinations("update")
 }

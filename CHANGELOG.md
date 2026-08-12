@@ -8,6 +8,86 @@ The GitHub Actions release workflow extracts the section matching the pushed tag
 (e.g. `## v1.0.0`) and uses it as the GitHub / Gitee release notes, and embeds it
 into `release.json` as the `log` field consumed by the in-app updater.
 
+## v2.9.0
+
+### 新增 — 番茄专注沉浸模式 + 已完成全选删除 + 表单默认值变更 + 任务卡片交互分流
+
+#### 一、 紧急修复项与表单默认值变更 (Form & UI Fixes)
+
+1. **【已完成】Tab 强制渲染「清空全部」工具栏**
+   - 在 Completed Task 列表顶部 Header 行渲染：左侧 `已完成 (X项)`、右侧 `🗑️ 清空全部` 按钮。
+   - 点击弹出 M3 确认弹窗，确认后执行 DAO `DELETE FROM task_table WHERE isCompleted = 1`。
+   - 在【已完成】Tab 下点击卡片禁用编辑，弹窗提示「确定彻底删除该任务？」，确认后单条删除。
+
+2. **DatePicker 数字裁剪 Bug**
+   - 给 `DatePickerDialog` 显式添加 `properties = DialogProperties(usePlatformDefaultWidth = false)`，确保右侧网格数字（14/21/28）完全无遮挡展示。
+
+3. **截止日期（DueDate）改为【可选项】**
+   - `TaskEntity` 增加 `hasDueDate: Boolean = false`。
+   - 表单中增加开关：**默认关闭（不设截止日期，从开始日期起无限期执行）**。开启后方可选择具体截止日期。
+
+4. **提醒时间与模式默认值修正**
+   - 提醒时间默认开关设为 `isReminderEnabled = true`（开启）。
+   - 提醒频率默认选项修改为 **「每日」** (`ReminderMode.DAILY`)。
+
+5. **自定义分类 & 颜色 (Custom Category)**
+   - 分类 Chip 末尾增加 `＋ 自定义` 按钮，点击弹窗包含：名称输入框（限 6 字）+ 莫兰迪色系调色盘（10 色）。保存后存入 `CategoryEntity` 并自动选中。
+   - 长按自定义分类 Chip 可删除（系统弹窗确认），内置分类不可删除。
+
+6. **专注时长配置**
+   - `TaskEntity` 增加 `focusDurationMinutes: Int = 25`。表单提供 FilterChips：`[10分]` `[25分(默认)]` `[35分]` `[⚙️自定义]`。
+
+#### 二、 任务卡片交互分流 (Card Touch Zones)
+
+1. **右侧 Checkbox**：仅触发任务完成/恢复状态切换。
+2. **右上角编辑图标 (新增)**：渲染 `Icons.Outlined.Edit` 按钮，**仅点击此图标才唤起【编辑任务】弹窗**。
+3. **卡片主体 (Card Body)**：点击卡片空白/文本区域，**直接带参 `taskId` 跳转进入 `PomodoroScreen` (番茄专注页)**。
+
+#### 三、 番茄专注沉浸页面 (Pomodoro Focus Screen)
+
+新建 `PomodoroScreen.kt` 及配套 ViewModel / AudioPlayerManager：
+
+1. **屏幕常亮 (Keep Screen On)**
+   - 底部提供 `[ ☀️ 开启屏幕常亮 ]` 切换胶囊按钮。
+   - 状态开启时，通过 `DisposableEffect` 对当前 Window 动态设置 `WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON`，关闭/退出页面时自动清除标记。
+
+2. **核心 UI**
+   - 沉浸式壁纸背景（深紫渐变 + 星点 Canvas）+ 顶部励志名言（8 句随机）+ 极简环形倒计时器（显示 `MM:SS`，初始值为任务设定的 `focusDurationMinutes`）。
+   - 底部控制栏：`[ 🎵 背景音 ]`、`[ ▶/⏸ 播放/暂停 ]`（放大渐变主控按钮）、`[ ↺ 重置 ]`。
+
+3. **双音源背景音乐播放器 (AudioPlayerManager)**
+   - 弹窗 BottomSheet 提供切换：`[💾 本地离线]`（读取 `res/raw` 雨声/滴答声等）与 `[🌐 在线流媒体]`（网络音频 URL）。
+   - 预置分类 Tab：`[自然音]` `[氛围音乐]` `[轻音乐]`，本地资源缺失时友好 Toast 提示而不崩溃。
+
+4. **专注统计打通**
+   - 倒计时完成（100%）时，自动写入 `focus_history` 表（包含 `taskId`, `durationMinutes`, `timestamp`）。
+   - `StatisticsScreen` 新增「番茄专注」卡片：累计专注时长 + 完成轮数 + 近 7 天专注分钟柱状图，数据实时联动。
+
+#### 数据层
+- `TaskEntity` 新增 `hasDueDate: Boolean` 与 `focusDurationMinutes: Int` 字段。
+- 新建 `FocusHistoryEntity` / `FocusHistoryDao` / `FocusHistoryRepository`（专注历史记录仓库）。
+- 数据库版本 v6 → v7 迁移：`ALTER TABLE tasks ADD COLUMN hasDueDate/focusDurationMinutes` + `CREATE TABLE focus_history`。
+- `ServiceLocator` 注册 `FocusHistoryRepository`；`StatsViewModel` 注入并扩展为 12 路 combine 流。
+
+#### 构建信息
+- versionCode: 47
+- versionName: 2.9.0
+
+---
+
+## v2.8.0
+
+### 修复 — 已完成 Tab 清空按钮、主界面冻结、DatePicker 时区、检查更新安装、小组件点击
+
+1. **已完成 Tab 清空按钮**：在【已完成】Tab 且列表非空时，于搜索框/分类 Tab 与任务列表之间显示 `已完成 (共 X 项)` + 红色 `🗑️ 清空全部` Header 行；点击弹出确认对话框清空所有已完成任务。
+2. **主界面全局冻结**：`TaskCompletionDialogActivity` 添加 `setOnDismissListener` 确保对话框关闭时 Activity 调用 `finish()`，`onDestroy` 取消协程，避免透明 Activity 拦截触摸事件。
+3. **DatePicker 时区 Bug**：Material3 DatePicker 内部按 UTC 解释时间戳，转换回 `LocalDate` 时统一使用 `ZoneId.of("UTC")`，修复默认选中昨天的时区偏移问题。
+4. **检查更新下载后不弹安装界面**：Manifest 已声明 `REQUEST_INSTALL_PACKAGES`，配置 `FileProvider` + `res/xml/file_paths.xml`，下载完成用 `content://` URI 启动 `ACTION_VIEW` 安装；检查更新图标增加旋转 Loading 动效。
+5. **小组件卡片点击无响应**：使用 `PendingIntentTemplate` 配合 `setOnClickFillInIntent`，确认后更新数据库并调用 `notifyAppWidgetViewDataChanged` 刷新。
+6. **跨应用/锁屏全屏闹钟**：Manifest 声明 `USE_FULL_SCREEN_INTENT` / `SCHEDULE_EXACT_ALARM` / `WAKE_LOCK` / `VIBRATE`，通过 `Notification.setFullScreenIntent` 实现跨应用与锁屏全屏强弹。
+
+---
+
 ## v2.1.4
 
 ### 修复 — 应用内更新无法下载 APK
