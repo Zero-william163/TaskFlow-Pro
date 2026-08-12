@@ -81,6 +81,8 @@ fun HomeScreen(
     val state by viewModel.state.collectAsState()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    // 应用级单例: 关键交互 (点击卡片主体 / 编辑图标) 时播放点击音效 (spec §2)。
+    val soundEffectManager = ServiceLocator.soundEffectManager
 
     // Bottom sheet for add/edit.
     var showAddSheet by remember { mutableStateOf(false) }
@@ -269,15 +271,17 @@ fun HomeScreen(
                     //      • edit icon (onEditClick) → task detail/edit screen
                     //      • checkbox → complete/restore toggle
                     val isCompletedTab = state.filter == HomeFilter.COMPLETED && isCompletedCard
+                    // Spec §2 交互隔离: 点击卡片主体 / 编辑图标时播放点击音效。
+                    // (checkbox 仅切换状态, 不触发音效, 保持克制。)
                     val cardClick: () -> Unit = if (isCompletedTab) {
                         { pendingDeleteTask = task }
                     } else {
-                        { onPomodoroClick(task.id) }
+                        { soundEffectManager.playClick(); onPomodoroClick(task.id) }
                     }
                     val editClick: () -> Unit = if (isCompletedTab) {
                         { pendingDeleteTask = task }
                     } else {
-                        { onTaskClick(task.id) }
+                        { soundEffectManager.playClick(); onTaskClick(task.id) }
                     }
                     val toggleClick: () -> Unit = if (isCompletedTab) {
                         { pendingDeleteTask = task }
@@ -291,6 +295,7 @@ fun HomeScreen(
                         onClick = cardClick,
                         onToggleComplete = toggleClick,
                         onEditClick = editClick,
+                        todayFocusCount = state.todayFocusCounts[task.id] ?: 0,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
                     )
                 }

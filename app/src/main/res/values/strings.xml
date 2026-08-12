@@ -167,6 +167,15 @@
     <string name="settings_general">通用</string>
     <string name="settings_appearance">外观</string>
 
+    <!-- Settings: 交互音效 -->
+    <string name="settings_sound_section">交互音效</string>
+    <string name="settings_sound_enabled">点击音效</string>
+    <string name="settings_sound_enabled_hint">在关键交互时播放轻量音效</string>
+    <string name="settings_sound_type">音效类型</string>
+    <string name="settings_sound_volume">音量</string>
+    <string name="settings_sound_preview">试听</string>
+    <string name="settings_sound_disabled_hint">已关闭所有交互音效</string>
+
     <!-- Update -->
     <string name="update_checking">正在检查更新…</string>
     <string name="update_latest">已是最新版本</string>

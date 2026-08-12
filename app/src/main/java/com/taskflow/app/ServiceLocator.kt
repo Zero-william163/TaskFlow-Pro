@@ -6,6 +6,7 @@ import com.taskflow.app.data.repository.CategoryRepository
 import com.taskflow.app.data.repository.FocusHistoryRepository
 import com.taskflow.app.data.repository.TaskRepository
 import com.taskflow.app.notification.ReminderScheduler
+import com.taskflow.app.notification.SoundEffectManager
 import com.taskflow.app.permission.PermissionManager
 import com.taskflow.app.update.UpdateChecker
 
@@ -31,6 +32,9 @@ object ServiceLocator {
         private set
     lateinit var updateChecker: UpdateChecker
         private set
+    /** 交互音效管理器: SoundPool + 合成 PCM, 应用级单例. */
+    lateinit var soundEffectManager: SoundEffectManager
+        private set
 
     fun init(context: Context) {
         if (initialized) return
@@ -44,6 +48,8 @@ object ServiceLocator {
             reminderScheduler = ReminderScheduler(app)
             permissionManager = PermissionManager(app)
             updateChecker = UpdateChecker(app)
+            // 必须在 userPreferences 之后初始化 (内部订阅偏好 Flow)
+            soundEffectManager = SoundEffectManager(app, userPreferences)
             initialized = true
         }
     }

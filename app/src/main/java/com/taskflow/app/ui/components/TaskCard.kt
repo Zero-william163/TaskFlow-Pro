@@ -3,6 +3,8 @@ package com.taskflow.app.ui.components
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -15,17 +17,22 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Edit
-import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
@@ -38,6 +45,50 @@ import com.taskflow.app.ui.theme.PriorityLow
 import com.taskflow.app.ui.theme.PriorityMedium
 import com.taskflow.app.ui.theme.PriorityNone
 
+/**
+ * Premium "scenic" gradient palettes used as card backgrounds. Each palette is a
+ * multi-stop vertical brush evoking a sky/horizon (蓝天 / 夕阳 / 云海 / 暮色),
+ * giving the card a high-end editorial look without bundling image assets.
+ *
+ * Picked deterministically from [Task.id] so the same task always shows the same
+ * scenery; a semi-transparent black overlay is layered on top to guarantee text
+ * legibility regardless of palette brightness.
+ */
+private val ScenicPalettes: List<List<Color>> = listOf(
+    // 暮色蓝 (Dusk Blue)
+    listOf(Color(0xFF1F2A44), Color(0xFF355C7D), Color(0xFF6C7A89)),
+    // 暖夕 (Warm Sunset)
+    listOf(Color(0xFF355C7D), Color(0xFFC06C84), Color(0xFFF67280)),
+    // 云海 (Cloud Sea)
+    listOf(Color(0xFF2C3E50), Color(0xFF4A6572), Color(0xFF7B8FA1)),
+    // 深紫 (Deep Violet)
+    listOf(Color(0xFF2C1A47), Color(0xFF5B2C83), Color(0xFF8E44AD)),
+    // 森林 (Forest)
+    listOf(Color(0xFF0F2027), Color(0xFF1B4332), Color(0xFF2D6A4F)),
+    // 海洋 (Ocean)
+    listOf(Color(0xFF1A2980), Color(0xFF274472), Color(0xFF41729F)),
+    // 黎明 (Dawn)
+    listOf(Color(0xFF3A1C2E), Color(0xFF7A4171), Color(0xFFC56183)),
+    // 夜空 (Night Sky)
+    listOf(Color(0xFF0B0F19), Color(0xFF1B2333), Color(0xFF2E3A59))
+)
+
+private fun pickPalette(seed: Long): List<Color> =
+    ScenicPalettes[(seed.hashCode().toLong() and Long.MAX_VALUE).toInt() % ScenicPalettes.size]
+
+/**
+ * High-end task card with a scenic gradient background + dark overlay.
+ *
+ * Layout (spec §2 任务卡片视觉全美化):
+ *  - Left column:  title (strikethrough when completed) + focusDurationMinutes
+ *  - Right column: [开始] pill (top) + 今日已专注 X 次 (bottom)
+ *  - Top-right:    grey edit icon (Icons.Outlined.Edit)
+ *
+ * Touch isolation (spec §2 交互隔离):
+ *  - Edit icon (onEditClick) → opens the edit task sheet (caller plays sound)
+ *  - Left circle checkbox (onToggleComplete) → toggles completion only
+ *  - Card body (onClick) → navigates to PomodoroScreen with taskId (caller plays sound)
+ */
 @Composable
 fun TaskCard(
     task: Task,
@@ -47,13 +98,12 @@ fun TaskCard(
     onToggleComplete: () -> Unit,
     modifier: Modifier = Modifier,
     readOnly: Boolean = false,
-    // Spec: 右上角编辑图标 — 仅点击此图标才唤起【编辑任务】弹窗。
-    // The card body (onClick) navigates to the Pomodoro focus screen instead.
-    onEditClick: (() -> Unit)? = null
+    onEditClick: (() -> Unit)? = null,
+    todayFocusCount: Int = 0
 ) {
     val completedAlpha by animateFloatAsState(
-        targetValue = if (task.isCompleted || task.isCompletedToday) 0.55f else 1f,
-        animationSpec = tween(260),
+        targetValue = if (task.isCompleted || task.isCompletedToday) 0.6f else 1f,
+        animationSpec = tween(280),
         label = "completedAlpha"
     )
     val accent: Color = when (task.priority) {
@@ -63,139 +113,210 @@ fun TaskCard(
         Priority.NONE -> PriorityNone
     }
 
-    // Recurring tasks checked off today show a "今日已完成" badge and a checked
-    // checkbox, but the task itself is NOT isCompleted — it stays alive.
     val showCompletedTodayBadge = task.isCompletedToday
     val checkboxChecked = task.isCompleted || task.isCompletedToday
-
-    // Overdue tasks (dueDate < today, not completed) get a muted grey card body
-    // + a striking red "已逾期" capsule badge next to the due time. This lowers
-    // the visual weight of stale tasks while making the overdue state unmistakable.
     val isOverdue = task.isOverdue
 
-    SoftCard(
-        modifier = modifier.fillMaxWidth(),
-        onClick = onClick
+    // Effective focus duration: per-task value, falling back to the 25-min app default.
+    val focusMinutes = if (task.focusDurationMinutes > 0) task.focusDurationMinutes else 25
+
+    val palette = remember(task.id) { pickPalette(task.id) }
+    val scenicBrush = remember(palette) {
+        Brush.verticalGradient(
+            colors = palette,
+            startY = 0f,
+            endY = Float.POSITIVE_INFINITY
+        )
+    }
+    // Semi-transparent black gradient (top faint → bottom strong) so white text
+    // stays legible over any palette (spec: 叠加半透明黑色渐变).
+    val overlayBrush = Brush.verticalGradient(
+        colors = listOf(
+            Color.Black.copy(alpha = 0.18f),
+            Color.Black.copy(alpha = 0.32f),
+            Color.Black.copy(alpha = 0.55f)
+        )
+    )
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .shadow(
+                elevation = 8.dp,
+                shape = RoundedCornerShape(18.dp),
+                ambientColor = Color.Black.copy(alpha = 0.10f),
+                spotColor = Color.Black.copy(alpha = 0.18f)
+            )
+            .clip(RoundedCornerShape(18.dp))
+            .background(scenicBrush)
+            .then(if (!readOnly) Modifier.clickable { onClick() } else Modifier)
     ) {
+        // Dark legibility overlay
+        Box(Modifier.matchParentSize().background(overlayBrush))
+
+        // Priority accent strip on the leading edge
+        Box(
+            Modifier
+                .align(Alignment.CenterStart)
+                .width(4.dp)
+                .height(72.dp)
+                .background(
+                    if (isOverdue) PriorityHigh.copy(alpha = 0.85f)
+                    else accent.copy(alpha = 0.9f)
+                )
+        )
+
         Row(
             modifier = Modifier
-                .padding(16.dp)
-                .then(if (isOverdue) Modifier.background(Color(0xFFF2F2F4)) else Modifier),
+                .fillMaxWidth()
+                .padding(start = 18.dp, end = 14.dp, top = 16.dp, bottom = 16.dp),
             verticalAlignment = Alignment.Top
         ) {
-            Box(
-                Modifier
-                    .width(4.dp)
-                    .height(46.dp)
-                    .clip(RoundedCornerShape(50))
-                    .background(if (isOverdue) Color(0xFFB0B3BC) else accent)
-            )
-            Spacer(Modifier.width(14.dp))
+            // ===== Left column: checkbox + title (top), focus duration (bottom) =====
             Column(Modifier.weight(1f)) {
-                Text(
-                    text = task.title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = if (isOverdue) MaterialTheme.colorScheme.onSurfaceVariant
-                    else MaterialTheme.colorScheme.onSurface,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    textDecoration = if (task.isCompleted) TextDecoration.LineThrough else TextDecoration.None,
-                    modifier = Modifier.alpha(completedAlpha)
-                )
-                if (task.description.isNotBlank()) {
-                    Spacer(Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (!readOnly) {
+                        TaskCheckbox(
+                            checked = checkboxChecked,
+                            onCheckedChange = { onToggleComplete() }
+                        )
+                        Spacer(Modifier.width(10.dp))
+                    }
                     Text(
-                        text = task.description,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        text = task.title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
+                        textDecoration = if (task.isCompleted) TextDecoration.LineThrough
+                        else TextDecoration.None,
                         modifier = Modifier.alpha(completedAlpha)
                     )
                 }
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(12.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Outlined.Timer,
+                        contentDescription = null,
+                        tint = Color.White.copy(alpha = 0.85f),
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        text = "$focusMinutes 分钟",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color.White.copy(alpha = 0.9f),
+                        fontWeight = FontWeight.Medium
+                    )
                     if (categoryName.isNotBlank()) {
-                        TagChip(text = categoryName, color = categoryColor)
-                        Spacer(Modifier.width(8.dp))
+                        Spacer(Modifier.width(10.dp))
+                        // Inline tag chip adapted to the dark scenic background
+                        Surface(
+                            shape = RoundedCornerShape(50),
+                            color = Color.White.copy(alpha = 0.18f)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                            ) {
+                                PriorityDot(color = categoryColor, size = 6)
+                                Spacer(Modifier.width(4.dp))
+                                Text(
+                                    text = categoryName,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
                     }
                     if (showCompletedTodayBadge) {
-                        // Green capsule badge for recurring tasks checked off today
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(50))
-                                .background(Color(0xFF4CAF50).copy(alpha = 0.15f))
-                                .padding(horizontal = 8.dp, vertical = 2.dp)
+                        Spacer(Modifier.width(8.dp))
+                        Surface(
+                            shape = RoundedCornerShape(50),
+                            color = Color(0xFF4CAF50).copy(alpha = 0.85f)
                         ) {
                             Text(
                                 text = "今日已完成",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = Color(0xFF2E7D32),
-                                fontWeight = FontWeight.Medium
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
                             )
                         }
-                        Spacer(Modifier.width(8.dp))
                     }
                     if (isOverdue) {
-                        // Striking red capsule badge for overdue tasks.
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(50))
-                                .background(Color(0xFFFF4D4F).copy(alpha = 0.15f))
-                                .padding(horizontal = 8.dp, vertical = 2.dp)
+                        Spacer(Modifier.width(8.dp))
+                        Surface(
+                            shape = RoundedCornerShape(50),
+                            color = Color(0xFFFF4D4F).copy(alpha = 0.9f)
                         ) {
                             Text(
                                 text = "已逾期",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = Color(0xFFFF4D4F),
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                        Spacer(Modifier.width(8.dp))
-                    }
-                    task.dueDate?.let { due ->
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Outlined.Schedule,
-                                contentDescription = null,
-                                tint = if (isOverdue) PriorityHigh
-                                else MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Spacer(Modifier.width(4.dp))
-                            Text(
-                                text = Format.describeDueShort(due),
-                                style = MaterialTheme.typography.labelMedium,
-                                color = if (isOverdue) PriorityHigh
-                                else MaterialTheme.colorScheme.onSurfaceVariant
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
                             )
                         }
                     }
                 }
             }
+
             Spacer(Modifier.width(12.dp))
-            if (!readOnly) {
-                // 右上角编辑图标：仅点击此图标才唤起【编辑任务】弹窗 (spec)。
-                // IconButton consumes its own click so it does NOT trigger the
-                // card-body onClick (Pomodoro navigation).
-                if (onEditClick != null) {
-                    IconButton(
-                        onClick = onEditClick,
-                        modifier = Modifier.size(36.dp)
+
+            // ===== Right column: 开始 pill (top), 今日已专注 X 次 (bottom) =====
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.height(72.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(50),
+                    color = Color.White.copy(alpha = 0.22f)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.Outlined.Edit,
-                            contentDescription = "编辑任务",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(20.dp)
+                            imageVector = Icons.Outlined.PlayArrow,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            text = "开始",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = Color.White,
+                            fontWeight = FontWeight.SemiBold
                         )
                     }
-                    Spacer(Modifier.width(4.dp))
                 }
-                TaskCheckbox(
-                    checked = checkboxChecked,
-                    onCheckedChange = { onToggleComplete() }
+                Text(
+                    text = "今日已专注 $todayFocusCount 次",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White.copy(alpha = 0.8f)
+                )
+            }
+        }
+
+        // ===== Top-right edit icon (interaction-isolated from card body) =====
+        if (!readOnly && onEditClick != null) {
+            IconButton(
+                onClick = onEditClick,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 2.dp, end = 2.dp)
+                    .size(36.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Edit,
+                    contentDescription = "编辑任务",
+                    tint = Color.White.copy(alpha = 0.85f),
+                    modifier = Modifier.size(18.dp)
                 )
             }
         }

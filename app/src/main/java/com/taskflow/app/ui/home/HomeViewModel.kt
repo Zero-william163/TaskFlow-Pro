@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.taskflow.app.data.model.Category
 import com.taskflow.app.data.model.Task
 import com.taskflow.app.data.repository.CategoryRepository
+import com.taskflow.app.data.repository.FocusHistoryRepository
 import com.taskflow.app.data.repository.TaskRepository
 import com.taskflow.app.notification.ReminderScheduler
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,7 +25,10 @@ data class HomeUiState(
     val categories: Map<Long, Category> = emptyMap(),
     val filter: HomeFilter = HomeFilter.ALL,
     val query: String = "",
-    val pendingCount: Int = 0
+    val pendingCount: Int = 0,
+    /** Per-task completed Pomodoro sessions today (taskId → count). Drives the
+     *  card's "今日已专注 X 次" subtitle (spec §2 任务卡片视觉全美化). */
+    val todayFocusCounts: Map<Long, Int> = emptyMap()
 ) {
     /**
      * Filtered task list with recurring-task awareness:
@@ -92,7 +96,8 @@ data class HomeUiState(
 class HomeViewModel(
     private val taskRepository: TaskRepository,
     private val categoryRepository: CategoryRepository,
-    private val reminderScheduler: ReminderScheduler
+    private val reminderScheduler: ReminderScheduler,
+    private val focusHistoryRepository: FocusHistoryRepository
 ) : ViewModel() {
 
     private val filter = MutableStateFlow(HomeFilter.ALL)
@@ -103,14 +108,17 @@ class HomeViewModel(
             taskRepository.observeAll(),
             categoryRepository.observeAll(),
             filter,
-            query
-        ) { tasks, categories, f, q ->
+            query,
+            // 今日每任务已完成专注次数 (taskId → count)，驱动卡片「今日已专注 X 次」。
+            focusHistoryRepository.observeTodayFocusCounts(LocalDate.now().toString())
+        ) { tasks, categories, f, q, focusCounts ->
             HomeUiState(
                 tasks = tasks,
                 categories = categories.associateBy { it.id },
                 filter = f,
                 query = q,
-                pendingCount = tasks.count { !it.isCompleted }
+                pendingCount = tasks.count { !it.isCompleted },
+                todayFocusCounts = focusCounts.associate { it.taskId to it.cnt }
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), HomeUiState())
 

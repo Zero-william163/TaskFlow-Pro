@@ -51,6 +51,35 @@ class JSDelivrSource : UpdateSource {
     }
 }
 
+/**
+ * Reads release.json from GitHub Raw through the gh-proxy.com domestic mirror.
+ * Bypasses both the raw.githubusercontent.com Great-Firewall block AND the
+ * jsDelivr CDN multi-day cache, so domestic users always see the real latest
+ * version within minutes of a push.
+ */
+class GhProxyRawSource : UpdateSource {
+    override fun fetch(client: OkHttpClient): UpdateInfo? {
+        val text = client.getBody(UpdateConfig.ghProxyRawUrl()) ?: return null
+        return parseReleaseJson(text)
+    }
+}
+
+/** Same as [GhProxyRawSource] but using the ghfast.top CDN mirror. */
+class GhFastRawSource : UpdateSource {
+    override fun fetch(client: OkHttpClient): UpdateInfo? {
+        val text = client.getBody(UpdateConfig.ghFastRawUrl()) ?: return null
+        return parseReleaseJson(text)
+    }
+}
+
+/** Same as [GhProxyRawSource] but using the gh-proxy.org mirror. */
+class GhProxyOrgRawSource : UpdateSource {
+    override fun fetch(client: OkHttpClient): UpdateInfo? {
+        val text = client.getBody(UpdateConfig.ghProxyOrgRawUrl()) ?: return null
+        return parseReleaseJson(text)
+    }
+}
+
 /** Queries the GitHub Releases API and maps the latest release to [UpdateInfo]. */
 class GitHubApiSource : UpdateSource {
     override fun fetch(client: OkHttpClient): UpdateInfo? {

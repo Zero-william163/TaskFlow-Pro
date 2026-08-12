@@ -4,7 +4,9 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -12,23 +14,30 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.Brightness6
 import androidx.compose.material.icons.outlined.Code
+import androidx.compose.material.icons.outlined.GraphicEq
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material.icons.outlined.SystemUpdate
+import androidx.compose.material.icons.outlined.VolumeUp
 import androidx.compose.material.icons.outlined.Widgets
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Switch
@@ -41,6 +50,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -49,6 +60,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.taskflow.app.R
+import com.taskflow.app.data.preferences.SoundType
 import com.taskflow.app.data.preferences.ThemeMode
 import com.taskflow.app.ui.AppViewModelFactory
 import com.taskflow.app.ui.components.SectionTitle
@@ -91,6 +103,8 @@ fun SettingsScreen(
 
     var showWidgetGuideDialog by remember { mutableStateOf(false) }
     var widgetGuideMessage by remember { mutableStateOf("") }
+    // 音效类型选择弹窗
+    var showSoundTypeDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -137,6 +151,111 @@ fun SettingsScreen(
                         Spacer(Modifier.width(8.dp))
                         Text(label)
                     }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        // ====== 交互音效模块 (SoundEffectManager) ======
+        // 总开关 + 类型选择 (木鱼/轴体/气泡/滴答) + 音量滑块 + 试听。
+        // 关键交互触发点 (点击编辑图标、进入专注页) 时由各页面调用
+        // SoundEffectManager.playClick() 实际播放。
+        SectionTitle(stringResource(R.string.settings_sound_section))
+        SoftCard(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp)) {
+                // 总开关
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Outlined.GraphicEq,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            text = stringResource(R.string.settings_sound_enabled),
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        Text(
+                            text = stringResource(R.string.settings_sound_enabled_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(checked = state.soundEnabled, onCheckedChange = viewModel::setSoundEnabled)
+                }
+
+                if (state.soundEnabled) {
+                    Spacer(Modifier.height(16.dp))
+
+                    // 音效类型 (FilterChip 选择 + 试听)
+                    Text(
+                        text = stringResource(R.string.settings_sound_type),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        SoundType.entries.forEach { st ->
+                            FilterChip(
+                                selected = state.soundType == st,
+                                onClick = {
+                                    viewModel.setSoundType(st)
+                                    // 点击即试听该音效
+                                    viewModel.previewSound(st)
+                                },
+                                label = { Text(st.label) }
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(16.dp))
+
+                    // 音量滑块
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Outlined.VolumeUp,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = "${state.soundVolume}%",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.width(48.dp)
+                        )
+                        Slider(
+                            value = state.soundVolume.toFloat(),
+                            onValueChange = { viewModel.setSoundVolume(it.toInt()) },
+                            valueRange = 0f..100f,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        TextButton(
+                            onClick = { viewModel.previewSound(state.soundType) }
+                        ) {
+                            Text(stringResource(R.string.settings_sound_preview))
+                        }
+                    }
+                } else {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = stringResource(R.string.settings_sound_disabled_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }

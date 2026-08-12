@@ -45,7 +45,25 @@ interface FocusHistoryDao {
 
     @Query("DELETE FROM focus_history WHERE taskId = :taskId")
     suspend fun deleteForTask(taskId: Long)
+
+    /**
+     * Per-task completed-session count for [today] ("YYYY-MM-DD"). Used by the
+     * task card to render "今日已专注 X 次". Grouped by taskId so the UI can fold
+     * the result into a Map<Long, Int>.
+     */
+    @Query(
+        """
+        SELECT taskId AS taskId, COUNT(*) AS cnt
+        FROM focus_history
+        WHERE date(timestamp/1000, 'unixepoch') = :today
+        GROUP BY taskId
+        """
+    )
+    fun observeTodayFocusCounts(today: String): Flow<List<TaskFocusCount>>
 }
+
+/** One task's completed-session count for a given day. */
+data class TaskFocusCount(val taskId: Long, val cnt: Int)
 
 /** One day's total focused minutes. `day` is "YYYY-MM-DD". */
 data class DailyFocusMinutes(val day: String, val minutes: Int)

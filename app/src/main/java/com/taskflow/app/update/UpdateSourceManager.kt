@@ -59,12 +59,29 @@ class UpdateSourceManager {
      * stops at the first success — it probes ALL sources and returns the
      * HIGHEST version found, preventing "downgrade" prompts when a domestic
      * mirror is out of date.
+     *
+     * Domestic users get the three GH-proxy-wrapped raw sources (gh-proxy.com,
+     * ghfast.top, gh-proxy.org) early, because raw.githubusercontent.com is
+     * blocked in China and jsDelivr caches branch files for up to 7 days —
+     * using proxy mirrors lets domestic users immediately see new releases
+     * without waiting for CDN invalidation.
      */
     fun getSortedSources(isDomestic: Boolean): List<UpdateSource> =
         if (isDomestic) {
-            listOf(GitHubApiSource(), GiteeApiSource(), GitHubRawSource(), GiteeRawSource(), JSDelivrSource())
+            listOf(
+                GitHubApiSource(),
+                GhProxyRawSource(), GhFastRawSource(), GhProxyOrgRawSource(),
+                GiteeApiSource(),
+                GitHubRawSource(), GiteeRawSource(),
+                JSDelivrSource()
+            )
         } else {
-            listOf(GitHubApiSource(), GitHubRawSource(), JSDelivrSource(), GiteeApiSource(), GiteeRawSource())
+            listOf(
+                GitHubApiSource(),
+                GitHubRawSource(), JSDelivrSource(),
+                GhProxyRawSource(), GhFastRawSource(), GhProxyOrgRawSource(),
+                GiteeApiSource(), GiteeRawSource()
+            )
         }
 
     /**

@@ -23,7 +23,7 @@ object AppViewModelFactory : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         return when {
             modelClass.isAssignableFrom(HomeViewModel::class.java) ->
-                HomeViewModel(locator.taskRepository, locator.categoryRepository, locator.reminderScheduler) as T
+                HomeViewModel(locator.taskRepository, locator.categoryRepository, locator.reminderScheduler, locator.focusHistoryRepository) as T
             modelClass.isAssignableFrom(TaskViewModel::class.java) ->
                 TaskViewModel(locator.taskRepository, locator.categoryRepository, locator.reminderScheduler) as T
             modelClass.isAssignableFrom(CalendarViewModel::class.java) ->
@@ -31,7 +31,7 @@ object AppViewModelFactory : ViewModelProvider.Factory {
             modelClass.isAssignableFrom(StatsViewModel::class.java) ->
                 StatsViewModel(locator.taskRepository, locator.categoryRepository, locator.focusHistoryRepository) as T
             modelClass.isAssignableFrom(SettingsViewModel::class.java) ->
-                SettingsViewModel(locator.userPreferences, locator.updateChecker) as T
+                SettingsViewModel(locator.userPreferences, locator.updateChecker, locator.soundEffectManager) as T
             modelClass.isAssignableFrom(UpdateViewModel::class.java) ->
                 UpdateViewModel(locator.updateChecker, locator.userPreferences) as T
             modelClass.isAssignableFrom(PermissionViewModel::class.java) ->

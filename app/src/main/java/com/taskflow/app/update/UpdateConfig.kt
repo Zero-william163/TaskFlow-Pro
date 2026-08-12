@@ -29,6 +29,18 @@ object UpdateConfig {
     fun jsDelivrUrl(file: String = RELEASE_FILE): String =
         "https://cdn.jsdelivr.net/gh/$GITHUB_OWNER/$GITHUB_REPO@$DEFAULT_BRANCH/$file"
 
+    /** GitHub Raw file wrapped by gh-proxy.com (domestic-accessible mirror, no CDN cache). */
+    fun ghProxyRawUrl(file: String = RELEASE_FILE): String =
+        "https://gh-proxy.com/https://raw.githubusercontent.com/$GITHUB_OWNER/$GITHUB_REPO/$DEFAULT_BRANCH/$file"
+
+    /** GitHub Raw file wrapped by ghfast.top (domestic-accessible, no cache). */
+    fun ghFastRawUrl(file: String = RELEASE_FILE): String =
+        "https://ghfast.top/https://raw.githubusercontent.com/$GITHUB_OWNER/$GITHUB_REPO/$DEFAULT_BRANCH/$file"
+
+    /** GitHub Raw file wrapped by gh-proxy.org (domestic fallback). */
+    fun ghProxyOrgRawUrl(file: String = RELEASE_FILE): String =
+        "https://gh-proxy.org/https://raw.githubusercontent.com/$GITHUB_OWNER/$GITHUB_REPO/$DEFAULT_BRANCH/$file"
+
     /** GitHub Releases API (latest). */
     fun githubApiUrl(): String =
         "https://api.github.com/repos/$GITHUB_OWNER/$GITHUB_REPO/releases/latest"

@@ -5,6 +5,7 @@ import com.taskflow.app.data.local.DailyFocusMinutes
 import com.taskflow.app.data.local.FocusHistoryDao
 import com.taskflow.app.data.local.FocusHistoryEntity
 import com.taskflow.app.data.local.TaskDatabase
+import com.taskflow.app.data.local.TaskFocusCount
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -25,6 +26,13 @@ class FocusHistoryRepository private constructor(
     /** Daily focus minutes (oldest first) for the Stats trend chart. */
     fun observeDailyFocusMinutes(): Flow<List<DailyFocusMinutes>> =
         dao.observeDailyFocusMinutes()
+
+    /**
+     * Per-task completed-session count for [today] ("YYYY-MM-DD"). Used by the
+     * task card to render "今日已专注 X 次".
+     */
+    fun observeTodayFocusCounts(today: String): Flow<List<TaskFocusCount>> =
+        dao.observeTodayFocusCounts(today)
 
     /**
      * Persist a completed session. Called when the Pomodoro ring timer reaches
