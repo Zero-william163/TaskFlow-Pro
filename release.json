@@ -1,25 +1,25 @@
 {
-  "version": "2.8.0",
-  "code": 46,
-  "versionTag": "v2.8.0",
-  "log": "## v2.8.0 更新内容\n\n### 闹钟系统三大核心重构\n\n#### 一、已完成/提前打卡任务不响铃 (Alarm Suppression)\n- **方案 A（主动取消）**：完成任务时同步调用 AlarmManager.cancel 取消今日闹钟\n  - 非重复任务完成 → 取消闹钟；取消完成 → 重新注册闹钟\n  - 周期任务今日打卡 → 取消今日闹钟 + 自动注册下一个设定日期的闹钟\n  - 周期任务取消打卡 → 恢复今日闹钟\n- **方案 B（Receiver 校验拦截）**：AlarmReceiver 响铃前优先查询数据库\n  - isCompleted == true → 丢弃，不响铃\n  - 周期任务 lastCompletedDate == 今天 → 丢弃，不响铃\n- **Service 层安全网**：AlarmService.handleStartAlarm 再次过滤已完成任务\n\n#### 二、同一时间多个闹钟合并提醒 (Alarm Aggregation)\n- AlarmReceiver 触发时查询所有同一时刻(同 hour:minute)设定的未完成任务\n- 通过 EXTRA_TASK_IDS 数组传递给 AlarmService → AlarmActivity\n- 全屏 UI 同时列出所有任务名称（1. 开会 2. 提交日报）\n- 新增【全部完成】按钮，一键处理该时间段所有任务\n- AlarmActionReceiver 兼容单任务/多任务 EXTRA_TASK_IDS\n\n#### 三、跨应用/后台弹出全屏闹钟 (Full-Screen Alarm Over Apps)\n- Manifest: USE_FULL_SCREEN_INTENT + SCHEDULE_EXACT_ALARM 权限已就绪\n- AlarmActivity: showWhenLocked + turnScreenOn + singleTop + excludeFromRecents\n- onCreate: setShowWhenLocked/setTurnScreenOn + KeyguardManager.requestDismissKeyguard\n- AlarmService: NotificationCompat setFullScreenIntent(contentPi, true) + PRIORITY_MAX + CATEGORY_ALARM\n- 通知 Body 使用 BigTextStyle 展示合并后的任务名列表\n\n### 已完成 Tab「清空已完成」精修\n- 对话框标题改为「清空已完成任务」\n- 对话框内容改为「确定要彻底删除所有已完成的任务记录吗？此操作无法撤销。」\n- 确认按钮改为「彻底删除」（红色破坏性样式）\n- 删除成功后弹出 Toast「已清空所有已完成任务」\n- 新增 TaskDao.clearAllCompletedTasks() 别名方法\n\n### 构建信息\n- versionCode: 46\n- versionName: 2.8.0\n",
-  "apk": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.8.0/taskflow-v2.8.0.apk",
-  "sha256": "dcc1928525bb0526fdddf9c7c0ca6d8a75d94704c2a9bd2386bcce779ae464bb",
-  "size": 46521707,
+  "version": "2.9.0",
+  "code": 47,
+  "versionTag": "v2.9.0",
+  "log": "\n### 新增 — 番茄专注沉浸模式 + 已完成全选删除 + 表单默认值变更 + 任务卡片交互分流\n\n#### 一、 紧急修复项与表单默认值变更 (Form & UI Fixes)\n\n1. **【已完成】Tab 强制渲染「清空全部」工具栏**\n   - 在 Completed Task 列表顶部 Header 行渲染：左侧 `已完成 (X项)`、右侧 `🗑️ 清空全部` 按钮。\n   - 点击弹出 M3 确认弹窗，确认后执行 DAO `DELETE FROM task_table WHERE isCompleted = 1`。\n   - 在【已完成】Tab 下点击卡片禁用编辑，弹窗提示「确定彻底删除该任务？」，确认后单条删除。\n\n2. **DatePicker 数字裁剪 Bug**\n   - 给 `DatePickerDialog` 显式添加 `properties = DialogProperties(usePlatformDefaultWidth = false)`，确保右侧网格数字（14/21/28）完全无遮挡展示。\n\n3. **截止日期（DueDate）改为【可选项】**\n   - `TaskEntity` 增加 `hasDueDate: Boolean = false`。\n   - 表单中增加开关：**默认关闭（不设截止日期，从开始日期起无限期执行）**。开启后方可选择具体截止日期。\n\n4. **提醒时间与模式默认值修正**\n   - 提醒时间默认开关设为 `isReminderEnabled = true`（开启）。\n   - 提醒频率默认选项修改为 **「每日」** (`ReminderMode.DAILY`)。\n\n5. **自定义分类 & 颜色 (Custom Category)**\n   - 分类 Chip 末尾增加 `＋ 自定义` 按钮，点击弹窗包含：名称输入框（限 6 字）+ 莫兰迪色系调色盘（10 色）。保存后存入 `CategoryEntity` 并自动选中。\n   - 长按自定义分类 Chip 可删除（系统弹窗确认），内置分类不可删除。\n\n6. **专注时长配置**\n   - `TaskEntity` 增加 `focusDurationMinutes: Int = 25`。表单提供 FilterChips：`[10分]` `[25分(默认)]` `[35分]` `[⚙️自定义]`。\n\n#### 二、 任务卡片交互分流 (Card Touch Zones)\n\n1. **右侧 Checkbox**：仅触发任务完成/恢复状态切换。\n2. **右上角编辑图标 (新增)**：渲染 `Icons.Outlined.Edit` 按钮，**仅点击此图标才唤起【编辑任务】弹窗**。\n3. **卡片主体 (Card Body)**：点击卡片空白/文本区域，**直接带参 `taskId` 跳转进入 `PomodoroScreen` (番茄专注页)**。\n\n#### 三、 番茄专注沉浸页面 (Pomodoro Focus Screen)\n\n新建 `PomodoroScreen.kt` 及配套 ViewModel / AudioPlayerManager：\n\n1. **屏幕常亮 (Keep Screen On)**\n   - 底部提供 `[ ☀️ 开启屏幕常亮 ]` 切换胶囊按钮。\n   - 状态开启时，通过 `DisposableEffect` 对当前 Window 动态设置 `WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON`，关闭/退出页面时自动清除标记。\n\n2. **核心 UI**\n   - 沉浸式壁纸背景（深紫渐变 + 星点 Canvas）+ 顶部励志名言（8 句随机）+ 极简环形倒计时器（显示 `MM:SS`，初始值为任务设定的 `focusDurationMinutes`）。\n   - 底部控制栏：`[ 🎵 背景音 ]`、`[ ▶/⏸ 播放/暂停 ]`（放大渐变主控按钮）、`[ ↺ 重置 ]`。\n\n3. **双音源背景音乐播放器 (AudioPlayerManager)**\n   - 弹窗 BottomSheet 提供切换：`[💾 本地离线]`（读取 `res/raw` 雨声/滴答声等）与 `[🌐 在线流媒体]`（网络音频 URL）。\n   - 预置分类 Tab：`[自然音]` `[氛围音乐]` `[轻音乐]`，本地资源缺失时友好 Toast 提示而不崩溃。\n\n4. **专注统计打通**\n   - 倒计时完成（100%）时，自动写入 `focus_history` 表（包含 `taskId`, `durationMinutes`, `timestamp`）。\n   - `StatisticsScreen` 新增「番茄专注」卡片：累计专注时长 + 完成轮数 + 近 7 天专注分钟柱状图，数据实时联动。\n\n#### 数据层\n- `TaskEntity` 新增 `hasDueDate: Boolean` 与 `focusDurationMinutes: Int` 字段。\n- 新建 `FocusHistoryEntity` / `FocusHistoryDao` / `FocusHistoryRepository`（专注历史记录仓库）。\n- 数据库版本 v6 → v7 迁移：`ALTER TABLE tasks ADD COLUMN hasDueDate/focusDurationMinutes` + `CREATE TABLE focus_history`。\n- `ServiceLocator` 注册 `FocusHistoryRepository`；`StatsViewModel` 注入并扩展为 12 路 combine 流。\n\n#### 构建信息\n- versionCode: 47\n- versionName: 2.9.0\n\n---\n\n",
+  "apk": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.9.0/taskflow-v2.9.0.apk",
+  "sha256": "1349bec6f398f23bad766c5f7b3b1877aceead255c4138563f89720e9aa2c699",
+  "size": 46718315,
   "downloadUrls": [
     {
       "name": "GH Proxy",
-      "url": "https://gh-proxy.com/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.8.0/taskflow-v2.8.0.apk",
+      "url": "https://gh-proxy.com/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.9.0/taskflow-v2.9.0.apk",
       "region": "domestic"
     },
     {
       "name": "GH Fast",
-      "url": "https://ghfast.top/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.8.0/taskflow-v2.8.0.apk",
+      "url": "https://ghfast.top/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.9.0/taskflow-v2.9.0.apk",
       "region": "cdn"
     },
     {
       "name": "GitHub",
-      "url": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.8.0/taskflow-v2.8.0.apk",
+      "url": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.9.0/taskflow-v2.9.0.apk",
       "region": "international"
     }
   ]
