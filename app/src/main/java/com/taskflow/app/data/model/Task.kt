@@ -76,7 +76,13 @@ data class Task(
      * Pomodoro focus duration in minutes. Drives the initial ring-timer value on
      * the Pomodoro focus screen. 0 = use app default (25 min).
      */
-    val focusDurationMinutes: Int = 0
+    val focusDurationMinutes: Int = 0,
+    /**
+     * Maximum allowed pause duration (in minutes) when the user hits "暂停" on
+     * the Pomodoro screen. A countdown dialog enforces this limit to avoid
+     * breaking focus flow with overly long breaks. 0 = use app default (2 min).
+     */
+    val pauseLimitMinutes: Int = 0
 ) {
     val hasReminder: Boolean get() = reminderTime != null
 

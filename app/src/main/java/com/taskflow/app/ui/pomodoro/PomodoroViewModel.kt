@@ -19,6 +19,15 @@ import kotlinx.coroutines.launch
  * not AlarmManager, so it pauses cleanly with the screen) and persists a
  * completed session to `focus_history` when the ring reaches 100%.
  *
+ * Behavior added in the focus-engine refactor:
+ * - **Auto-start**: as soon as the task loads, the focus countdown begins
+ *   automatically (spec: 只要从主页/小组件点击卡片主体进入 PomodoroScreen,
+ *   专注倒计时自动开启).
+ * - **Pause-limit timer**: when the user hits "暂停", a separate countdown
+ *   (driven by [Task.pauseLimitMinutes]) starts and the UI shows a modal. When
+ *   the pause-limit hits 0 the focus auto-resumes so the user can't stall
+ *   indefinitely (spec: 倒计时过程中点击"暂停"按钮, 立即弹窗显示暂停限制倒计时).
+ *
  * @param taskId the task being focused on (used to load title + duration and
  *   to tag the recorded focus session).
  */
@@ -35,13 +44,23 @@ class PomodoroViewModel(
         val isRunning: Boolean = false,
         val completed: Boolean = false,
         val keepScreenOn: Boolean = false,
-        val sessionsCompleted: Int = 0
+        val sessionsCompleted: Int = 0,
+        // ====== Pause-limit timer state ======
+        /** Total pause seconds allowed (read from Task.pauseLimitMinutes). */
+        val pauseLimitTotalSeconds: Int = 2 * 60,
+        /** Remaining pause seconds in the current pause window. */
+        val pauseRemainingSeconds: Int = 2 * 60,
+        /** True while the pause-limit countdown is active (modal shown). */
+        val isPausing: Boolean = false,
+        /** True once the initial task load + auto-start has fired. */
+        val initialized: Boolean = false
     )
 
     private val _state = MutableStateFlow(UiState())
     val state: StateFlow<UiState> = _state.asStateFlow()
 
     private var tickJob: Job? = null
+    private var pauseJob: Job? = null
 
     init {
         loadTask()
@@ -50,21 +69,34 @@ class PomodoroViewModel(
     private fun loadTask() {
         viewModelScope.launch {
             val task: Task? = taskRepository.getTask(taskId)
-            val minutes = task?.focusDurationMinutes?.takeIf { it > 0 } ?: 25
-            val secs = minutes * 60
+            val focusMinutes = task?.focusDurationMinutes?.takeIf { it > 0 } ?: 25
+            val pauseMinutes = task?.pauseLimitMinutes?.takeIf { it > 0 } ?: 2
+            val focusSecs = focusMinutes * 60
+            val pauseSecs = pauseMinutes * 60
             _state.update {
                 it.copy(
                     taskTitle = task?.title?.ifBlank { "专注" } ?: "专注",
-                    totalSeconds = secs,
-                    remainingSeconds = secs
+                    totalSeconds = focusSecs,
+                    remainingSeconds = focusSecs,
+                    pauseLimitTotalSeconds = pauseSecs,
+                    pauseRemainingSeconds = pauseSecs,
+                    initialized = true
                 )
             }
+            // ====== Auto-start (spec: 进页自动倒计时 Auto-Start) ======
+            // Only fire once, right after the task loads.
+            start()
         }
     }
 
     fun toggleRunning() {
         if (_state.value.completed) return
-        if (_state.value.isRunning) pause() else start()
+        if (_state.value.isRunning) {
+            // ====== Pause → open the pause-limit modal + start its countdown ======
+            beginPause()
+        } else {
+            resumeFromPause()
+        }
     }
 
     private fun start() {
@@ -81,18 +113,57 @@ class PomodoroViewModel(
         }
     }
 
-    private fun pause() {
-        _state.update { it.copy(isRunning = false) }
+    /**
+     * Pause the focus countdown and immediately open the pause-limit modal
+     * with a fresh countdown (read from [UiState.pauseLimitTotalSeconds]).
+     */
+    private fun beginPause() {
+        _state.update {
+            it.copy(
+                isRunning = false,
+                isPausing = true,
+                pauseRemainingSeconds = it.pauseLimitTotalSeconds
+            )
+        }
         tickJob?.cancel()
+        pauseJob?.cancel()
+        pauseJob = viewModelScope.launch {
+            while (_state.value.isPausing && _state.value.pauseRemainingSeconds > 0) {
+                delay(1000L)
+                _state.update { it.copy(pauseRemainingSeconds = it.pauseRemainingSeconds - 1) }
+            }
+            // Pause-limit expired → auto-resume focus so the user can't stall.
+            if (_state.value.pauseRemainingSeconds <= 0) {
+                resumeFromPause()
+            }
+        }
+    }
+
+    /**
+     * Manually resume focus from the pause modal (user tapped "▶ 继续专注").
+     * Also invoked automatically when the pause-limit countdown hits 0.
+     */
+    fun resumeFromPause() {
+        pauseJob?.cancel()
+        _state.update {
+            it.copy(
+                isPausing = false,
+                pauseRemainingSeconds = it.pauseLimitTotalSeconds
+            )
+        }
+        start()
     }
 
     fun reset() {
         tickJob?.cancel()
+        pauseJob?.cancel()
         _state.update {
             it.copy(
                 isRunning = false,
+                isPausing = false,
                 completed = false,
-                remainingSeconds = it.totalSeconds
+                remainingSeconds = it.totalSeconds,
+                pauseRemainingSeconds = it.pauseLimitTotalSeconds
             )
         }
     }
@@ -125,6 +196,7 @@ class PomodoroViewModel(
     override fun onCleared() {
         super.onCleared()
         tickJob?.cancel()
+        pauseJob?.cancel()
     }
 
     companion object {

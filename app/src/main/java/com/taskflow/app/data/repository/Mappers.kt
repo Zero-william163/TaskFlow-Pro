@@ -29,7 +29,8 @@ internal fun TaskEntity.toDomain(): Task = Task(
     lastCompletedDate = lastCompletedDate,
     nextDueDate = nextDueDate,
     hasDueDate = hasDueDate,
-    focusDurationMinutes = focusDurationMinutes
+    focusDurationMinutes = focusDurationMinutes,
+    pauseLimitMinutes = pauseLimitMinutes
 )
 
 internal fun Task.toEntity(): TaskEntity = TaskEntity(
@@ -55,7 +56,8 @@ internal fun Task.toEntity(): TaskEntity = TaskEntity(
     lastCompletedDate = lastCompletedDate,
     nextDueDate = nextDueDate,
     hasDueDate = hasDueDate,
-    focusDurationMinutes = focusDurationMinutes
+    focusDurationMinutes = focusDurationMinutes,
+    pauseLimitMinutes = pauseLimitMinutes
 )
 
 internal fun CategoryEntity.toDomain(): Category = Category(

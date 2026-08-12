@@ -164,6 +164,15 @@ fun AddEditTaskSheet(
     }
     var showFocusDurationDialog by remember { mutableStateOf(false) }
 
+    // Pomodoro pause-limit duration (spec: 默认 2 分, 暂停限制时长).
+    // 0 on existing tasks falls back to 2 in the UI/Pomodoro screen; the form
+    // offers 1/2/5/自定义 chips. When the user hits "暂停" on the focus screen,
+    // a countdown dialog enforces this limit to avoid breaking focus flow.
+    var pauseLimitMinutes by remember(task) {
+        mutableStateOf(task?.pauseLimitMinutes?.takeIf { it > 0 } ?: 2)
+    }
+    var showPauseLimitDialog by remember { mutableStateOf(false) }
+
     var frequency by remember(task) { mutableStateOf(task?.frequency ?: FrequencyType.DAILY) }
     var customDates by remember(task) {
         mutableStateOf((task?.customDates.orEmpty()).toSet())
@@ -197,6 +206,7 @@ fun AddEditTaskSheet(
         showCustomCategoryDialog = false
         showDeleteCategoryConfirm = null
         showFocusDurationDialog = false
+        showPauseLimitDialog = false
     }
     LifecycleEventEffect(Lifecycle.Event.ON_PAUSE) {
         showStartPicker = false
@@ -319,7 +329,8 @@ fun AddEditTaskSheet(
             customDatesRaw = customRaw,
             weeklyWeekdays = weeklyWeekdays,
             alarmSoundUri = alarmSoundUri,
-            focusDurationMinutes = focusDurationMinutes
+            focusDurationMinutes = focusDurationMinutes,
+            pauseLimitMinutes = pauseLimitMinutes
         )
         viewModel.saveTask(built) { id, isNew ->
             onSaved(id, isNew)
@@ -561,6 +572,25 @@ fun AddEditTaskSheet(
             FilterChip(
                 selected = focusDurationMinutes !in listOf(10, 25, 35),
                 onClick = { showFocusDurationDialog = true },
+                label = { Text("⚙️自定义") }
+            )
+        }
+
+        // ====== 暂停限制时长 (Pomodoro pause-limit) ======
+        // FilterChips: 1 / 2(默认) / 5 / ⚙️自定义. Drives the pause countdown
+        // dialog on the Pomodoro focus screen when the user hits "暂停".
+        SectionTitle("暂停限制时长")
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf(1, 2, 5).forEach { mins ->
+                FilterChip(
+                    selected = pauseLimitMinutes == mins,
+                    onClick = { pauseLimitMinutes = mins },
+                    label = { Text("${mins}分") }
+                )
+            }
+            FilterChip(
+                selected = pauseLimitMinutes !in listOf(1, 2, 5),
+                onClick = { showPauseLimitDialog = true },
                 label = { Text("⚙️自定义") }
             )
         }
@@ -934,6 +964,51 @@ fun AddEditTaskSheet(
             },
             dismissButton = {
                 TextButton(onClick = { showFocusDurationDialog = false }) {
+                    Text(stringResource(R.string.common_cancel))
+                }
+            }
+        )
+    }
+
+    // ====== 暂停限制时长自定义弹窗 (⚙️自定义 Chip 触发) ======
+    if (showPauseLimitDialog) {
+        var customMinutes by remember { mutableStateOf(pauseLimitMinutes.toString()) }
+        AlertDialog(
+            onDismissRequest = { showPauseLimitDialog = false },
+            title = { Text("自定义暂停限制时长") },
+            text = {
+                Column {
+                    Text(
+                        text = "请输入暂停限制时长（分钟，1~30）",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = customMinutes,
+                        onValueChange = { input ->
+                            customMinutes = input.filter { it.isDigit() }.take(2)
+                        },
+                        label = { Text("分钟") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp)
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val mins = customMinutes.toIntOrNull() ?: 0
+                    if (mins in 1..30) {
+                        pauseLimitMinutes = mins
+                        showPauseLimitDialog = false
+                    } else {
+                        Toast.makeText(context, "请输入 1~30 之间的数字", Toast.LENGTH_SHORT).show()
+                    }
+                }) { Text(stringResource(R.string.common_confirm)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPauseLimitDialog = false }) {
                     Text(stringResource(R.string.common_cancel))
                 }
             }

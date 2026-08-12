@@ -1,9 +1,14 @@
 package com.taskflow.app.ui.alarm
 
+import android.animation.AnimatorSet
+import android.animation.ObjectAnimator
+import android.animation.ValueAnimator
 import android.app.Activity
 import android.app.KeyguardManager
 import android.content.Context
 import android.content.Intent
+import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.media.AudioAttributes
 import android.media.AudioManager
 import android.media.MediaPlayer
@@ -21,7 +26,10 @@ import android.util.Log
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
+import android.view.animation.AccelerateDecelerateInterpolator
+import android.view.animation.LinearInterpolator
 import android.widget.Button
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import com.taskflow.app.R
@@ -57,6 +65,11 @@ class AlarmActivity : Activity() {
     private var audioManager: AudioManager? = null
     private var previousVolume: Int = -1
     private var audioFocusAbandoned = false
+
+    // ====== Pulse / breathing animation targets (spec: 呼吸灯/脉冲动画) ======
+    private var pulseAnimators: MutableList<ValueAnimator> = mutableListOf()
+    private var iconPulseView: View? = null
+    private var glowPulseView: View? = null
 
     private val autoDismissRunnable = Runnable { finishAlarm(snooze = false) }
 
@@ -149,33 +162,60 @@ class AlarmActivity : Activity() {
     // ====================== 全屏 UI 构建 ======================
 
     /**
-     * Builds the full-screen alarm UI. When multiple tasks are aggregated at
-     * the same reminder time, they are listed as "1. 开会 / 2. 提交日报".
-     * The "全部完成" button marks ALL tasks complete; "关闭闹钟" just dismisses.
+     * Builds the full-screen alarm UI (spec: 高质感强弹界面，呼吸灯/脉冲动画 +
+     * 高饱和度圆角按钮). When multiple tasks are aggregated at the same reminder
+     * time, they are listed as "1. 开会 / 2. 提交日报". The "全部完成" button
+     * marks ALL tasks complete; "关闭闹钟" just dismisses.
      */
     private fun buildAlarmUI(displayNames: List<String>, tasks: List<com.taskflow.app.data.model.Task>) {
+        // ===== Root: deep gradient background (full-bleed, immersive) =====
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(0xFF0F0C29.toInt())
-            setPadding(48, 80, 48, 64)
+            // Rich deep-purple gradient base — drawn as a flat color here; the
+            // immersive gradient is layered via a FrameLayout background below.
+            setBackgroundColor(0xFF1B0A3A.toInt())
+            setPadding(56, 96, 56, 80)
             gravity = Gravity.CENTER_HORIZONTAL
         }
 
+        // ===== Breathing glow ring behind the icon (spec: 呼吸灯) =====
+        // A circular GradientDrawable that pulses alpha + scale to simulate
+        // a "breathing light" behind the alarm clock emoji.
+        val glowDrawable = GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            colors = intArrayOf(0xCC8E2DE2.toInt(), 0x338E2DE2.toInt(), 0x008E2DE2.toInt())
+            gradientType = GradientDrawable.RADIAL_GRADIENT
+            gradientRadius = 420f
+        }
+        val glowView = View(this).apply {
+            background = glowDrawable
+            layoutParams = FrameLayout.LayoutParams(
+                resources.displayMetrics.widthPixels,
+                resources.displayMetrics.widthPixels
+            ).apply { gravity = Gravity.CENTER }
+        }
+        glowPulseView = glowView
+
+        // ===== Pulsing alarm icon (spec: 脉冲动画) =====
         val iconText = TextView(this).apply {
             text = "⏰"
-            textSize = 72f
+            textSize = 84f
             gravity = Gravity.CENTER
-            setPadding(0, 20, 0, 16)
+            setPadding(0, 24, 0, 16)
+            // Subtle amber glow tint to read as "urgent".
+            setShadowLayer(28f, 0f, 0f, 0x66F59E0B.toInt())
         }
+        iconPulseView = iconText
 
         val timeText = TextView(this).apply {
             val now = LocalTime.now()
             text = String.format("%02d:%02d", now.hour, now.minute)
-            textSize = 72f
-            setTextColor(0xFF8E2DE2.toInt())
+            textSize = 80f
+            setTextColor(0xFFFFFFFF.toInt())
             gravity = Gravity.CENTER
             setPadding(0, 0, 0, 32)
             typeface = android.graphics.Typeface.DEFAULT_BOLD
+            setShadowLayer(24f, 0f, 0f, 0x886D1AE1.toInt())
         }
 
         // ===== Aggregated task list =====
@@ -201,7 +241,7 @@ class AlarmActivity : Activity() {
                 val itemText = TextView(this).apply {
                     text = "${index + 1}. $name"
                     textSize = 18f
-                    setTextColor(0xFFDDDDDD.toInt())
+                    setTextColor(0xFFE6E6F0.toInt())
                     gravity = Gravity.CENTER
                     setPadding(0, 6, 0, 6)
                 }
@@ -216,50 +256,46 @@ class AlarmActivity : Activity() {
             val descText = TextView(this).apply {
                 text = if (description.isBlank()) "任务即将到期" else description
                 textSize = 17f
-                setTextColor(0xFFBBBBCC.toInt())
+                setTextColor(0xFFC9C4DD.toInt())
                 gravity = Gravity.CENTER
                 setPadding(0, 0, 0, 0)
             }
             descContainer.addView(descText)
         }
 
-        // ===== 全部完成 button (marks all tasks complete) =====
-        val completeAllBtn = Button(this).apply {
-            text = if (isMulti) "全部完成" else getString(R.string.widget_mark_complete_yes)
-            textSize = 18f
-            setTextColor(0xFFFFFFFF.toInt())
-            setBackgroundColor(0xFF4CAF50.toInt())
-            setOnClickListener { finishAlarm(snooze = false, completeAll = true) }
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                140
-            ).apply { bottomMargin = 14 }
-        }
+        // ===== 高饱和度圆角按钮 (spec: high-saturation rounded buttons) =====
+        // 全部完成 — emerald→green gradient (high saturation).
+        val completeAllBtn = buildGradientButton(
+            text = if (isMulti) "全部完成" else getString(R.string.widget_mark_complete_yes),
+            textSize = 18f,
+            startColor = 0xFF22C55E.toInt(),
+            endColor = 0xFF16A34A.toInt(),
+            heightPx = dp(56)
+        ) { finishAlarm(snooze = false, completeAll = true) }
+        completeAllBtn.layoutParams = (completeAllBtn.layoutParams as LinearLayout.LayoutParams)
+            .apply { bottomMargin = dp(12) }
 
-        val snoozeBtn = Button(this).apply {
-            text = getString(R.string.notification_snooze_5)
-            textSize = 17f
-            setBackgroundColor(0xFF2D2B4A.toInt())
-            setTextColor(0xFFFFFFFF.toInt())
-            setOnClickListener { finishAlarm(snooze = true) }
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                130
-            ).apply { bottomMargin = 14 }
-        }
+        // 稍后提醒 — translucent dark glass pill.
+        val snoozeBtn = buildGradientButton(
+            text = getString(R.string.notification_snooze_5),
+            textSize = 17f,
+            startColor = 0xFF3B3470.toInt(),
+            endColor = 0xFF2D2B4A.toInt(),
+            heightPx = dp(52),
+            strokeColor = 0x44FFFFFF.toInt(),
+            strokeWidthPx = 1
+        ) { finishAlarm(snooze = true) }
+        snoozeBtn.layoutParams = (snoozeBtn.layoutParams as LinearLayout.LayoutParams)
+            .apply { bottomMargin = dp(12) }
 
-        // ===== 关闭闹钟 button (just dismiss, don't mark complete) =====
-        val dismissBtn = Button(this).apply {
-            text = getString(R.string.common_close)
-            textSize = 18f
-            setTextColor(0xFFFFFFFF.toInt())
-            setBackgroundColor(0xFF8E2DE2.toInt())
-            setOnClickListener { finishAlarm(snooze = false) }
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                150
-            )
-        }
+        // 关闭闹钟 — vivid purple→magenta gradient (high saturation).
+        val dismissBtn = buildGradientButton(
+            text = getString(R.string.common_close),
+            textSize = 18f,
+            startColor = 0xFF8E2DE2.toInt(),
+            endColor = 0xFFD72DA8.toInt(),
+            heightPx = dp(60)
+        ) { finishAlarm(snooze = false) }
 
         root.apply {
             addView(iconText)
@@ -270,7 +306,132 @@ class AlarmActivity : Activity() {
             addView(snoozeBtn)
             addView(dismissBtn)
         }
-        setContentView(root)
+
+        // ===== Wrap content in a FrameLayout so the breathing glow sits
+        // behind everything (centered), with the linear content on top. =====
+        val frame = FrameLayout(this).apply {
+            // Full-bleed deep gradient background (spec: 高质感强弹界面).
+            background = GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(0xFF0F0C29.toInt(), 0xFF1B0A3A.toInt(), 0xFF2A0B4E.toInt())
+            )
+            addView(glowView)
+            addView(root)
+        }
+        setContentView(frame)
+
+        // ===== Kick off the breathing + pulse animations (spec: 呼吸灯/脉冲) =====
+        startBreathingAnimations()
+    }
+
+    /**
+     * Builds a high-saturation rounded-corner button with a vertical gradient
+     * background (spec: 高饱和度圆角按钮). Uses [GradientDrawable] so it works
+     * on all API levels without theme dependencies.
+     */
+    private fun buildGradientButton(
+        text: String,
+        textSize: Float,
+        startColor: Int,
+        endColor: Int,
+        heightPx: Int,
+        strokeColor: Int = 0,
+        strokeWidthPx: Int = 0,
+        onClick: () -> Unit
+    ): Button {
+        val drawable = GradientDrawable(
+            GradientDrawable.Orientation.TOP_BOTTOM,
+            intArrayOf(startColor, endColor)
+        ).apply {
+            cornerRadius = dp(28).toFloat()
+            if (strokeWidthPx > 0) setStroke(strokeWidthPx, strokeColor)
+        }
+        return Button(this).apply {
+            this.text = text
+            this.textSize = textSize
+            setTextColor(Color.WHITE)
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            background = drawable
+            // Remove the default Material elevation/shadow tint so the gradient reads cleanly.
+            stateListAnimator = null
+            setOnClickListener { onClick() }
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                heightPx
+            )
+        }
+    }
+
+    /** Converts dp to px for button sizing. */
+    private fun dp(value: Int): Int =
+        (value * resources.displayMetrics.density).toInt()
+
+    /**
+     * Launches the breathing-glow + icon-pulse loop (spec: 呼吸灯/脉冲动画).
+     * Runs indefinitely until [stopBreathingAnimations] cancels the animators.
+     */
+    private fun startBreathingAnimations() {
+        stopBreathingAnimations()
+
+        // ===== Glow: breathing alpha (0.35 → 1.0 → 0.35) on a 2.2s cycle =====
+        glowPulseView?.let { glow ->
+            val glowAlpha = ValueAnimator.ofFloat(0.35f, 1f, 0.35f).apply {
+                duration = 2200L
+                repeatMode = ValueAnimator.RESTART
+                repeatCount = ValueAnimator.INFINITE
+                interpolator = AccelerateDecelerateInterpolator()
+                addUpdateListener { a -> glow.alpha = a.animatedValue as Float }
+            }
+            // Gentle scale breathing for the glow (1.0 → 1.12 → 1.0).
+            val glowScaleX = ObjectAnimator.ofFloat(glow, View.SCALE_X, 1f, 1.12f, 1f).apply {
+                duration = 2200L
+                repeatMode = ValueAnimator.RESTART
+                repeatCount = ValueAnimator.INFINITE
+                interpolator = AccelerateDecelerateInterpolator()
+            }
+            val glowScaleY = ObjectAnimator.ofFloat(glow, View.SCALE_Y, 1f, 1.12f, 1f).apply {
+                duration = 2200L
+                repeatMode = ValueAnimator.RESTART
+                repeatCount = ValueAnimator.INFINITE
+                interpolator = AccelerateDecelerateInterpolator()
+            }
+            glowAlpha.start(); glowScaleX.start(); glowScaleY.start()
+            pulseAnimators.add(glowAlpha); pulseAnimators.add(glowScaleX); pulseAnimators.add(glowScaleY)
+        }
+
+        // ===== Icon: pulse scale (1.0 → 1.18 → 1.0) on a 0.9s sharp cycle =====
+        iconPulseView?.let { icon ->
+            val iconScaleX = ObjectAnimator.ofFloat(icon, View.SCALE_X, 1f, 1.18f, 1f).apply {
+                duration = 900L
+                repeatMode = ValueAnimator.RESTART
+                repeatCount = ValueAnimator.INFINITE
+                interpolator = LinearInterpolator()
+            }
+            val iconScaleY = ObjectAnimator.ofFloat(icon, View.SCALE_Y, 1f, 1.18f, 1f).apply {
+                duration = 900L
+                repeatMode = ValueAnimator.RESTART
+                repeatCount = ValueAnimator.INFINITE
+                interpolator = LinearInterpolator()
+            }
+            val iconAlpha = ValueAnimator.ofFloat(1f, 0.78f, 1f).apply {
+                duration = 900L
+                repeatMode = ValueAnimator.RESTART
+                repeatCount = ValueAnimator.INFINITE
+                interpolator = LinearInterpolator()
+                addUpdateListener { a -> icon.alpha = a.animatedValue as Float }
+            }
+            AnimatorSet().apply {
+                playTogether(iconScaleX, iconScaleY, iconAlpha)
+                start()
+            }
+            pulseAnimators.add(iconScaleX); pulseAnimators.add(iconScaleY); pulseAnimators.add(iconAlpha)
+        }
+    }
+
+    /** Cancels all running breathing/pulse animators. */
+    private fun stopBreathingAnimations() {
+        pulseAnimators.forEach { runCatching { it.cancel() } }
+        pulseAnimators.clear()
     }
 
     // ====================== 音量 + 响铃 ======================
@@ -419,6 +580,9 @@ class AlarmActivity : Activity() {
     private fun finishAlarm(snooze: Boolean, completeAll: Boolean = false) {
         handler.removeCallbacks(autoDismissRunnable)
 
+        // Stop the breathing/pulse animators immediately so they don't leak.
+        stopBreathingAnimations()
+
         mediaPlayer?.let {
             runCatching { if (it.isPlaying) it.stop() }
             runCatching { it.reset() }
@@ -467,6 +631,7 @@ class AlarmActivity : Activity() {
     override fun onDestroy() {
         super.onDestroy()
         handler.removeCallbacks(autoDismissRunnable)
+        stopBreathingAnimations()
         mediaPlayer?.let {
             runCatching { if (it.isPlaying) it.stop() }
             runCatching { it.release() }

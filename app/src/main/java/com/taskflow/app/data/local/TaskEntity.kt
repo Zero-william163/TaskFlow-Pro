@@ -67,5 +67,10 @@ data class TaskEntity(
      * Pomodoro focus duration in minutes for this task. Drives the initial
      * ring-timer value on the Pomodoro focus screen. 0 = use app default (25).
      */
-    val focusDurationMinutes: Int = 0
+    val focusDurationMinutes: Int = 0,
+    /**
+     * Maximum allowed pause duration (minutes) on the Pomodoro screen.
+     * 0 = use app default (2 min). Enforced by a countdown dialog.
+     */
+    val pauseLimitMinutes: Int = 0
 )

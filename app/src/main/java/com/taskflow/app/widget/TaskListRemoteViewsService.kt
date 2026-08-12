@@ -153,12 +153,13 @@ class TaskListRemoteViewsService : RemoteViewsService() {
                     Log.e(TAG, "factory[$widgetId].getViewAt($position): toggle PendingIntent FAILED", e)
                 }
 
-                // Per-item click → launch TaskCompletionDialogActivity with task id.
+                // Per-item click → 卡片主体进入【番茄专注模式 (PomodoroScreen)】。
                 // The ListView carries the template PendingIntent (set by WidgetHelper)
-                // pointing to TaskCompletionDialogActivity; we only fill in the task id.
+                // pointing to MainActivity with ACTION_OPEN_POMODORO; we fill in the
+                // task id so MainActivity knows which task to start the focus session for.
                 try {
                     val fillIn = Intent().apply {
-                        putExtra(TaskCompletionDialogActivity.EXTRA_TASK_ID, task.id)
+                        putExtra(com.taskflow.app.MainActivity.EXTRA_TASK_ID, task.id)
                     }
                     views.setOnClickFillInIntent(R.id.widget_item_root, fillIn)
                 } catch (e: Throwable) {

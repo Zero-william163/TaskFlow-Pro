@@ -30,6 +30,13 @@ sealed interface AudioSource {
     data class Local(val rawName: String) : AudioSource
     /** Play a network audio stream URL. */
     data class Online(val url: String) : AudioSource
+    /**
+     * Play a user-imported local audio file (MP3, M4A, WAV, etc.) referenced by
+     * a content:// URI. The caller is responsible for taking persistable read
+     * permission on the URI before passing it here so playback survives process
+     * death. See [AudioPlayerManager.playImported].
+     */
+    data class LocalFile(val uri: String, val displayName: String) : AudioSource
 }
 
 enum class AudioCategory(val label: String) {
@@ -110,6 +117,10 @@ class AudioPlayerManager(private val context: Context) {
                 is AudioSource.Online -> {
                     mp.setDataSource(context, Uri.parse(src.url))
                 }
+                is AudioSource.LocalFile -> {
+                    // User-imported audio (content:// URI from file picker).
+                    mp.setDataSource(context, Uri.parse(src.uri))
+                }
             }
             mp.setOnPreparedListener {
                 it.start()
@@ -129,6 +140,23 @@ class AudioPlayerManager(private val context: Context) {
             mp.release()
             isPlaying = false
         }
+    }
+
+    /**
+     * Convenience for the "📁 自定义导入" picker entry: wrap a content:// URI +
+     * display name into an [AudioSource.LocalFile] and start playback. The
+     * caller should have already taken persistable read permission on [uri]
+     * (via `ContentResolver.takePersistableUriPermission`) so the URI remains
+     * usable after process death.
+     */
+    fun playImported(uri: Uri, displayName: String) {
+        play(
+            AudioTrack(
+                title = displayName,
+                category = AudioCategory.LIGHT, // imported tracks land in 轻音乐 tab
+                source = AudioSource.LocalFile(uri.toString(), displayName)
+            )
+        )
     }
 
     fun pause() {

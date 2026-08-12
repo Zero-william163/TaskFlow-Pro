@@ -11,7 +11,7 @@ import com.taskflow.app.data.model.Category
 
 @Database(
     entities = [TaskEntity::class, CategoryEntity::class, TaskInstanceEntity::class, FocusHistoryEntity::class],
-    version = 7,
+    version = 8,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -34,7 +34,7 @@ abstract class TaskDatabase : RoomDatabase() {
                     "taskflow.db"
                 )
                     .addCallback(SeedCallback())
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
                     .build()
                     .also { INSTANCE = it }
             }
@@ -196,6 +196,19 @@ abstract class TaskDatabase : RoomDatabase() {
                 )
                 db.execSQL(
                     "CREATE INDEX IF NOT EXISTS index_focus_history_timestamp ON focus_history(timestamp)"
+                )
+            }
+        }
+
+        /**
+         * v7 → v8: add [TaskEntity.pauseLimitMinutes] (Int). Defaults to 0 which
+         * the Pomodoro screen interprets as the app default (2 min). Existing
+         * tasks keep their current focus-flow behavior.
+         */
+        private val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE tasks ADD COLUMN pauseLimitMinutes INTEGER NOT NULL DEFAULT 0"
                 )
             }
         }

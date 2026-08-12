@@ -133,6 +133,8 @@ class TaskWidgetProvider : AppWidgetProvider() {
                                 repo.setCompleted(task, !task.isCompleted)
                                 Log.d(TAG, "onReceive: task $taskId toggled to ${!task.isCompleted}")
                             }
+                            // ====== Spec: 点击直接完成/恢复任务，并刷新小组件 ======
+                            WidgetHelper.refresh(context)
                         } else {
                             Log.w(TAG, "onReceive: task $taskId not found")
                         }

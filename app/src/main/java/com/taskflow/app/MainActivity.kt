@@ -29,6 +29,8 @@ class MainActivity : ComponentActivity() {
     private var newTaskRequested = mutableStateOf(false)
     // Widget 卡片点击触发：请求弹出"标记为完成"确认对话框
     private var markCompleteTaskId = mutableStateOf<Long?>(null)
+    // Widget 卡片主体点击触发：直接进入番茄专注模式 (PomodoroScreen)
+    private var openPomodoroTaskId = mutableStateOf<Long?>(null)
     private var lastBackgroundTime = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -88,13 +90,16 @@ class MainActivity : ComponentActivity() {
                     val taskToOpen by remember { openTaskId }
                     val taskToMarkComplete by remember { markCompleteTaskId }
                     val shouldRequestNewTask by remember { newTaskRequested }
+                    val pomodoroTaskToOpen by remember { openPomodoroTaskId }
                     TaskFlowNavHost(
                         openTaskId = taskToOpen,
                         onTaskConsumed = { openTaskId.value = null },
                         markCompleteTaskId = taskToMarkComplete,
                         onMarkCompleteConsumed = { markCompleteTaskId.value = null },
                         newTaskRequested = shouldRequestNewTask,
-                        onNewTaskConsumed = { newTaskRequested.value = false }
+                        onNewTaskConsumed = { newTaskRequested.value = false },
+                        openPomodoroTaskId = pomodoroTaskToOpen,
+                        onPomodoroConsumed = { openPomodoroTaskId.value = null }
                     )
                 }
             }
@@ -137,6 +142,13 @@ class MainActivity : ComponentActivity() {
                 newTaskRequested.value = true
                 Log.d(TAG, "consumeIntent: ACTION_NEW_TASK → requesting new task sheet")
             }
+            ACTION_OPEN_POMODORO -> {
+                val id = intent.getLongExtra(EXTRA_TASK_ID, -1L)
+                if (id > 0L) {
+                    openPomodoroTaskId.value = id
+                    Log.d(TAG, "consumeIntent: setting openPomodoroTaskId=$id")
+                }
+            }
         }
     }
 
@@ -145,6 +157,7 @@ class MainActivity : ComponentActivity() {
         const val ACTION_OPEN_TASK = "com.taskflow.app.action.OPEN_TASK"
         const val ACTION_MARK_COMPLETE = "com.taskflow.app.action.MARK_COMPLETE"
         const val ACTION_NEW_TASK = "com.taskflow.app.action.NEW_TASK"
+        const val ACTION_OPEN_POMODORO = "com.taskflow.app.action.OPEN_POMODORO"
         const val EXTRA_TASK_ID = "extra_task_id"
     }
 }

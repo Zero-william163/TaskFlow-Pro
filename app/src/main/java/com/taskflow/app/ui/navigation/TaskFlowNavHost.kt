@@ -59,7 +59,9 @@ fun TaskFlowNavHost(
     markCompleteTaskId: Long? = null,
     onMarkCompleteConsumed: () -> Unit = {},
     newTaskRequested: Boolean = false,
-    onNewTaskConsumed: () -> Unit = {}
+    onNewTaskConsumed: () -> Unit = {},
+    openPomodoroTaskId: Long? = null,
+    onPomodoroConsumed: () -> Unit = {}
 ) {
     val navController = rememberNavController()
     val backStack by navController.currentBackStackEntryAsState()
@@ -176,6 +178,18 @@ fun TaskFlowNavHost(
                     navigatedTaskId = id
                     navController.navigate(Destinations.TaskDetail.create(id))
                     onTaskConsumed()
+                }
+            }
+        }
+
+        // ====== Widget card body click → 直接进入番茄专注模式 ======
+        var navigatedPomodoroId by remember { mutableStateOf<Long?>(null) }
+        LaunchedEffect(openPomodoroTaskId) {
+            openPomodoroTaskId?.let { id ->
+                if (id != navigatedPomodoroId) {
+                    navigatedPomodoroId = id
+                    navController.navigate(Destinations.Pomodoro.create(id))
+                    onPomodoroConsumed()
                 }
             }
         }
