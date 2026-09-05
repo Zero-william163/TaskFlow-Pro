@@ -142,6 +142,7 @@
                 <action android:name="com.taskflow.app.WIDGET_REFRESH" />
                 <action android:name="com.taskflow.app.TASKS_CHANGED" />
                 <action android:name="com.taskflow.app.TOGGLE_TASK" />
+                <action android:name="com.taskflow.app.TOGGLE_COMPLETE" />
                 <action android:name="com.taskflow.app.TOGGLE_MODE" />
                 <action android:name="com.taskflow.app.SET_MODE" />
             </intent-filter>

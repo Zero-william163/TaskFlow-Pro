@@ -2,8 +2,10 @@ package com.taskflow.app.notification
 
 import android.content.Context
 import android.media.AudioAttributes
+import android.media.AudioManager
 import android.media.MediaPlayer
 import android.media.SoundPool
+import android.media.ToneGenerator
 import android.net.Uri
 import android.util.Log
 import com.taskflow.app.data.preferences.SoundType
@@ -81,9 +83,20 @@ class SoundEffectManager(
 
     private var soundPool: SoundPool? = null
 
+    /**
+     * ToneGenerator 强行保底 (spec: 当 SoundPool 未加载成功时，使用
+     * ToneGenerator(AudioManager.STREAM_SYSTEM, 100) 播放清脆的按键反馈音，
+     * 确保「试听」按钮与任何点击绝对能发出声音)。
+     * STREAM_SYSTEM 通道不受媒体音量静音影响。
+     */
+    @Volatile
+    private var toneGenerator: ToneGenerator? = null
+
     init {
         // 初始化 SoundPool + 加载合成 PCM
         initSoundPool()
+        // 初始化 ToneGenerator 保底
+        initToneGenerator()
         // 收集偏好变更: 开关 / 类型 / 音量
         scope.launch {
             preferences.soundEnabled.collectLatest { _enabled.value = it }
@@ -96,6 +109,17 @@ class SoundEffectManager(
         }
         scope.launch {
             preferences.soundCustomUri.collectLatest { _customUri.value = it }
+        }
+    }
+
+    private fun initToneGenerator() {
+        try {
+            // STREAM_SYSTEM + 100% volume: 确保即使媒体音量静音也能发声
+            toneGenerator = ToneGenerator(AudioManager.STREAM_SYSTEM, 100)
+            Log.d(TAG, "initToneGenerator: ✅ ToneGenerator ready")
+        } catch (t: Throwable) {
+            Log.e(TAG, "initToneGenerator: FAILED", t)
+            toneGenerator = null
         }
     }
 
@@ -140,6 +164,11 @@ class SoundEffectManager(
     /**
      * 在关键交互触发点播放点击音效。若总开关关闭则静默返回。
      * 默认按当前 [type] 播放, 也可显式传入 [override]。
+     *
+     * 双重保底 (spec):
+     * 1. 优先使用 SoundPool (USAGE_ASSISTANCE_SONIFICATION) 播放合成音效
+     * 2. 若 SoundPool 未加载 / play 失败 → 降级到 ToneGenerator(STREAM_SYSTEM)
+     *    播放 TONE_PROP_BEEP，确保「试听」按钮与任何点击绝对能发出声音
      */
     fun playClick(override: SoundType? = null) {
         if (!_enabled.value) return
@@ -151,22 +180,60 @@ class SoundEffectManager(
             return
         }
 
-        val pool = soundPool ?: return
-        val sid = soundIds[st] ?: return
-        if (sid == 0) return
+        val pool = soundPool
+        val sid = if (pool != null) soundIds[st] else 0
+
         // SoundPool volume: 0.0~1.0
         val v = (_volume.value.coerceIn(0, 100) / 100f)
+
+        if (pool != null && sid != null && sid != 0 && ready) {
+            try {
+                pool.play(sid, v, v, 1, 0, 1.0f)
+                return
+            } catch (t: Throwable) {
+                Log.w(TAG, "playClick: SoundPool play FAILED → fallback to ToneGenerator", t)
+            }
+        }
+
+        // ====== 保底: ToneGenerator 强行发声 ======
+        // TONE_PROP_BEEP 清脆短促，STREAM_SYSTEM 通道不受媒体音量静音影响。
+        playToneFallback()
+    }
+
+    /**
+     * ToneGenerator 保底播放: 当 SoundPool 不可用时，确保点击绝对能发出声音。
+     * 使用 STREAM_SYSTEM 通道 + TONE_PROP_BEEP，构造时音量设为 100%
+     * (spec: ToneGenerator(AudioManager.STREAM_SYSTEM, 100))，
+     * 不受媒体音量静音影响。
+     */
+    private fun playToneFallback() {
+        val tg = toneGenerator
+        if (tg == null) {
+            // 极端情况: ToneGenerator 也未初始化 → 重试初始化一次
+            initToneGenerator()
+            toneGenerator?.let {
+                try {
+                    // startTone(toneType, durationMs): 80ms 清脆按键音
+                    it.startTone(ToneGenerator.TONE_PROP_BEEP, 80)
+                } catch (t: Throwable) {
+                    Log.w(TAG, "playToneFallback: retry FAILED", t)
+                }
+            }
+            return
+        }
         try {
-            pool.play(sid, v, v, 1, 0, 1.0f)
+            // startTone(toneType, durationMs): 80ms 清脆按键反馈音
+            tg.startTone(ToneGenerator.TONE_PROP_BEEP, 80)
         } catch (t: Throwable) {
-            Log.w(TAG, "playClick: FAILED (ignored)", t)
+            Log.w(TAG, "playToneFallback: FAILED", t)
         }
     }
 
     /** Play the user-imported custom sound file (if set). */
     private fun playCustomSound() {
         val uriStr = _customUri.value ?: run {
-            Log.w(TAG, "playCustomSound: no custom URI set")
+            Log.w(TAG, "playCustomSound: no custom URI set → fallback ToneGenerator")
+            playToneFallback()
             return
         }
         try {
@@ -182,13 +249,16 @@ class SoundEffectManager(
             mp.setOnPreparedListener { it.start() }
             mp.setOnCompletionListener { it.release(); customPlayer = null }
             mp.setOnErrorListener { mpErr, _, _ ->
-                Log.w(TAG, "playCustomSound: MediaPlayer error")
-                mpErr.release(); customPlayer = null; true
+                Log.w(TAG, "playCustomSound: MediaPlayer error → fallback ToneGenerator")
+                mpErr.release(); customPlayer = null
+                playToneFallback()
+                true
             }
             mp.prepareAsync()
             customPlayer = mp
         } catch (t: Throwable) {
-            Log.w(TAG, "playCustomSound: FAILED", t)
+            Log.w(TAG, "playCustomSound: FAILED → fallback ToneGenerator", t)
+            playToneFallback()
         }
     }
 
@@ -200,6 +270,8 @@ class SoundEffectManager(
         ready = false
         customPlayer?.release()
         customPlayer = null
+        toneGenerator?.release()
+        toneGenerator = null
     }
 
     // ====== PCM 合成 (无外部音频素材) ======

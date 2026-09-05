@@ -1,30 +1,30 @@
 {
-  "version": "2.9.3",
-  "code": 50,
-  "versionTag": "v2.9.3",
-  "log": "\n### v2.9.3 — 紧急 Bug 修复、视觉解耦与音效/音频底层重建\n\n#### 一、 卡片布局重叠与专注页交互修复\n1. **主页 TaskCard 编辑图标重叠 Bug**\n   - 重构右侧布局 Row：`[▶ 开始按钮]` 与 `[✏️ 编辑图标]` 水平并排，12dp 间距，**绝不与任何文本/按钮重叠**。\n   - 移除原先右上角浮动 IconButton（`align(TopEnd)`），消除层级覆盖问题。\n2. **专注页 (PomodoroScreen) 图标重复与退出弹窗**\n   - 彻底删除右上角 `Icons.Outlined.Image` 重复壁纸图标，仅保留底部主控制栏中的 `[🖼️ 壁纸]` 胶囊按钮。\n   - **退出拦截弹窗**：点击顶部 `[←]` 或触发返回键时，拦截返回事件弹出 M3 对话框：\n     - 标题：「结束专注」\n     - 内容：「专注尚未结束，是否标记该任务为提前完成？」\n     - 按钮：`[仅退出]`（保持未完成）、`[标记已完成并退出]`（自动更新 `isCompleted = true` 并返回）、`[继续专注]`\n   - 新增 `PomodoroViewModel.markTaskCompletedAndStop()` 方法，调用 `TaskRepository.setCompleted(task, true)`。\n   - 使用 `BackHandler` 拦截系统返回键。\n\n#### 二、 桌面小组件点击与精致度升级\n1. **圆圈打卡触摸失效 Bug**\n   - 将 checkbox ImageView 从 20dp 扩大到 **48dp 触摸区域**（内部 24dp 图标居中 + 12dp padding）。\n   - 为 `widget_checkbox` 设置独立的 `PendingIntent.getBroadcast(...)`，开启 `Intent.FLAG_RECEIVER_FOREGROUND`。\n   - BroadcastReceiver 收到 `ACTION_TOGGLE_TASK` 后，精确取 `taskId` 修改 `isCompleted` 状态，并执行 `AppWidgetManager.notifyAppWidgetViewDataChanged` 局部刷新。\n\n#### 三、 音频/音效系统底层保底与设置页滑动修复\n1. **背景音保底机制**\n   - 当 `res/raw/` 目录下缺失对应 mp3 文件时，**绝不直接报错静音**。\n   - 自动降级为使用 Android `AudioTrack` 动态合成舒缓白噪音（雨声/海浪/滴答钟/白噪音），保证用户点开就能听到声音。\n   - MediaPlayer `onError` 也自动降级到合成白噪音。\n   - 新增 `SynthType` 枚举和 `AudioSource.Synthesized` 类型。\n2. **自定义音效导出**\n   - 允许在「自定义导入」中选择手机本地任意音频文件播放（已有功能保持）。\n3. **设置页「音效类型」横向滑动与自定义**\n   - 给 SettingsScreen 中的音效类型 Chips 容器增加 `Modifier.horizontalScroll(rememberScrollState())`，解决右侧被遮挡切断问题。\n   - 在音效 Chip 列表中补充 `[⚙️ 自定义]` 选项，支持选择本地短音效文件作为按键反馈音。\n   - 新增 `SoundType.CUSTOM` 枚举值、`UserPreferences.soundCustomUri` 偏好键。\n   - `SoundEffectManager` 新增 `playCustomSound()` 方法，通过 MediaPlayer 播放用户导入的音效文件。\n\n#### 构建信息\n- versionCode: 50\n- versionName: 2.9.3\n- SHA256: 2e8ce3bbc79c0cd96a11e66d4e29556542e2bb529b1f8c239b4da4b50d2cf698\n- Size: 46,885,155 bytes\n\n---\n\n",
-  "apk": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.9.3/taskflow-v2.9.3.apk",
-  "sha256": "2e8ce3bbc79c0cd96a11e66d4e29556542e2bb529b1f8c239b4da4b50d2cf698",
-  "size": 46885155,
+  "version": "2.9.4",
+  "code": 51,
+  "versionTag": "v2.9.4",
+  "log": "\n### v2.9.4 — 桌面小组件点击彻底隔离 / 视觉同步 / 音效音频底层重建\n\n#### 一、 桌面小组件点击彻底隔离与视觉与主 App 同步\n1. **点击响应隔离 Bug 彻底修复**\n   - **控件解耦**：严禁在整张卡片根布局 (`widget_item_root`) 上设置跳转 Activity 的 PendingIntent。\n   - **圆圈独立绑定**：为 `R.id.widget_checkbox`（48dp 触摸区）设置 `setOnClickPendingIntent`，显式指向 `TaskWidgetProvider.ACTION_TOGGLE_COMPLETE` 广播，点击**只切换打卡状态并刷新小组件，绝不跳转应用**。\n   - **卡片主体独立绑定**：仅在 `R.id.widget_card_body`（标题/分类/时间区域）绑定跳转到 PomodoroActivity 的 `FillInIntent`。\n   - **增大触摸响应区**：圆圈容器 48dp x 48dp + 12dp padding，防止手误触发卡片主体。\n2. **小组件卡片视觉精美度同步**\n   - `widget_item_card_bg.xml` 改为与主 App TaskCard 一致的高质感 135° 斜向渐变（深蓝 → 紫罗兰风景遮罩）+ 16dp 大圆角 + 0.5dp 极细描边。\n   - 新增 `widget_card_gradient_start/end/stroke` 颜色 token（含夜间模式变体），item card 内文字改用专用浅色 token，保证深色背景上可读性。\n\n#### 二、 专注页面背景音乐自动播放与真实音质\n1. **自动播放机制**\n   - 进入 `PomodoroScreen` 时，`LaunchedEffect(Unit)` 中自动开始播放默认背景音乐（雨声），无需用户手动再点一次。\n2. **高品质音源保底 (替代噪音)**\n   - **彻底移除所有 `AudioTrack` 算法合成的杂音/噪点代码**（删除 `SynthType`、`AudioSource.Synthesized`、`startSynth/stopSynth`）。\n   - 若 `res/raw/` 缺失本地文件，自动降级为可靠的高清在线流媒体 CDN 链接（雨声/滴答钟/海浪等），每个音源配备主 URL + 备用 URL。\n   - MediaPlayer `setOnErrorListener` 发生异常时自动切换至备用音源并弹吐司提示。\n3. **自定义音效导入**：保持选择手机本地任意音频文件播放功能。\n\n#### 三、 点击按键音效系统修复与试听响应\n1. **SoundPool / ToneGenerator 双重保底**\n   - SoundPool 音频属性设置为 `AudioAttributes.USAGE_ASSISTANCE_SONIFICATION`（系统交互音效通道）。\n   - **ToneGenerator 强行保底**：当 SoundPool 未加载成功 / play 失败时，直接使用 `ToneGenerator(AudioManager.STREAM_SYSTEM, 100)` 播放 `TONE_PROP_BEEP`，确保「试听」按钮与任何点击**绝对能发出声音**。\n   - CUSTOM 类型 MediaPlayer 出错时也自动降级到 ToneGenerator。\n2. **试听与全局点击响应**：设置页「试听」按钮触发 `SoundEffectManager.playClick()` 时，立即听到当前选择的音效类型。\n\n#### 构建信息\n- versionCode: 51\n- versionName: 2.9.4\n- SHA256: b209ec240480d0234c6dae13f820af6bcfc7c864079e782d07edfd1f4ecae42b\n- Size: 46,902,179 bytes\n\n---\n\n",
+  "apk": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.9.4/taskflow-v2.9.4.apk",
+  "sha256": "b209ec240480d0234c6dae13f820af6bcfc7c864079e782d07edfd1f4ecae42b",
+  "size": 46902179,
   "downloadUrls": [
     {
       "name": "GH Proxy",
-      "url": "https://gh-proxy.com/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.9.3/taskflow-v2.9.3.apk",
+      "url": "https://gh-proxy.com/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.9.4/taskflow-v2.9.4.apk",
       "region": "domestic"
     },
     {
       "name": "GH Fast",
-      "url": "https://ghfast.top/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.9.3/taskflow-v2.9.3.apk",
+      "url": "https://ghfast.top/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.9.4/taskflow-v2.9.4.apk",
       "region": "cdn"
     },
     {
       "name": "GH Proxy Org",
-      "url": "https://gh-proxy.org/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.9.3/taskflow-v2.9.3.apk",
+      "url": "https://gh-proxy.org/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.9.4/taskflow-v2.9.4.apk",
       "region": "domestic"
     },
     {
       "name": "GitHub",
-      "url": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.9.3/taskflow-v2.9.3.apk",
+      "url": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.9.4/taskflow-v2.9.4.apk",
       "region": "international"
     }
   ]

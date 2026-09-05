@@ -134,6 +134,19 @@ fun PomodoroScreen(
         onDispose { audioManager.release() }
     }
 
+    // ====== 自动播放 (spec: 进入专注页自动播放默认背景音乐「雨声」) ======
+    // LaunchedEffect(Unit) 仅在屏幕首次进入时触发一次，无需用户手动点击。
+    // 若用户在音频 BottomSheet 中手动切换/停止，此 effect 不会再次触发，
+    // 因为 key=Unit 不会变化。
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(300L) // 略延迟，等待 Activity 转场完成
+        try {
+            audioManager.playDefault()
+        } catch (t: Throwable) {
+            android.util.Log.e("PomodoroScreen", "auto-play default failed", t)
+        }
+    }
+
     // ====== Local audio file import (spec: 📁 自定义导入, 读取手机本地 MP3). ======
     val audioImportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()

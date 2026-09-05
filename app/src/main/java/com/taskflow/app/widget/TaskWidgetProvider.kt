@@ -117,9 +117,12 @@ class TaskWidgetProvider : AppWidgetProvider() {
                     WidgetHelper.setMode(context, widgetId, mode)
                 }
             }
-            ACTION_TOGGLE_TASK -> {
+            // ====== Spec: 圆圈打卡点击隔离 — ACTION_TOGGLE_COMPLETE (新规范名) ======
+            // 同时兼容旧名 ACTION_TOGGLE_TASK。收到后精确取 taskId 修改 isCompleted，
+            // 并 notifyAppWidgetViewDataChanged 局部刷新，绝不跳转应用。
+            ACTION_TOGGLE_COMPLETE, ACTION_TOGGLE_TASK -> {
                 val taskId = intent.getLongExtra(EXTRA_TASK_ID, -1L)
-                Log.d(TAG, "onReceive: TOGGLE_TASK taskId=$taskId")
+                Log.d(TAG, "onReceive: TOGGLE_COMPLETE taskId=$taskId")
                 if (taskId > 0) {
                     scope.launch {
                         val repo = TaskRepository.get(context)
@@ -163,6 +166,12 @@ class TaskWidgetProvider : AppWidgetProvider() {
         // 别名：便于 WidgetHelper 中使用 TaskWidgetProvider.ACTION_REFRESH
         const val ACTION_REFRESH = ACTION_WIDGET_REFRESH
         const val ACTION_TASKS_CHANGED = "com.taskflow.app.TASKS_CHANGED"
+        /**
+         * 新规范名：圆圈打卡点击广播。widget_checkbox 仅绑定此 action，
+         * 点击只切换打卡状态并刷新小组件，绝不跳转应用。
+         */
+        const val ACTION_TOGGLE_COMPLETE = "com.taskflow.app.TOGGLE_COMPLETE"
+        /** 旧名，保留向后兼容 (alias of ACTION_TOGGLE_COMPLETE). */
         const val ACTION_TOGGLE_TASK = "com.taskflow.app.TOGGLE_TASK"
         const val ACTION_TOGGLE_MODE = "com.taskflow.app.TOGGLE_MODE"
         const val ACTION_SET_MODE = "com.taskflow.app.SET_MODE"

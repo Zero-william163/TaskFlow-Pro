@@ -134,30 +134,36 @@ class TaskListRemoteViewsService : RemoteViewsService() {
                     Log.e(TAG, "factory[$widgetId].getViewAt($position): R.id.item_check drawable FAILED", e)
                 }
 
-                // Checkbox click → broadcast to toggle task completion directly from widget.
-                // Fix: FLAG_RECEIVER_FOREGROUND ensures the broadcast is delivered promptly
-                // even when the system is dozing; 48dp touch area in the layout guarantees
-                // the click lands on the checkbox, not the card body.
+                // ====== 点击彻底隔离 (spec: AppWidget Overhaul) ======
+                // 1) widget_checkbox (48dp 触摸区) → 仅绑定 ACTION_TOGGLE_COMPLETE 广播，
+                //    点击只切换打卡状态并刷新小组件，绝不跳转应用。
+                // 2) widget_card_body (标题/分类/时间区域) → 仅绑定跳转 PomodoroActivity
+                //    的 FillInIntent。
+                // 3) 根布局 widget_item_root 绝不绑定任何 PendingIntent，避免吞掉子区域点击。
                 try {
-                    val toggleIntent = Intent(TaskWidgetProvider.ACTION_TOGGLE_TASK).apply {
+                    val toggleIntent = Intent(TaskWidgetProvider.ACTION_TOGGLE_COMPLETE).apply {
                         setPackage(context.packageName)
                         putExtra(TaskWidgetProvider.EXTRA_TASK_ID, task.id)
+                        // FLAG_RECEIVER_FOREGROUND: 确保广播在前台优先级派发，即使系统
+                        // 处于 doze 也能可靠送达，圆圈打卡绝不失响应。
                         addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
                     }
                     views.setOnClickPendingIntent(
-                        R.id.item_check,
+                        R.id.widget_checkbox,
                         android.app.PendingIntent.getBroadcast(
                             context,
                             task.id.toInt(),
                             toggleIntent,
-                            android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT
+                            android.app.PendingIntent.FLAG_IMMUTABLE or
+                                android.app.PendingIntent.FLAG_UPDATE_CURRENT
                         )
                     )
+                    Log.d(TAG, "factory[$widgetId].getViewAt($position): ✅ widget_checkbox → ACTION_TOGGLE_COMPLETE")
                 } catch (e: Throwable) {
                     Log.e(TAG, "factory[$widgetId].getViewAt($position): toggle PendingIntent FAILED", e)
                 }
 
-                // Per-item click → 卡片主体进入【番茄专注模式 (PomodoroScreen)】。
+                // 卡片主体 (除圆圈外的文本与主体区域) → 跳转到 PomodoroActivity。
                 // The ListView carries the template PendingIntent (set by WidgetHelper)
                 // pointing to MainActivity with ACTION_OPEN_POMODORO; we fill in the
                 // task id so MainActivity knows which task to start the focus session for.
@@ -165,7 +171,8 @@ class TaskListRemoteViewsService : RemoteViewsService() {
                     val fillIn = Intent().apply {
                         putExtra(com.taskflow.app.MainActivity.EXTRA_TASK_ID, task.id)
                     }
-                    views.setOnClickFillInIntent(R.id.widget_item_root, fillIn)
+                    views.setOnClickFillInIntent(R.id.widget_card_body, fillIn)
+                    Log.d(TAG, "factory[$widgetId].getViewAt($position): ✅ widget_card_body → PomodoroActivity FillIn")
                 } catch (e: Throwable) {
                     Log.e(TAG, "factory[$widgetId].getViewAt($position): fillIn FAILED", e)
                 }

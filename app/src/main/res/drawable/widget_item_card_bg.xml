@@ -1,7 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Widget 任务卡片背景：柔和 Surface 色 + 12dp 圆角 -->
+<!--
+    Widget 任务卡片背景 v3 — 高质感渐变 + 16dp 大圆角
+    与主 App TaskCard 的「风景渐变」视觉高度统一：
+      - 双色斜向渐变 (深蓝 → 紫罗兰)，模拟夜空风景遮罩
+      - 16dp 大圆角，呼应主 App 卡片圆角语言
+      - 0.5dp 极细描边，提升卡片边界精致度
+-->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
-    <solid android:color="@color/widget_card_bg" />
-    <corners android:radius="12dp" />
+    <gradient
+        android:angle="135"
+        android:startColor="@color/widget_card_gradient_start"
+        android:endColor="@color/widget_card_gradient_end"
+        android:type="linear" />
+    <corners android:radius="16dp" />
+    <stroke android:width="0.5dp" android:color="@color/widget_card_stroke" />
 </shape>

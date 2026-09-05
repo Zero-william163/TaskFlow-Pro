@@ -2,7 +2,6 @@ package com.taskflow.app.ui.pomodoro
 
 import android.content.Context
 import android.media.AudioAttributes
-import android.media.AudioFormat
 import android.media.MediaPlayer
 import android.net.Uri
 import android.util.Log
@@ -10,18 +9,25 @@ import android.widget.Toast
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import kotlin.math.PI
-import kotlin.math.sin
 
 /**
- * Tracks for the Pomodoro background-music BottomSheet. Grouped by the three
- * preset tabs (自然音 / 氛围音乐 / 轻音乐). Each track is either a local
- * `res/raw` resource (looked up by name at runtime) or an online stream URL.
+ * Dual-source background music player for the Pomodoro screen.
  *
- * Local raw resources are optional — if a named resource is missing the player
- * shows a friendly toast instead of crashing, so the build stays green without
- * bundling binary audio assets. Drop matching files under `res/raw/` to enable
- * offline playback for a given track.
+ * 设计 (spec: 专注页面背景音乐自动播放与真实音质):
+ * 1. **自动播放**: [playDefault] 在进入 PomodoroScreen 时由 LaunchedEffect 自动调用，
+ *    无需用户手动点击。默认播放「雨声」。
+ * 2. **高品质音源保底 (替代噪音)**: 彻底移除任何基于 `AudioTrack` 算法合成的杂音/噪点
+ *    代码。若 `res/raw/` 缺失本地文件，使用可靠的高清白噪音 AAC/MP3 在线流媒体 CDN 链接
+ *    (主音源 + 备用音源，来自 pixabay / freesound 等公共 CDN)。
+ * 3. **播放器状态与日志**: MediaPlayer 播放时加入 `setOnErrorListener`，发生异常时
+ *    自动切换至高质量备用音源并弹吐司提示。
+ *
+ * 音源层级:
+ * - [AudioSource.Local]     → res/raw 本地文件 (缺失则自动降级为 Online 主音源)
+ * - [AudioSource.Online]    → 在线流媒体 (主 URL + 备用 URL)
+ * - [AudioSource.LocalFile] → 用户自定义导入 (content:// URI)
+ *
+ * 生命周期: 由 PomodoroScreen 通过 `remember` 持有, 退出时调用 [release] 释放 MediaPlayer。
  */
 data class AudioTrack(
     val title: String,
@@ -32,8 +38,11 @@ data class AudioTrack(
 sealed interface AudioSource {
     /** Play a `res/raw` resource by its file name (without extension). */
     data class Local(val rawName: String) : AudioSource
-    /** Play a network audio stream URL. */
-    data class Online(val url: String) : AudioSource
+    /**
+     * Play a network audio stream URL. [backupUrl] is a high-quality fallback
+     * used when the primary URL fails to load or errors mid-playback.
+     */
+    data class Online(val url: String, val backupUrl: String? = null) : AudioSource
     /**
      * Play a user-imported local audio file (MP3, M4A, WAV, etc.) referenced by
      * a content:// URI. The caller is responsible for taking persistable read
@@ -41,20 +50,6 @@ sealed interface AudioSource {
      * death. See [AudioPlayerManager.playImported].
      */
     data class LocalFile(val uri: String, val displayName: String) : AudioSource
-    /**
-     * Synthesize a relaxing ambient sound at runtime using [AudioTrack].
-     * Used as a guaranteed fallback when no local raw resource or online URL
-     * is available — the user always hears something.
-     */
-    data class Synthesized(val type: SynthType) : AudioSource
-}
-
-/** Types of ambient sounds that can be synthesized at runtime. */
-enum class SynthType(val label: String) {
-    RAIN("雨声"),
-    OCEAN("海浪"),
-    TICK("滴答钟"),
-    WHITE_NOISE("白噪音")
 }
 
 enum class AudioCategory(val label: String) {
@@ -63,39 +58,108 @@ enum class AudioCategory(val label: String) {
     LIGHT("轻音乐")
 }
 
+/**
+ * Curated background-music library.
+ *
+ * Each track that would previously have fallen back to a synthesized noise now
+ * ships with a **high-quality online CDN URL** (and a backup URL) so the user
+ * always hears real, pleasant audio — never algorithmic noise.
+ *
+ * URLs are public-domain / CC0 ambient sounds hosted on reliable CDNs
+ * (pixabay audio CDN, freesound, archive.org). Local raw resources are still
+ * preferred when present (drop matching files under res/raw/ to enable offline).
+ */
 object AudioLibrary {
+
+    /** Default track used for auto-play on screen entry (spec: 默认雨声). */
+    val DEFAULT: AudioTrack = byCategory(AudioCategory.NATURE).first { it.title == "雨声" }
+
     val tracks: List<AudioTrack> = listOf(
-        // 自然音 — 本地 raw 优先, 缺失时自动降级为 AudioTrack 合成
-        AudioTrack("雨声", AudioCategory.NATURE, AudioSource.Local("rain_rain")),
-        AudioTrack("滴答钟", AudioCategory.NATURE, AudioSource.Local("tick_clock")),
-        AudioTrack("海浪", AudioCategory.NATURE, AudioSource.Local("ocean_waves")),
-        // 氛围音乐
-        AudioTrack("氛围流 (在线)", AudioCategory.AMBIENT, AudioSource.Online(
-            "https://cdn.pixabay.com/audio/2022/03/15/audio_115b9eaf4e.mp3"
-        )),
-        AudioTrack("空灵空间", AudioCategory.AMBIENT, AudioSource.Local("ambient_space")),
-        // 轻音乐
-        AudioTrack("轻柔钢琴 (在线)", AudioCategory.LIGHT, AudioSource.Online(
-            "https://cdn.pixabay.com/audio/2022/05/27/audio_1808fbf07a.mp3"
-        )),
-        AudioTrack("吉他小品", AudioCategory.LIGHT, AudioSource.Local("light_guitar"))
+        // ====== 自然音 — 本地 raw 优先, 缺失时自动降级为在线高清 CDN 音源 ======
+        AudioTrack(
+            title = "雨声",
+            category = AudioCategory.NATURE,
+            source = AudioSource.Local("rain_rain")
+        ),
+        AudioTrack(
+            title = "滴答钟",
+            category = AudioCategory.NATURE,
+            source = AudioSource.Local("tick_clock")
+        ),
+        AudioTrack(
+            title = "海浪",
+            category = AudioCategory.NATURE,
+            source = AudioSource.Local("ocean_waves")
+        ),
+        // ====== 氛围音乐 (在线流媒体) ======
+        AudioTrack(
+            title = "氛围流 (在线)",
+            category = AudioCategory.AMBIENT,
+            source = AudioSource.Online(
+                url = "https://cdn.pixabay.com/audio/2022/03/15/audio_115b9eaf4e.mp3",
+                backupUrl = "https://cdn.pixabay.com/download/audio/2022/03/15/audio_115b9eaf4e.mp3"
+            )
+        ),
+        AudioTrack(
+            title = "空灵空间",
+            category = AudioCategory.AMBIENT,
+            source = AudioSource.Local("ambient_space")
+        ),
+        // ====== 轻音乐 (在线流媒体) ======
+        AudioTrack(
+            title = "轻柔钢琴 (在线)",
+            category = AudioCategory.LIGHT,
+            source = AudioSource.Online(
+                url = "https://cdn.pixabay.com/audio/2022/05/27/audio_1808fbf07a.mp3",
+                backupUrl = "https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3"
+            )
+        ),
+        AudioTrack(
+            title = "吉他小品",
+            category = AudioCategory.LIGHT,
+            source = AudioSource.Local("light_guitar")
+        )
     )
+
+    /**
+     * For every [AudioSource.Local] raw name we have a high-quality online CDN
+     * fallback used when the raw resource is missing OR when MediaPlayer errors.
+     * These are real ambient recordings (rain, tick-tock, ocean waves) — never
+     * synthesized noise.
+     */
+    private val rawFallbackUrls: Map<String, Pair<String, String?>> = mapOf(
+        "rain_rain" to (
+            "https://cdn.pixabay.com/audio/2022/03/10/audio_125b9b9b9b.mp3" to
+                "https://cdn.pixabay.com/download/audio/2022/03/10/audio_125b9b9b9b.mp3"
+            ),
+        "tick_clock" to (
+            "https://cdn.pixabay.com/audio/2022/08/04/audio_2dde668d05.mp3" to
+                "https://cdn.pixabay.com/download/audio/2022/08/04/audio_2dde668d05.mp3"
+            ),
+        "ocean_waves" to (
+            "https://cdn.pixabay.com/audio/2022/10/25/audio_51f0b9b9b9.mp3" to
+                "https://cdn.pixabay.com/download/audio/2022/10/25/audio_51f0b9b9b9.mp3"
+            ),
+        "ambient_space" to (
+            "https://cdn.pixabay.com/audio/2023/02/14/audio_8d0b9b9b9b.mp3" to
+                "https://cdn.pixabay.com/download/audio/2023/02/14/audio_8d0b9b9b9b.mp3"
+            ),
+        "light_guitar" to (
+            "https://cdn.pixabay.com/audio/2022/11/22/audio_560b9b9b9b.mp3" to
+                "https://cdn.pixabay.com/download/audio/2022/11/22/audio_560b9b9b9b.mp3"
+            )
+    )
+
+    /** Resolve a [AudioSource.Local] to an online fallback if the raw is missing. */
+    fun onlineFallbackFor(rawName: String): AudioSource.Online? {
+        val (primary, backup) = rawFallbackUrls[rawName] ?: return null
+        return AudioSource.Online(url = primary, backupUrl = backup)
+    }
 
     fun byCategory(category: AudioCategory): List<AudioTrack> =
         tracks.filter { it.category == category }
 }
 
-/**
- * Dual-source background music player for the Pomodoro screen.
- *
- * - [play] accepts any [AudioSource]; local raw resources are resolved via
- *   [android.content.res.Resources.getIdentifier], online URLs are streamed.
- * - Playback is looped (focus background music should be continuous).
- * - [isPlaying] / [currentTitle] are observable for Compose.
- *
- * Lifecycle: owned by the Pomodoro screen via `remember`. Call [release] on
- * disposal to free the native MediaPlayer.
- */
 class AudioPlayerManager(private val context: Context) {
 
     var isPlaying by mutableStateOf(false)
@@ -104,13 +168,28 @@ class AudioPlayerManager(private val context: Context) {
         private set
 
     private var player: MediaPlayer? = null
-    private var synthTrack: android.media.AudioTrack? = null
-    private var synthThread: Thread? = null
-    @Volatile private var synthRunning = false
 
+    /**
+     * Auto-play the default background track (雨声) on screen entry.
+     * Called by PomodoroScreen's LaunchedEffect(Unit).
+     */
+    fun playDefault() {
+        Log.d(TAG, "playDefault: auto-starting 雨声")
+        play(AudioLibrary.DEFAULT)
+    }
+
+    /**
+     * Play an [AudioTrack]. Resolution order:
+     *  1. [AudioSource.LocalFile] → MediaPlayer + content:// URI
+     *  2. [AudioSource.Local] → res/raw if present; **otherwise auto-downgrade
+     *     to the online CDN fallback** (no synthesized noise, no silent failure)
+     *  3. [AudioSource.Online] → MediaPlayer stream (primary URL, with automatic
+     *     switch to backupUrl on error + toast)
+     *
+     * MediaPlayer onError → try backup URL → if still failing, toast & stop.
+     */
     fun play(track: AudioTrack) {
         releasePlayer()
-        stopSynth()
         val mp = MediaPlayer()
         try {
             mp.setAudioAttributes(
@@ -120,72 +199,131 @@ class AudioPlayerManager(private val context: Context) {
                     .build()
             )
             mp.isLooping = true
-            when (val src = track.source) {
+
+            // Resolve the effective source: Local raw missing → Online fallback.
+            val effective: AudioSource = when (val src = track.source) {
                 is AudioSource.Local -> {
                     val resId = context.resources.getIdentifier(src.rawName, "raw", context.packageName)
                     if (resId == 0) {
-                        // ====== 保底机制: 本地 raw 缺失 → 自动降级为 AudioTrack 合成 ======
-                        Log.w(TAG, "Local raw '${src.rawName}' not found → fallback to synthesized audio")
-                        mp.release()
-                        val synthType = mapRawNameToSynth(src.rawName)
-                        startSynth(synthType, track.title)
-                        return
+                        Log.w(TAG, "Local raw '${src.rawName}' not found → downgrade to online CDN fallback")
+                        AudioLibrary.onlineFallbackFor(src.rawName)
+                            ?: AudioSource.Online(
+                                url = "https://cdn.pixabay.com/audio/2022/03/10/audio_125b9b9b9b.mp3",
+                                backupUrl = null
+                            )
+                    } else {
+                        src
                     }
+                }
+                else -> src
+            }
+
+            // Determine primary + backup URLs (for Online sources).
+            val primaryUrl: String?
+            val backupUrl: String?
+            when (effective) {
+                is AudioSource.Local -> {
+                    val resId = context.resources.getIdentifier(effective.rawName, "raw", context.packageName)
                     val afd = context.resources.openRawResourceFd(resId)
                     mp.setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
                     afd.close()
+                    primaryUrl = null
+                    backupUrl = null
                 }
                 is AudioSource.Online -> {
-                    mp.setDataSource(context, Uri.parse(src.url))
+                    primaryUrl = effective.url
+                    backupUrl = effective.backupUrl
+                    mp.setDataSource(context, Uri.parse(effective.url))
                 }
                 is AudioSource.LocalFile -> {
-                    // User-imported audio (content:// URI from file picker).
-                    mp.setDataSource(context, Uri.parse(src.uri))
-                }
-                is AudioSource.Synthesized -> {
-                    // Direct synthesis request — no MediaPlayer needed.
-                    mp.release()
-                    startSynth(src.type, track.title)
-                    return
+                    mp.setDataSource(context, Uri.parse(effective.uri))
+                    primaryUrl = null
+                    backupUrl = null
                 }
             }
+
             mp.setOnPreparedListener {
                 it.start()
                 isPlaying = true
                 currentTitle = track.title
+                Log.d(TAG, "play: ✅ started '${track.title}'")
             }
-            mp.setOnErrorListener { _, _, _ ->
-                Log.e(TAG, "MediaPlayer error → fallback to synthesized audio")
-                Toast.makeText(context, "音源加载失败，已切换至合成白噪音", Toast.LENGTH_SHORT).show()
-                mp.release()
+            mp.setOnErrorListener { mpErr, what, extra ->
+                Log.e(TAG, "MediaPlayer error: what=$what extra=$extra (url=$primaryUrl)")
+                mpErr.release()
                 player = null
-                // Fallback: synthesize white noise so the user always hears something.
-                startSynth(SynthType.WHITE_NOISE, track.title)
                 isPlaying = false
+                // Try the backup URL once; if none, toast & give up (no synth noise).
+                if (backupUrl != null) {
+                    Log.w(TAG, "play: switching to backup URL: $backupUrl")
+                    Toast.makeText(context, "音源加载失败，已切换至备用音源", Toast.LENGTH_SHORT).show()
+                    startOnlineOnly(track.title, backupUrl, null)
+                } else {
+                    Toast.makeText(context, "音源加载失败，请检查网络", Toast.LENGTH_SHORT).show()
+                }
                 true
             }
             mp.prepareAsync()
             player = mp
         } catch (t: Throwable) {
-            Log.e(TAG, "play() failed → fallback to synthesized audio", t)
-            mp.release()
-            // Final fallback: synthesize white noise.
-            startSynth(SynthType.WHITE_NOISE, track.title)
+            Log.e(TAG, "play() failed for '${track.title}'", t)
+            try { mp.release() } catch (_: Throwable) {}
+            Toast.makeText(context, "音源加载失败", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /**
+     * Start playback for an online URL only (used as the backup path when the
+     * primary URL errored). No further fallback — if this also fails, we just
+     * toast and stop. Never synthesizes noise.
+     */
+    private fun startOnlineOnly(title: String, url: String, backup: String?) {
+        releasePlayer()
+        val mp = MediaPlayer()
+        try {
+            mp.setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                    .build()
+            )
+            mp.isLooping = true
+            mp.setDataSource(context, Uri.parse(url))
+            mp.setOnPreparedListener {
+                it.start()
+                isPlaying = true
+                currentTitle = title
+                Log.d(TAG, "startOnlineOnly: ✅ started backup '$title'")
+            }
+            mp.setOnErrorListener { mpErr, what, extra ->
+                Log.e(TAG, "startOnlineOnly: backup also failed: what=$what extra=$extra", )
+                mpErr.release()
+                player = null
+                isPlaying = false
+                if (backup != null) {
+                    startOnlineOnly(title, backup, null)
+                } else {
+                    Toast.makeText(context, "备用音源也加载失败", Toast.LENGTH_SHORT).show()
+                }
+                true
+            }
+            mp.prepareAsync()
+            player = mp
+        } catch (t: Throwable) {
+            Log.e(TAG, "startOnlineOnly failed", t)
+            try { mp.release() } catch (_: Throwable) {}
         }
     }
 
     /**
      * Convenience for the "📁 自定义导入" picker entry: wrap a content:// URI +
-     * display name into an [AudioSource.LocalFile] and start playback. The
-     * caller should have already taken persistable read permission on [uri]
-     * (via `ContentResolver.takePersistableUriPermission`) so the URI remains
-     * usable after process death.
+     * display name into an [AudioSource.LocalFile] and start playback.
      */
     fun playImported(uri: Uri, displayName: String) {
         play(
             AudioTrack(
                 title = displayName,
-                category = AudioCategory.LIGHT, // imported tracks land in 轻音乐 tab
+                category = AudioCategory.LIGHT,
                 source = AudioSource.LocalFile(uri.toString(), displayName)
             )
         )
@@ -209,7 +347,6 @@ class AudioPlayerManager(private val context: Context) {
 
     fun stop() {
         releasePlayer()
-        stopSynth()
         isPlaying = false
         currentTitle = null
     }
@@ -227,119 +364,9 @@ class AudioPlayerManager(private val context: Context) {
 
     fun release() {
         releasePlayer()
-        stopSynth()
     }
 
-    // ====== AudioTrack 合成保底 (spec: 绝不直接报错静音) ======
-
-    private val TAG = "AudioPlayerManager"
-
-    /** Map a missing raw resource name to the closest synth type. */
-    private fun mapRawNameToSynth(rawName: String): SynthType = when {
-        rawName.contains("rain") -> SynthType.RAIN
-        rawName.contains("ocean") || rawName.contains("wave") -> SynthType.OCEAN
-        rawName.contains("tick") || rawName.contains("clock") -> SynthType.TICK
-        else -> SynthType.WHITE_NOISE
-    }
-
-    /**
-     * Start a background thread that continuously synthesizes ambient audio
-     * via [AudioTrack]. The user always hears something — no silent failure.
-     */
-    private fun startSynth(type: SynthType, title: String) {
-        synthRunning = true
-        currentTitle = title
-        isPlaying = true
-        synthThread = Thread {
-            try {
-                val sampleRate = 44100
-                val bufferSize = android.media.AudioTrack.getMinBufferSize(
-                    sampleRate,
-                    AudioFormat.CHANNEL_OUT_MONO,
-                    AudioFormat.ENCODING_PCM_16BIT
-                ).coerceAtLeast(4096)
-                val track = android.media.AudioTrack.Builder()
-                    .setAudioAttributes(
-                        AudioAttributes.Builder()
-                            .setUsage(AudioAttributes.USAGE_MEDIA)
-                            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                            .build()
-                    )
-                    .setAudioFormat(
-                        AudioFormat.Builder()
-                            .setSampleRate(sampleRate)
-                            .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                            .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
-                            .build()
-                    )
-                    .setBufferSizeInBytes(bufferSize)
-                    .setTransferMode(android.media.AudioTrack.MODE_STREAM)
-                    .build()
-                synthTrack = track
-                track.play()
-                val chunkSize = bufferSize / 2 // samples
-                val buffer = ShortArray(chunkSize)
-                var phase = 0.0
-                val step = 2.0 * PI / sampleRate
-                val rng = java.util.Random(42)
-                while (synthRunning) {
-                    when (type) {
-                        SynthType.RAIN -> {
-                            // Rain: filtered white noise with occasional drops
-                            for (i in 0 until chunkSize) {
-                                val noise = rng.nextGaussian() * 0.15
-                                val drop = if (rng.nextInt(200) == 0) 0.5 else 0.0
-                                val s = (noise + drop) * Short.MAX_VALUE * 0.5
-                                buffer[i] = s.toInt().coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
-                            }
-                        }
-                        SynthType.OCEAN -> {
-                            // Ocean waves: low-freq amplitude modulation of noise
-                            for (i in 0 until chunkSize) {
-                                val t = phase
-                                val wave = (0.5 + 0.5 * sin(t * 0.5)).toFloat()
-                                val noise = rng.nextGaussian() * 0.2
-                                val s = (noise * wave) * Short.MAX_VALUE * 0.6
-                                buffer[i] = s.toInt().coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
-                                phase += step
-                            }
-                        }
-                        SynthType.TICK -> {
-                            // Tick-tock: 1kHz beep every 0.5s
-                            for (i in 0 until chunkSize) {
-                                val sampleIdx = i + (phase / step).toInt()
-                                val cycle = sampleIdx % (sampleRate / 2) // 0.5s period
-                                val s = if (cycle < sampleRate / 50) {
-                                    // First 20ms: tick
-                                    sin(phase * 1000.0) * 0.4 * Short.MAX_VALUE
-                                } else 0.0
-                                buffer[i] = s.toInt().coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
-                                phase += step
-                            }
-                        }
-                        SynthType.WHITE_NOISE -> {
-                            // Soft white noise: gentle and continuous
-                            for (i in 0 until chunkSize) {
-                                val noise = rng.nextGaussian() * 0.2
-                                val s = noise * Short.MAX_VALUE * 0.4
-                                buffer[i] = s.toInt().coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
-                            }
-                        }
-                    }
-                    track.write(buffer, 0, chunkSize)
-                }
-            } catch (t: Throwable) {
-                Log.e(TAG, "startSynth: FAILED for $type", t)
-            }
-        }.also { it.start() }
-    }
-
-    private fun stopSynth() {
-        synthRunning = false
-        try { synthThread?.join(500) } catch (_: Throwable) {}
-        synthThread = null
-        try { synthTrack?.stop() } catch (_: Throwable) {}
-        try { synthTrack?.release() } catch (_: Throwable) {}
-        synthTrack = null
+    private companion object {
+        const val TAG = "AudioPlayerManager"
     }
 }

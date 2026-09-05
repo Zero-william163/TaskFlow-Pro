@@ -15,6 +15,13 @@
     <color name="widget_border">#10FFFFFF</color>
     <color name="widget_card_bg">#2A2C3A</color>
 
+    <!-- Widget item card scenic gradient (dark mode 更深邃, 与主 App 夜空风景统一) -->
+    <color name="widget_card_gradient_start">#0B0F19</color>
+    <color name="widget_card_gradient_end">#2E3A59</color>
+    <color name="widget_card_stroke">#33FFFFFF</color>
+    <color name="widget_item_text_primary">#FFFFFF</color>
+    <color name="widget_item_text_secondary">#CCFFFFFF</color>
+
     <!-- Widget capsule/badge colors (dark) - gradient pill -->
     <color name="widget_badge_bg_start">#312E81</color>
     <color name="widget_badge_bg_end">#4C1D95</color>

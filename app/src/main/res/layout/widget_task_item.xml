@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    Widget 任务卡片：高颜值重构版
-    - 整体 12dp 圆角卡片背景
-    - 左侧 Checkbox 圆圈
-    - 标题：Bold 粗体 + widget_text_primary
-    - 次行：胶囊分类标签 + 时间 (widget_text_secondary 弱化)
-    - 严格显式绑定颜色，杜绝白字白底
+    Widget 任务卡片 v3 — 点击彻底隔离版
+    关键规则：
+      - 根布局 widget_item_root 绝不绑定任何 PendingIntent (避免吞掉子区域点击)
+      - widget_checkbox (48dp 触摸区) 仅绑定 ACTION_TOGGLE_COMPLETE 广播
+      - widget_card_body (标题/分类/时间) 仅绑定跳转 PomodoroActivity 的 FillInIntent
+    视觉：16dp 大圆角渐变背景 (与主 App TaskCard 风景渐变统一)
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_item_root"
@@ -19,11 +19,15 @@
     android:paddingHorizontal="12dp"
     android:paddingVertical="10dp">
 
-    <!-- Checkbox Circle — 48dp 触摸区域，内部 24dp 图标居中 -->
+    <!-- Checkbox Circle — 48dp x 48dp 触摸区，独立 id=widget_checkbox，
+         仅绑定 ACTION_TOGGLE_COMPLETE 广播，绝不跳转应用。 -->
     <FrameLayout
+        android:id="@+id/widget_checkbox"
         android:layout_width="48dp"
         android:layout_height="48dp"
         android:padding="12dp"
+        android:clickable="true"
+        android:focusable="true"
         android:clipToPadding="false">
         <ImageView
             android:id="@+id/item_check"
@@ -35,22 +39,24 @@
             android:scaleType="fitCenter" />
     </FrameLayout>
 
-    <!-- Title + Meta Column -->
+    <!-- Title + Meta Column — id=widget_card_body，
+         仅此区域绑定跳转 PomodoroActivity 的 FillInIntent。 -->
     <LinearLayout
+        android:id="@+id/widget_card_body"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginStart="10dp"
         android:layout_weight="1"
         android:orientation="vertical">
 
-        <!-- Title: Bold 粗体 + widget_text_primary 显式绑定 -->
+        <!-- Title: Bold 粗体 + item card 专用浅色 (深色风景渐变背景上保证可读) -->
         <TextView
             android:id="@+id/item_title"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:ellipsize="end"
             android:maxLines="1"
-            android:textColor="@color/widget_text_primary"
+            android:textColor="@color/widget_item_text_primary"
             android:textSize="14sp"
             android:textStyle="bold"
             android:includeFontPadding="false" />
@@ -75,13 +81,13 @@
                 android:includeFontPadding="false"
                 android:visibility="gone" />
 
-            <!-- Due Time: Secondary Muted 弱化字色 -->
+            <!-- Due Time: Secondary Muted 弱化字色 (item card 专用浅色) -->
             <TextView
                 android:id="@+id/item_meta"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="6dp"
-                android:textColor="@color/widget_text_secondary"
+                android:textColor="@color/widget_item_text_secondary"
                 android:textSize="11sp"
                 android:includeFontPadding="false"
                 android:visibility="gone" />
