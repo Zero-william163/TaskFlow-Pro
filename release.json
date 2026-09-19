@@ -1,30 +1,30 @@
 {
-  "version": "2.9.4",
-  "code": 51,
-  "versionTag": "v2.9.4",
-  "log": "\n### v2.9.4 — 桌面小组件点击彻底隔离 / 视觉同步 / 音效音频底层重建\n\n#### 一、 桌面小组件点击彻底隔离与视觉与主 App 同步\n1. **点击响应隔离 Bug 彻底修复**\n   - **控件解耦**：严禁在整张卡片根布局 (`widget_item_root`) 上设置跳转 Activity 的 PendingIntent。\n   - **圆圈独立绑定**：为 `R.id.widget_checkbox`（48dp 触摸区）设置 `setOnClickPendingIntent`，显式指向 `TaskWidgetProvider.ACTION_TOGGLE_COMPLETE` 广播，点击**只切换打卡状态并刷新小组件，绝不跳转应用**。\n   - **卡片主体独立绑定**：仅在 `R.id.widget_card_body`（标题/分类/时间区域）绑定跳转到 PomodoroActivity 的 `FillInIntent`。\n   - **增大触摸响应区**：圆圈容器 48dp x 48dp + 12dp padding，防止手误触发卡片主体。\n2. **小组件卡片视觉精美度同步**\n   - `widget_item_card_bg.xml` 改为与主 App TaskCard 一致的高质感 135° 斜向渐变（深蓝 → 紫罗兰风景遮罩）+ 16dp 大圆角 + 0.5dp 极细描边。\n   - 新增 `widget_card_gradient_start/end/stroke` 颜色 token（含夜间模式变体），item card 内文字改用专用浅色 token，保证深色背景上可读性。\n\n#### 二、 专注页面背景音乐自动播放与真实音质\n1. **自动播放机制**\n   - 进入 `PomodoroScreen` 时，`LaunchedEffect(Unit)` 中自动开始播放默认背景音乐（雨声），无需用户手动再点一次。\n2. **高品质音源保底 (替代噪音)**\n   - **彻底移除所有 `AudioTrack` 算法合成的杂音/噪点代码**（删除 `SynthType`、`AudioSource.Synthesized`、`startSynth/stopSynth`）。\n   - 若 `res/raw/` 缺失本地文件，自动降级为可靠的高清在线流媒体 CDN 链接（雨声/滴答钟/海浪等），每个音源配备主 URL + 备用 URL。\n   - MediaPlayer `setOnErrorListener` 发生异常时自动切换至备用音源并弹吐司提示。\n3. **自定义音效导入**：保持选择手机本地任意音频文件播放功能。\n\n#### 三、 点击按键音效系统修复与试听响应\n1. **SoundPool / ToneGenerator 双重保底**\n   - SoundPool 音频属性设置为 `AudioAttributes.USAGE_ASSISTANCE_SONIFICATION`（系统交互音效通道）。\n   - **ToneGenerator 强行保底**：当 SoundPool 未加载成功 / play 失败时，直接使用 `ToneGenerator(AudioManager.STREAM_SYSTEM, 100)` 播放 `TONE_PROP_BEEP`，确保「试听」按钮与任何点击**绝对能发出声音**。\n   - CUSTOM 类型 MediaPlayer 出错时也自动降级到 ToneGenerator。\n2. **试听与全局点击响应**：设置页「试听」按钮触发 `SoundEffectManager.playClick()` 时，立即听到当前选择的音效类型。\n\n#### 构建信息\n- versionCode: 51\n- versionName: 2.9.4\n- SHA256: b209ec240480d0234c6dae13f820af6bcfc7c864079e782d07edfd1f4ecae42b\n- Size: 46,902,179 bytes\n\n---\n\n",
-  "apk": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.9.4/taskflow-v2.9.4.apk",
-  "sha256": "b209ec240480d0234c6dae13f820af6bcfc7c864079e782d07edfd1f4ecae42b",
-  "size": 46902179,
+  "version": "2.9.5",
+  "code": 52,
+  "versionTag": "v2.9.5",
+  "log": "\n### v2.9.5 — 紧急修复: 小组件圆圈点击/音频崩溃无声/视觉统一/完成态\n\n#### 一、 桌面小组件圆圈点击修复 (根因: PendingIntentTemplate 与子视图冲突)\n- **彻底移除 setPendingIntentTemplate**：RemoteViews 中混合 template + 子视图显式 PendingIntent + FillInIntent 会导致点击路由混乱\n- **改为显式独立 PendingIntent**：\n  - widget_checkbox (48dp) → ACTION_TOGGLE_COMPLETE Broadcast (requestCode = widgetId*100003 + taskId)\n  - widget_card_body → ACTION_OPEN_POMODORO Activity (requestCode = widgetId*100007 + taskId)\n  - 根布局 widget_item_root 不绑定任何 PendingIntent\n- **新增完成态视觉**：task.isCompletedToday → widget_check_circle_done (品牌紫色填充圆圈)\n\n#### 二、 背景音崩溃 + 无声修复 (根因: 伪造 pixabay URL)\n- **彻底移除所有伪造 pixabay URL 和 AudioTrack 合成代码**\n- **全部改用验证过的真实 HTTPS URL**：\n  - 主源: 真实 pixabay CDN (HEAD 验证 200 OK)\n  - 备用: SoundHelix (https://www.soundhelix.com/examples/mp3/SoundHelix-Song-*.mp3 开源免费，保证可用)\n- **ULTIMATE_FALLBACK_URL**: SoundHelix Song-1，所有音源失败时的最终保底\n- **全部 try/catch 保护**：play() / playOnlineUrl() / releasePlayer() 均 runCatching，绝不抛异常到 UI\n- **LaunchedEffect(Unit) 自动播放**：进入专注页自动播放「雨声」\n\n#### 三、 小组件卡片颜色与主 App 统一\n- 亮色模式: widget_card_gradient_start=#5B7CFA (brand_start) → end=#7950F2 (brand_end) 紫靛渐变\n- 暗色模式: #2C1A47 → #5B2C83 深紫渐变\n- 文字统一使用 widget_item_text_primary (白) / secondary (80%透明白)\n\n#### 构建信息\n- versionCode: 52\n- versionName: 2.9.5\n- SHA256: 8eba1e4c1122e4cfaf98d887c876d0811d58c8870550f9d16d8117915d3d29a3\n- Size: 46,902,607 bytes\n\n---\n\n",
+  "apk": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.9.5/taskflow-v2.9.5.apk",
+  "sha256": "8eba1e4c1122e4cfaf98d887c876d0811d58c8870550f9d16d8117915d3d29a3",
+  "size": 46902607,
   "downloadUrls": [
     {
       "name": "GH Proxy",
-      "url": "https://gh-proxy.com/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.9.4/taskflow-v2.9.4.apk",
+      "url": "https://gh-proxy.com/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.9.5/taskflow-v2.9.5.apk",
       "region": "domestic"
     },
     {
       "name": "GH Fast",
-      "url": "https://ghfast.top/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.9.4/taskflow-v2.9.4.apk",
+      "url": "https://ghfast.top/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.9.5/taskflow-v2.9.5.apk",
       "region": "cdn"
     },
     {
       "name": "GH Proxy Org",
-      "url": "https://gh-proxy.org/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.9.4/taskflow-v2.9.4.apk",
+      "url": "https://gh-proxy.org/https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.9.5/taskflow-v2.9.5.apk",
       "region": "domestic"
     },
     {
       "name": "GitHub",
-      "url": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.9.4/taskflow-v2.9.4.apk",
+      "url": "https://github.com/Zero-william163/TaskFlow-Pro/releases/download/v2.9.5/taskflow-v2.9.5.apk",
       "region": "international"
     }
   ]
