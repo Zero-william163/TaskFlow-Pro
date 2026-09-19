@@ -128,18 +128,23 @@ class TaskListRemoteViewsService : RemoteViewsService() {
                     views.setViewVisibility(R.id.item_meta, android.view.View.GONE)
                 }
 
+                // Checkbox visual: 未完成 → 空圆圈, 已完成 → 填充品牌紫色圆圈
                 try {
-                    views.setImageViewResource(R.id.item_check, R.drawable.widget_check_circle)
+                    val isDone = if (task.isRecurring) task.isCompletedToday else task.isCompleted
+                    val drawableRes = if (isDone) R.drawable.widget_check_circle_done else R.drawable.widget_check_circle
+                    views.setImageViewResource(R.id.item_check, drawableRes)
                 } catch (e: Throwable) {
                     Log.e(TAG, "factory[$widgetId].getViewAt($position): R.id.item_check drawable FAILED", e)
                 }
 
-                // ====== 点击彻底隔离 (spec: AppWidget Overhaul) ======
-                // 1) widget_checkbox (48dp 触摸区) → 仅绑定 ACTION_TOGGLE_COMPLETE 广播，
+                // ====== 点击彻底隔离 (spec: v2.9.4 修复版) ======
+                // 核心问题: 不能混合 setPendingIntentTemplate + 子视图显式 PendingIntent + FillInIntent。
+                // 修复方案: 移除 template，为每个子视图设置独立的 setOnClickPendingIntent。
+                // 1) widget_checkbox → Broadcast PendingIntent (ACTION_TOGGLE_COMPLETE)，
                 //    点击只切换打卡状态并刷新小组件，绝不跳转应用。
-                // 2) widget_card_body (标题/分类/时间区域) → 仅绑定跳转 PomodoroActivity
-                //    的 FillInIntent。
-                // 3) 根布局 widget_item_root 绝不绑定任何 PendingIntent，避免吞掉子区域点击。
+                // 2) widget_card_body → Activity PendingIntent (MainActivity + Pomodoro),
+                //    点击进入专注页。
+                // 3) 根布局 widget_item_root 不绑定任何 PendingIntent，避免吞掉子区域点击。
                 try {
                     val toggleIntent = Intent(TaskWidgetProvider.ACTION_TOGGLE_COMPLETE).apply {
                         setPackage(context.packageName)
@@ -148,33 +153,50 @@ class TaskListRemoteViewsService : RemoteViewsService() {
                         // 处于 doze 也能可靠送达，圆圈打卡绝不失响应。
                         addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
                     }
+                    // Unique requestCode per (widgetId, taskId) combo:
+                    // prevents PendingIntent collision between different rows / widgets.
+                    val checkboxRequestCode = (widgetId * 100003 + task.id.toInt())
                     views.setOnClickPendingIntent(
                         R.id.widget_checkbox,
                         android.app.PendingIntent.getBroadcast(
                             context,
-                            task.id.toInt(),
+                            checkboxRequestCode,
                             toggleIntent,
                             android.app.PendingIntent.FLAG_IMMUTABLE or
                                 android.app.PendingIntent.FLAG_UPDATE_CURRENT
                         )
                     )
-                    Log.d(TAG, "factory[$widgetId].getViewAt($position): ✅ widget_checkbox → ACTION_TOGGLE_COMPLETE")
+                    Log.d(TAG, "factory[$widgetId].getViewAt($position): ✅ widget_checkbox → ACTION_TOGGLE_COMPLETE (rc=$checkboxRequestCode)")
                 } catch (e: Throwable) {
                     Log.e(TAG, "factory[$widgetId].getViewAt($position): toggle PendingIntent FAILED", e)
                 }
 
-                // 卡片主体 (除圆圈外的文本与主体区域) → 跳转到 PomodoroActivity。
-                // The ListView carries the template PendingIntent (set by WidgetHelper)
-                // pointing to MainActivity with ACTION_OPEN_POMODORO; we fill in the
-                // task id so MainActivity knows which task to start the focus session for.
+                // 卡片主体 (标题/分类/时间区域) → 跳转到 PomodoroActivity。
+                // 使用独立的 Activity PendingIntent (不再依赖 template + FillInIntent)。
                 try {
-                    val fillIn = Intent().apply {
+                    val openIntent = Intent(Intent.ACTION_VIEW).apply {
+                        setClassName(context, "com.taskflow.app.MainActivity")
+                        action = com.taskflow.app.MainActivity.ACTION_OPEN_POMODORO
                         putExtra(com.taskflow.app.MainActivity.EXTRA_TASK_ID, task.id)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or
+                            Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                            Intent.FLAG_ACTIVITY_SINGLE_TOP)
                     }
-                    views.setOnClickFillInIntent(R.id.widget_card_body, fillIn)
-                    Log.d(TAG, "factory[$widgetId].getViewAt($position): ✅ widget_card_body → PomodoroActivity FillIn")
+                    // Different requestCode from checkbox so they don't collide.
+                    val bodyRequestCode = (widgetId * 100007 + task.id.toInt())
+                    views.setOnClickPendingIntent(
+                        R.id.widget_card_body,
+                        android.app.PendingIntent.getActivity(
+                            context,
+                            bodyRequestCode,
+                            openIntent,
+                            android.app.PendingIntent.FLAG_IMMUTABLE or
+                                android.app.PendingIntent.FLAG_UPDATE_CURRENT
+                        )
+                    )
+                    Log.d(TAG, "factory[$widgetId].getViewAt($position): ✅ widget_card_body → PomodoroActivity (rc=$bodyRequestCode)")
                 } catch (e: Throwable) {
-                    Log.e(TAG, "factory[$widgetId].getViewAt($position): fillIn FAILED", e)
+                    Log.e(TAG, "factory[$widgetId].getViewAt($position): body PendingIntent FAILED", e)
                 }
 
                 Log.d(TAG, "factory[$widgetId].getViewAt($position): ✅ OK")

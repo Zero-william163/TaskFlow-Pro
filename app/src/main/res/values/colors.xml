@@ -39,11 +39,11 @@
     <color name="widget_border">#1AFFFFFF</color>
     <color name="widget_card_bg">@color/widget_surface_variant</color>
 
-    <!-- Widget item card scenic gradient (与主 App TaskCard 夜空风景统一, 永远深色 + 白字) -->
-    <color name="widget_card_gradient_start">#1F2A44</color>
-    <color name="widget_card_gradient_end">#6C7A89</color>
-    <color name="widget_card_stroke">#22FFFFFF</color>
-    <!-- Item card 内的文字永远使用浅色 (因为卡片背景是深色风景渐变) -->
+    <!-- Widget item card scenic gradient (与主 App TaskCard 紫色风景统一) -->
+    <color name="widget_card_gradient_start">#5B7CFA</color>
+    <color name="widget_card_gradient_end">#7950F2</color>
+    <color name="widget_card_stroke">#1AFFFFFF</color>
+    <!-- Item card 内的文字永远使用浅色 (因为卡片背景是彩色渐变) -->
     <color name="widget_item_text_primary">#FFFFFF</color>
     <color name="widget_item_text_secondary">#CCFFFFFF</color>
 

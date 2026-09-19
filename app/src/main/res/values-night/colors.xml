@@ -15,9 +15,9 @@
     <color name="widget_border">#10FFFFFF</color>
     <color name="widget_card_bg">#2A2C3A</color>
 
-    <!-- Widget item card scenic gradient (dark mode 更深邃, 与主 App 夜空风景统一) -->
-    <color name="widget_card_gradient_start">#0B0F19</color>
-    <color name="widget_card_gradient_end">#2E3A59</color>
+    <!-- Widget item card scenic gradient (dark mode: 深紫靛蓝, 与主 App 统一) -->
+    <color name="widget_card_gradient_start">#2C1A47</color>
+    <color name="widget_card_gradient_end">#5B2C83</color>
     <color name="widget_card_stroke">#33FFFFFF</color>
     <color name="widget_item_text_primary">#FFFFFF</color>
     <color name="widget_item_text_secondary">#CCFFFFFF</color>

@@ -370,24 +370,18 @@ object WidgetHelper {
             Log.e(TAG, "buildViews[$appWidgetId]: ❌ R.id.task_list setRemoteAdapter FAILED", e)
             throw e
         }
-        val template = Intent(context, MainActivity::class.java).apply {
-            action = MainActivity.ACTION_OPEN_POMODORO
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-        }
-        val templatePi = try {
-            PendingIntent.getActivity(
-                context, appWidgetId, template,
-                PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-            )
-        } catch (e: Throwable) {
-            Log.e(TAG, "buildViews[$appWidgetId]: ❌ template PendingIntent FAILED", e)
-            throw e
-        }
+        // ====== 关键变更 (v2.9.4): 移除 setPendingIntentTemplate ======
+        // 因为 RemoteViews 中混合 template + 子视图显式 PendingIntent / FillInIntent
+        // 会导致点击路由混乱 (template 会拦截所有 item 级点击，子视图的显式
+        // setOnClickPendingIntent 也无法与 FillInIntent 共存)。
+        // 改为在 TaskListFactory.getViewAt() 中为每个子视图设置独立的
+        // setOnClickPendingIntent (checkbox → Broadcast + card_body → Activity)。
+        // 不再需要模板 PendingIntent。
         try {
-            views.setPendingIntentTemplate(R.id.task_list, templatePi)
-        } catch (e: Throwable) {
-            Log.e(TAG, "buildViews[$appWidgetId]: ❌ setPendingIntentTemplate FAILED", e)
-            throw e
+            views.setPendingIntentTemplate(R.id.task_list, null)
+        } catch (_: Throwable) {
+            // Some Android versions don't accept null template — ignore; the explicit
+            // setOnClickPendingIntent on children will override any lingering template.
         }
         // 关键修复：ListView 永远保持 VISIBLE。当没有任务时，RemoteViewsFactory.getCount()
         // 会返回 1 且 getViewAt(0) 返回内联空态视图，因此 ListView 永远有内容可渲染，
